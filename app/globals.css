@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%; /* White */
+    --foreground: 224 71.4% 4.1%; /* Dark Blue-Gray */
+
+    --card: 0 0% 100%; /* White */
+    --card-foreground: 224 71.4% 4.1%; /* Dark Blue-Gray */
+
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 224 71.4% 4.1%; /* Dark Blue-Gray */
+
+    --primary: 227 89% 44%; /* #0F33D1 - Deep Blue from logo */
+    --primary-foreground: 0 0% 100%; /* White */
+
+    --secondary: 220 13% 91%; /* Light Gray */
+    --secondary-foreground: 224 71.4% 4.1%; /* Dark Blue-Gray */
+
+    --muted: 220 14.3% 95.9%; /* Lighter Gray */
+    --muted-foreground: 220 8.9% 46.1%; /* Muted Gray */
+
+    --accent: 190 100% 50%; /* #00E1FC - Bright Cyan from logo */
+    --accent-foreground: 227 89% 20%; /* Darker shade of primary blue for contrast on cyan */
+
+    --destructive: 0 84.2% 60.2%; /* Standard Red */
+    --destructive-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --border: 220 13% 91%; /* Light Gray */
+    --input: 220 13% 91%; /* Light Gray */
+    --ring: 190 100% 50%; /* #00E1FC - Bright Cyan for focus */
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 224 71.4% 4.1%; /* Dark Blue-Gray */
+    --foreground: 0 0% 98%; /* Light Gray/White */
+
+    --card: 224 71.4% 4.1%; /* Dark Blue-Gray */
+    --card-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --popover: 224 71.4% 4.1%; /* Dark Blue-Gray */
+    --popover-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --primary: 190 100% 50%; /* #00E1FC - Bright Cyan for dark mode primary */
+    --primary-foreground: 227 89% 15%; /* Darker Blue for text on cyan */
+
+    --secondary: 227 89% 15%; /* Darker Blue */
+    --secondary-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --muted: 227 89% 10%; /* Even Darker Blue */
+    --muted-foreground: 220 8.9% 70%; /* Lighter Muted Gray for dark mode */
+
+    --accent: 227 89% 44%; /* #0F33D1 - Deep Blue for dark mode accent */
+    --accent-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --destructive: 0 62.8% 30.6%; /* Darker Red */
+    --destructive-foreground: 0 0% 98%; /* Light Gray/White */
+
+    --border: 227 89% 15%; /* Darker Blue */
+    --input: 227 89% 15%; /* Darker Blue */
+    --ring: 190 100% 50%; /* #00E1FC - Bright Cyan for focus */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
