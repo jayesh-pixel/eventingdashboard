@@ -427,21 +427,42 @@ export default function EventsPage({ params }: EventsPageProps) {
         if (!response.ok) {
           // Try to get error details from response
           let errorText = ""
+          let errorData = null
           try {
             errorText = await response.text()
-            console.log("Error response body:", errorText)
+            console.error("Error response:", errorText)
+            
+            // Try to parse as JSON to get structured error
+            try {
+              errorData = JSON.parse(errorText)
+            } catch (e) {
+              // Not JSON, use as plain text
+            }
           } catch (e) {
-            console.log("Could not read error response body")
+            console.error("Could not read error response")
           }
-          
-          // Log more debugging info for 404 errors
-          if (response.status === 404) {
-            console.log("404 Error - API endpoint might not exist or user not authorized")
-            console.log("Full endpoint URL:", apiEndpoint)
-            console.log("Request payload:", requestPayload)
+
+          // Handle 404 "not found" responses as empty data rather than errors
+          if (response.status === 404 && errorData && 
+              (errorData.message?.toLowerCase().includes('not found') || 
+               errorData.message?.toLowerCase().includes('no data'))) {
+            console.log("API returned 404 - no events found, treating as empty dataset")
+            setAllEventsData([])
+            setOriginalData([])
+            setUseMockData(false)
+            setApiError(null)
+            setLoading(false)
+            return
           }
-          
-          throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
+
+          // For any other API errors, also treat as no data available
+          console.log("API error - treating as no data available")
+          setAllEventsData([])
+          setOriginalData([])
+          setUseMockData(false)
+          setApiError(null)
+          setLoading(false)
+          return
         }
 
         const responseText = await response.text()
@@ -527,34 +548,20 @@ export default function EventsPage({ params }: EventsPageProps) {
       } catch (apiError) {
         console.error("API request failed:", apiError)
         
-        // Extract meaningful error message
-        let errorMessage = "Could not fetch events from server"
-        if (apiError instanceof Error) {
-          errorMessage = apiError.message
-        } else if (typeof apiError === 'string') {
-          errorMessage = apiError
-        }
-        
-        setApiError(errorMessage)
+        // Treat all API errors as no data available
         setAllEventsData([])
         setOriginalData([])
         setUseMockData(false)
+        setApiError(null)
       }
     } catch (error) {
       console.error("Error in getAllEventData:", error)
       
-      // Extract meaningful error message
-      let errorMessage = "Failed to load events"
-      if (error instanceof Error) {
-        errorMessage = error.message
-      } else if (typeof error === 'string') {
-        errorMessage = error
-      }
-      
-      setApiError(errorMessage)
+      // Treat all errors as no data available
       setAllEventsData([])
       setOriginalData([])
       setUseMockData(false)
+      setApiError(null)
     } finally {
       setLoading(false)
     }
@@ -720,16 +727,6 @@ export default function EventsPage({ params }: EventsPageProps) {
         </div>
       </div>
 
-      {/* Error Alert */}
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Error:</strong> {apiError}
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* Search Bar */}
       <Card>
         <CardContent className="pt-6">
@@ -767,18 +764,14 @@ export default function EventsPage({ params }: EventsPageProps) {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {currentEvents.length === 0 ? (
                 <div className="col-span-full text-center py-12">
-                  {apiError ? (
-                    <div className="space-y-2">
-                      <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
-                      <p className="text-muted-foreground">Unable to load events due to an error</p>
-                      <Button variant="outline" onClick={getAllEventData} disabled={loading}>
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Try Again
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground">No events found</p>
-                  )}
+                  <div className="space-y-2">
+                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
+                    <p className="text-muted-foreground">No events data available</p>
+                    <Button variant="outline" onClick={getAllEventData} disabled={loading}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 currentEvents.map((event) => (
@@ -910,18 +903,14 @@ export default function EventsPage({ params }: EventsPageProps) {
                     {currentEvents.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={(role as UserRole) === "promoter" ? 9 : 7} className="text-center py-8">
-                          {apiError ? (
-                            <div className="space-y-2">
-                              <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
-                              <p className="text-muted-foreground">Unable to load events due to an error</p>
-                              <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Try Again
-                              </Button>
-                            </div>
-                          ) : (
-                            "No events found"
-                          )}
+                          <div className="space-y-2">
+                            <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
+                            <p className="text-muted-foreground">No events data available</p>
+                            <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
+                              <RefreshCw className="h-4 w-4 mr-2" />
+                              Refresh
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (
