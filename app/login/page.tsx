@@ -26,22 +26,22 @@ interface RoleOption {
 }
 
 const roleOptions: RoleOption[] = [
-  {
-    value: "superadmin",
-    label: "Super Admin",
-    description: "Full system access and management",
-    endpoint: authEndpoints.LOGIN_API,
-  },
-  {
-    value: "organizer",
-    label: "Organizer",
-    description: "Event creation and management",
-    endpoint: organizerEndpoint.ORGANIZER_LOGIN_API_URL,
-  },
+  // {
+  //   value: "superadmin",
+  //   label: "Super Admin",
+  //   description: "Full system access and management",
+  //   endpoint: authEndpoints.LOGIN_API,
+  // },
+  // {
+  //   value: "organizer",
+  //   label: "Organizer",
+  //   description: "Event creation and management",
+  //   endpoint: organizerEndpoint.ORGANIZER_LOGIN_API_URL,
+  // },
   {
     value: "promoter",
     label: "Promoter",
-    description: "Event promotion and ticket sales",
+    description: "",
     endpoint: promoterEndPointPannel.LOGIN_PROMOTER_URL,
   },
 ]
