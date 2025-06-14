@@ -904,13 +904,19 @@ export default function EventsPage({ params }: EventsPageProps) {
             )}
           </div>
         </CardContent>
-      </Card>{/* Enhanced Tabs */}
+      </Card>      {/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-muted/50 dark:bg-muted/20">
-          <TabsTrigger value="all" className="text-xs sm:text-sm">
+        <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
+          <TabsTrigger 
+            value="all" 
+            className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+          >
             All ({allEventsData.length})
           </TabsTrigger>
-          <TabsTrigger value="published" className="text-xs sm:text-sm">
+          <TabsTrigger 
+            value="published" 
+            className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+          >
             Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
           </TabsTrigger>
         </TabsList>
@@ -918,16 +924,17 @@ export default function EventsPage({ params }: EventsPageProps) {
         <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-              {currentEvents.length === 0 ? (
-                <div className="col-span-full text-center py-12">
-                  <div className="space-y-4">
-                    <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
-                      <AlertCircle className="h-8 w-8 text-muted-foreground" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+              {currentEvents.length === 0 ? (                <div className="col-span-full text-center py-16">
+                  <div className="space-y-6">
+                    <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
+                      <AlertCircle className="h-10 w-10 text-muted-foreground" />
                     </div>
-                    <div className="space-y-2">
-                      <p className="text-lg font-medium text-muted-foreground">No events found</p>
-                      <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+                    <div className="space-y-3">
+                      <h3 className="text-xl font-semibold text-muted-foreground">No events found</h3>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Try adjusting your search terms or filters to find the events you're looking for
+                      </p>
                     </div>
                     <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
                       <RefreshCw className="h-4 w-4 mr-2" />
@@ -937,144 +944,171 @@ export default function EventsPage({ params }: EventsPageProps) {
                 </div>
               ) : (
                 currentEvents.map((event) => (
-                  <Card key={event._id} className="group overflow-hidden hover:shadow-xl transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm hover:bg-card/90">
-                    {/* Enhanced Image Section */}
+                  <Card key={event._id} className="group overflow-hidden hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer">                    {/* Enhanced Image Section with Overlay Effects */}
                     <div className="relative overflow-hidden">
-                      <img
-                        src={event.eventImage || "/placeholder.svg"}
-                        alt={event.eventName}
-                        className="w-full h-48 sm:h-52 object-cover transition-transform duration-300 group-hover:scale-105"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      <div className="aspect-[16/10] overflow-hidden">
+                        <img
+                          src={event.eventImage || "/placeholder.svg"}
+                          alt={event.eventName}
+                          className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+                        />
+                      </div>
                       
-                      {/* Status Badge */}
-                      <div className="absolute top-3 right-3">
-                        <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="shadow-lg backdrop-blur-sm">
+                      {/* Gradient overlays */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-70 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />                      
+                      {/* Status Badge with enhanced styling */}
+                      <div className="absolute top-4 right-4">
+                        <Badge 
+                          variant={getStatusBadgeVariant(event.eventStatus)} 
+                          className="shadow-lg backdrop-blur-md bg-background/90 border-background/20 text-xs font-medium px-3 py-1"
+                        >
                           {normalizeEventStatus(event.eventStatus)}
                         </Badge>
                       </div>
 
-                      {/* Featured Badge */}
+                      {/* Featured Badge with enhanced styling */}
                       {event.featuredEvent && (
-                        <div className="absolute top-3 left-3">
-                          <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">
-                            <Star className="h-3 w-3" />
+                        <div className="absolute top-4 left-4">
+                          <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm">
+                            <Star className="h-3 w-3 fill-current" />
                             Featured
                           </div>
                         </div>
                       )}
 
-                      {/* Quick Action Overlay */}
-                      <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      {/* Quick Action Overlay with improved positioning */}
+                      <div className="absolute bottom-4 left-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
                         <div className="flex gap-2">
                           <Button 
                             size="sm" 
-                            className="flex-1 bg-white/90 hover:bg-white text-black border-0 shadow-lg text-xs backdrop-blur-sm" 
-                            onClick={() => handleCheckReport(event._id)}
+                            className="flex-1 bg-white/95 hover:bg-white text-black border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCheckReport(event._id)
+                            }}
                           >
-                            <BarChart3 className="h-3 w-3 mr-1" />
-                            Report
+                            <BarChart3 className="h-3 w-3 mr-1.5" />
+                            Analytics
                           </Button>
                           <Button 
                             size="sm" 
-                            className="flex-1 bg-primary/90 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs backdrop-blur-sm"
-                            onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                            className="flex-1 bg-primary/95 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleBookTicket(event._id, event.arrangedEventDateTime)
+                            }}
                           >
-                            <DollarSign className="h-3 w-3 mr-1" />
-                            Book
+                            <DollarSign className="h-3 w-3 mr-1.5" />
+                            Book Now
                           </Button>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Enhanced Content Section */}
-                    <div className="p-4 sm:p-5 space-y-4">
-                      {/* Header */}
+                    </div>                    {/* Enhanced Content Section */}
+                    <div className="p-5 space-y-4">
+                      {/* Header with improved typography */}
                       <div className="space-y-2">
-                        <h3 className="font-bold text-base sm:text-lg line-clamp-2 group-hover:text-primary transition-colors">
+                        <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
                           {event.eventName}
                         </h3>
-                        <p 
-                          className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed"
+                        <div 
+                          className="text-sm text-muted-foreground line-clamp-3 leading-relaxed"
                           dangerouslySetInnerHTML={{ 
-                            __html: event.eventDescription.length > 80 
-                              ? event.eventDescription.substring(0, 80) + '...' 
-                              : event.eventDescription 
+                            __html: stripHtmlTags(event.eventDescription).length > 100 
+                              ? stripHtmlTags(event.eventDescription).substring(0, 100) + '...' 
+                              : stripHtmlTags(event.eventDescription)
                           }}
                         />
                       </div>
 
-                      {/* Event Details Grid */}
-                      <div className="grid grid-cols-1 gap-2.5">
+                      {/* Event Details Grid with enhanced styling */}
+                      <div className="space-y-3">
                         {/* Date & Time */}
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
-                          <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="truncate">{formatDate(event.eventStartDate)}</span>
-                          <Clock className="h-4 w-4 text-primary flex-shrink-0 ml-1" />
-                          <span className="truncate">{formatTime(event.eventStartDate)}</span>
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-medium">{formatDate(event.eventStartDate)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-medium">{formatTime(event.eventStartDate)}</span>
+                          </div>
                         </div>
 
                         {/* Location */}
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
                           <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="truncate">
-                            {event.venueName}, {event.city}
-                          </span>
+                          <div className="flex-1">
+                            <span className="font-medium block truncate">
+                              {event.venueName}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {event.city}
+                            </span>
+                          </div>
                         </div>
 
                         {/* Organizer */}
-                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
                           <Users className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="truncate">{event.organizerName}</span>
+                          <span className="font-medium truncate">{event.organizerName}</span>
                         </div>
-
+                      </div>
+                      {/* Enhanced badges and info sections */}
+                      <div className="space-y-3">
                         {/* Category */}
                         {event.categoryName && (
                           <div className="flex items-center justify-center">
-                            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
-                              {event.categoryName}
+                            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 font-medium px-3 py-1">
+                              🎯 {event.categoryName}
                             </Badge>
+                          </div>
+                        )}
+
+                        {/* Additional Info sections with improved styling */}
+                        {event.bestSuitedFor && (
+                          <div className="p-3 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
+                            <div className="text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
+                              👥 Best suited for age {event.bestSuitedFor}+
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Contact Info */}
+                        {event.bookingPhoneNumber && (
+                          <div className="p-3 bg-gradient-to-r from-green-50/80 to-green-100/80 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
+                            <div className="flex items-center justify-center gap-2 text-sm">
+                              <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
+                            </div>
                           </div>
                         )}
                       </div>
 
-                      {/* Additional Info */}
-                      {event.bestSuitedFor && (
-                        <div className="p-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
-                          <div className="text-xs sm:text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
-                            👥 Best for age {event.bestSuitedFor}+
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Contact Info */}
-                      {event.bookingPhoneNumber && (
-                        <div className="p-3 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
-                          <div className="flex items-center justify-center gap-2 text-xs sm:text-sm">
-                            <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
-                            <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Desktop Action Buttons */}
-                      <div className="flex gap-2 sm:opacity-100 group-hover:opacity-100 transition-opacity">
+                      {/* Desktop Action Buttons with improved styling */}
+                      <div className="flex gap-3 pt-2">
                         <Button 
                           size="sm" 
                           variant="outline"
-                          className="flex-1 text-xs sm:text-sm border-primary/20 hover:bg-primary/10 hover:border-primary/40" 
-                          onClick={() => handleCheckReport(event._id)}
+                          className="flex-1 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 font-medium" 
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleCheckReport(event._id)
+                          }}
                         >
-                          <BarChart3 className="h-4 w-4 mr-1" />
-                          Report
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          View Report
                         </Button>
                         <Button 
                           size="sm" 
-                          className="flex-1 text-xs sm:text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
-                          onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                          className="flex-1 text-sm bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/85 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleBookTicket(event._id, event.arrangedEventDateTime)
+                          }}
                         >
-                          <DollarSign className="h-4 w-4 mr-1" />
-                          Book Ticket
+                          <DollarSign className="h-4 w-4 mr-2" />
+                          Book Tickets
                         </Button>
                       </div>
                     </div>
