@@ -757,241 +757,335 @@ export default function EventsPage({ params }: EventsPageProps) {
       </div>
     )
   }
-
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">
+    <div className="flex flex-col gap-4 sm:gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold">
           {(role as UserRole) === "promoter" ? "Available Events to Promote" : "Events Management"}
         </h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
           {(role as UserRole) === "promoter" && (
-            <div className="flex items-center gap-2 mr-4">
+            <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg">
               <Button
-                variant={viewMode === "cards" ? "default" : "outline"}
+                variant={viewMode === "cards" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setViewMode("cards")}
+                className={`text-xs sm:text-sm ${viewMode === "cards" ? "shadow-sm" : ""}`}
               >
                 Cards
               </Button>
               <Button
-                variant={viewMode === "table" ? "default" : "outline"}
+                variant={viewMode === "table" ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setViewMode("table")}
+                className={`text-xs sm:text-sm ${viewMode === "table" ? "shadow-sm" : ""}`}
               >
                 Table
               </Button>
             </div>
           )}
           {canAddEvent && (
-            <Button>
+            <Button className="w-full sm:w-auto text-sm">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Event
             </Button>
           )}
         </div>
-      </div>      {/* Search Bar and Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+      </div>      {/* Enhanced Search Bar and Filters */}
+      <Card className="border-0 shadow-lg bg-gradient-to-r from-card/90 to-card/95 backdrop-blur-sm">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex flex-col gap-4">
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
               {searchLoading && (
-                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-primary h-4 w-4 animate-spin z-10" />
               )}
               <Input
-                placeholder="Search by event name"
+                placeholder="Search by event name..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-10"
+                className="pl-10 pr-10 h-12 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm sm:text-base transition-all duration-200 shadow-inner"
                 disabled={searchLoading}
               />
+              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
             </div>
 
+            {/* Filters Row */}
             {(role as UserRole) === "promoter" && (
-              <div className="flex gap-2 items-center">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 {/* Date Filter Dropdown */}
-                <div className="relative">
+                <div className="flex-1 sm:flex-none">
                   <select
-                    className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
                     value={dateFilterOption}
                     onChange={(e) => handleDateSelection(e.target.value)}
                   >
-                    <option value="">Select Date Filter</option>
-                    <option value="Today">Today</option>
-                    <option value="Yesterday">Yesterday</option>
-                    <option value="Last 7 Days">Last 7 Days</option>
-                    <option value="Last 1 Month">Last 1 Month</option>
-                    <option value="Manual">Manual</option>
+                    <option value="">📅 Select Date Filter</option>
+                    <option value="Today">📍 Today</option>
+                    <option value="Yesterday">⏮️ Yesterday</option>
+                    <option value="Last 7 Days">📊 Last 7 Days</option>
+                    <option value="Last 1 Month">📈 Last 1 Month</option>
+                    <option value="Manual">🔧 Manual Selection</option>
                   </select>
                 </div>
 
                 {/* Manual Date Selection */}
                 {isManual && (
-                  <div className="flex gap-2 items-center">
-                    <Input
-                      type="date"
-                      value={startDate ? startDate.split('T')[0] : ''}
-                      onChange={(e) => handleManualDateChange(e.target.value, "start")}
-                      className="w-auto"
-                    />
-                    <Input
-                      type="date"
-                      value={endDate ? endDate.split('T')[0] : ''}
-                      onChange={(e) => handleManualDateChange(e.target.value, "end")}
-                      className="w-auto"
-                    />                    <Button onClick={handleManualSubmit} size="sm">
-                      Apply
-                    </Button>
+                  <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Start Date</label>
+                      <Input
+                        type="date"
+                        value={startDate ? startDate.split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange(e.target.value, "start")}
+                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">End Date</label>
+                      <Input
+                        type="date"
+                        value={endDate ? endDate.split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange(e.target.value, "end")}
+                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                      />
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <Button 
+                        onClick={handleManualSubmit} 
+                        size="sm" 
+                        className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+                        disabled={!startDate || !endDate}
+                      >
+                        ✅ Apply Dates
+                      </Button>
+                    </div>
                   </div>
                 )}
 
-                {/* Reset Filters Button */}
-                {(searchTerm || dateFilterOption) && (
-                  <Button variant="outline" size="sm" onClick={resetFilters}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Reset
+                {/* Actions */}
+                <div className="flex gap-2 sm:ml-auto">
+                  {/* Reset Filters Button */}
+                  {(searchTerm || dateFilterOption) && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={resetFilters} 
+                      className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Reset
+                    </Button>
+                  )}
+                  
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
+                  >
+                    <Download className="mr-2 h-4 w-4" /> Export
                   </Button>
-                )}
+                </div>
               </div>
             )}
 
-            <div className="flex gap-2">
-              <Button variant="outline">
-                <Download className="mr-2 h-4 w-4" /> Export
-              </Button>
-            </div>
+            {/* Non-promoter export button */}
+            {(role as UserRole) !== "promoter" && (
+              <div className="flex justify-end">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Export
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
-      </Card>
-
-      <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          <TabsTrigger value="all">All ({allEventsData.length})</TabsTrigger>
-          <TabsTrigger value="published">
+      </Card>{/* Enhanced Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-muted/50 dark:bg-muted/20">
+          <TabsTrigger value="all" className="text-xs sm:text-sm">
+            All ({allEventsData.length})
+          </TabsTrigger>
+          <TabsTrigger value="published" className="text-xs sm:text-sm">
             Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-4">
+        <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
-            // Card View for Promoters
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            // Enhanced Card View for Promoters
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
               {currentEvents.length === 0 ? (
                 <div className="col-span-full text-center py-12">
-                  <div className="space-y-2">
-                    <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto" />
-                    <p className="text-muted-foreground">No events data available</p>
-                    <Button variant="outline" onClick={getAllEventData} disabled={loading}>
+                  <div className="space-y-4">
+                    <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
+                      <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-lg font-medium text-muted-foreground">No events found</p>
+                      <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+                    </div>
+                    <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
                       <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
+                      Refresh Events
                     </Button>
                   </div>
                 </div>
               ) : (
-                currentEvents.map((event) => (                  <Card key={event._id} className="overflow-hidden hover:shadow-lg transition-shadow">
-                    <div className="relative">
+                currentEvents.map((event) => (
+                  <Card key={event._id} className="group overflow-hidden hover:shadow-xl transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm hover:bg-card/90">
+                    {/* Enhanced Image Section */}
+                    <div className="relative overflow-hidden">
                       <img
                         src={event.eventImage || "/placeholder.svg"}
                         alt={event.eventName}
-                        className="w-full h-48 object-cover"
+                        className="w-full h-48 sm:h-52 object-cover transition-transform duration-300 group-hover:scale-105"
                       />
-                      <div className="absolute top-4 right-4">
-                        <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                      
+                      {/* Status Badge */}
+                      <div className="absolute top-3 right-3">
+                        <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="shadow-lg backdrop-blur-sm">
                           {normalizeEventStatus(event.eventStatus)}
                         </Badge>
                       </div>
+
+                      {/* Featured Badge */}
                       {event.featuredEvent && (
-                        <div className="absolute top-4 left-4 bg-yellow-500 text-white px-2 py-1 rounded text-sm font-medium">
-                          Featured
+                        <div className="absolute top-3 left-3">
+                          <div className="flex items-center gap-1 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-2 py-1 rounded-full text-xs font-medium shadow-lg">
+                            <Star className="h-3 w-3" />
+                            Featured
+                          </div>
                         </div>
                       )}
-                    </div>                    <CardHeader className="pb-3">
-                      <CardTitle className="text-lg line-clamp-1">{event.eventName}</CardTitle>
-                      <CardDescription 
-                        className="line-clamp-2 text-sm text-muted-foreground"
-                        dangerouslySetInnerHTML={{ 
-                          __html: event.eventDescription.length > 100 
-                            ? event.eventDescription.substring(0, 100) + '...' 
-                            : event.eventDescription 
-                        }}
-                      />
-                    </CardHeader>
 
-                    <CardContent className="space-y-4">                      {/* Event Details */}
+                      {/* Quick Action Overlay */}
+                      <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            className="flex-1 bg-white/90 hover:bg-white text-black border-0 shadow-lg text-xs backdrop-blur-sm" 
+                            onClick={() => handleCheckReport(event._id)}
+                          >
+                            <BarChart3 className="h-3 w-3 mr-1" />
+                            Report
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="flex-1 bg-primary/90 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs backdrop-blur-sm"
+                            onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                          >
+                            <DollarSign className="h-3 w-3 mr-1" />
+                            Book
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Enhanced Content Section */}
+                    <div className="p-4 sm:p-5 space-y-4">
+                      {/* Header */}
                       <div className="space-y-2">
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Calendar className="h-4 w-4" />
-                          <span>{formatDate(event.eventStartDate)}</span>
-                          <Clock className="h-4 w-4 ml-2" />
-                          <span>{formatTime(event.eventStartDate)}</span>
+                        <h3 className="font-bold text-base sm:text-lg line-clamp-2 group-hover:text-primary transition-colors">
+                          {event.eventName}
+                        </h3>
+                        <p 
+                          className="text-xs sm:text-sm text-muted-foreground line-clamp-2 leading-relaxed"
+                          dangerouslySetInnerHTML={{ 
+                            __html: event.eventDescription.length > 80 
+                              ? event.eventDescription.substring(0, 80) + '...' 
+                              : event.eventDescription 
+                          }}
+                        />
+                      </div>
+
+                      {/* Event Details Grid */}
+                      <div className="grid grid-cols-1 gap-2.5">
+                        {/* Date & Time */}
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
+                          <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                          <span className="truncate">{formatDate(event.eventStartDate)}</span>
+                          <Clock className="h-4 w-4 text-primary flex-shrink-0 ml-1" />
+                          <span className="truncate">{formatTime(event.eventStartDate)}</span>
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <MapPin className="h-4 w-4" />
-                          <span>
+                        {/* Location */}
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
+                          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                          <span className="truncate">
                             {event.venueName}, {event.city}
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Users className="h-4 w-4" />
-                          <span>Organizer: {event.organizerName}</span>
+                        {/* Organizer */}
+                        <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground bg-muted/30 dark:bg-muted/50 rounded-lg p-2.5">
+                          <Users className="h-4 w-4 text-primary flex-shrink-0" />
+                          <span className="truncate">{event.organizerName}</span>
                         </div>
 
+                        {/* Category */}
                         {event.categoryName && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <Badge variant="outline" className="text-xs">
+                          <div className="flex items-center justify-center">
+                            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
                               {event.categoryName}
                             </Badge>
                           </div>
                         )}
                       </div>
 
-                      {/* Best Suited For */}
+                      {/* Additional Info */}
                       {event.bestSuitedFor && (
-                        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                          <div className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                            Best suited for age: {event.bestSuitedFor}+
+                        <div className="p-3 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
+                          <div className="text-xs sm:text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
+                            👥 Best for age {event.bestSuitedFor}+
                           </div>
                         </div>
                       )}
 
                       {/* Contact Info */}
                       {event.bookingPhoneNumber && (
-                        <div className="p-3 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
-                          <div className="text-sm">
-                            <span className="font-medium">Booking Phone: </span>
-                            <span className="text-blue-600">{event.bookingPhoneNumber}</span>
+                        <div className="p-3 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
+                          <div className="flex items-center justify-center gap-2 text-xs sm:text-sm">
+                            <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
                           </div>
                         </div>
-                      )}                      {/* Action Buttons */}
-                      <div className="flex gap-2">
+                      )}
+
+                      {/* Desktop Action Buttons */}
+                      <div className="flex gap-2 sm:opacity-100 group-hover:opacity-100 transition-opacity">
                         <Button 
                           size="sm" 
-                          className="flex-1" 
+                          variant="outline"
+                          className="flex-1 text-xs sm:text-sm border-primary/20 hover:bg-primary/10 hover:border-primary/40" 
                           onClick={() => handleCheckReport(event._id)}
                         >
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          Check Report
-                        </Button>                        <Button 
+                          <BarChart3 className="h-4 w-4 mr-1" />
+                          Report
+                        </Button>
+                        <Button 
                           size="sm" 
-                          variant="outline" 
-                          className="flex-1"
+                          className="flex-1 text-xs sm:text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
                           onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
                         >
-                          <DollarSign className="h-4 w-4 mr-2" />
+                          <DollarSign className="h-4 w-4 mr-1" />
                           Book Ticket
                         </Button>
                       </div>
-                    </CardContent>
+                    </div>
                   </Card>
                 ))
               )}
-            </div>
-          ) : (
-            // Table View (for all roles or when table view is selected)
-            <Card>
-              <CardHeader>
-                <CardTitle>
+            </div>          ) : (
+            // Enhanced Table View (for all roles or when table view is selected)
+            <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-lg sm:text-xl">
                   {activeTab === "all"
                     ? "All Events"
                     : activeTab === "published"
@@ -1002,81 +1096,198 @@ export default function EventsPage({ params }: EventsPageProps) {
                           ? "Events Under Review"
                           : "Rejected Events"}
                 </CardTitle>
-                <CardDescription>{filteredEvents.length} event(s) found</CardDescription>
+                <CardDescription className="text-sm sm:text-base">{filteredEvents.length} event(s) found</CardDescription>
               </CardHeader>
-              <CardContent>
-                <Table>                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Event Name</TableHead>
-                      <TableHead className="hidden md:table-cell">Start Date</TableHead>
-                      <TableHead className="hidden lg:table-cell">Organizer</TableHead>
-                      <TableHead className="hidden lg:table-cell">Venue</TableHead>
-                      <TableHead className="hidden lg:table-cell">City</TableHead>
-                      {(role as UserRole) === "promoter" && (
-                        <>
-                          <TableHead className="hidden xl:table-cell">Category</TableHead>
-                          <TableHead className="hidden xl:table-cell">Phone</TableHead>
-                        </>
-                      )}
-                      <TableHead>Status</TableHead>
-                      <TableHead>
-                        <span className="sr-only">Actions</span>
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentEvents.length === 0 ? (                      <TableRow>
-                        <TableCell colSpan={(role as UserRole) === "promoter" ? 9 : 7} className="text-center py-8">
-                          <div className="space-y-2">
-                            <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
-                            <p className="text-muted-foreground">No events data available</p>
-                            <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
-                              <RefreshCw className="h-4 w-4 mr-2" />
-                              Refresh
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (                      currentEvents.map((event) => (
-                        <TableRow key={event._id}>
-                          <TableCell className="font-medium">{event.eventName}</TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            {event.eventStartDate ? formatDate(event.eventStartDate) : "N/A"}
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">{event.organizerName || "N/A"}</TableCell>
-                          <TableCell className="hidden lg:table-cell">{event.venueName || "N/A"}</TableCell>
-                          <TableCell className="hidden lg:table-cell">{event.city || "N/A"}</TableCell>
-                          {(role as UserRole) === "promoter" && (
-                            <>
-                              <TableCell className="hidden xl:table-cell">
-                                <Badge variant="outline">{event.categoryName || "N/A"}</Badge>
-                              </TableCell>
-                              <TableCell className="hidden xl:table-cell">
-                                {event.bookingPhoneNumber || "N/A"}
-                              </TableCell>
-                            </>
-                          )}
-                          <TableCell>
-                            <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
+              <CardContent className="p-0">
+                {/* Mobile Card View (hidden on desktop) */}
+                <div className="block lg:hidden p-4 space-y-4">
+                  {currentEvents.length === 0 ? (
+                    <div className="text-center py-12">
+                      <div className="space-y-4">
+                        <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
+                          <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-base font-medium text-muted-foreground">No events found</p>
+                          <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+                        </div>
+                        <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh Events
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    currentEvents.map((event) => (
+                      <Card key={event._id} className="p-4 border border-border/50 hover:shadow-md transition-shadow">
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between">
+                            <h3 className="font-semibold text-sm line-clamp-2 flex-1 pr-2">{event.eventName}</h3>
+                            <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="text-xs">
                               {normalizeEventStatus(event.eventStatus)}
                             </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button aria-haspopup="true" size="icon" variant="ghost">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                  <span className="sr-only">Toggle menu</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <Calendar className="h-3 w-3" />
+                              <span>{event.eventStartDate ? formatDate(event.eventStartDate) : "N/A"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-3 w-3" />
+                              <span>{event.venueName || "N/A"}, {event.city || "N/A"}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Users className="h-3 w-3" />
+                              <span>{event.organizerName || "N/A"}</span>
+                            </div>
+                            {(role as UserRole) === "promoter" && (
+                              <>
+                                {event.categoryName && (
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {event.categoryName}
+                                    </Badge>
+                                  </div>
+                                )}
+                                {event.bookingPhoneNumber && (
+                                  <div className="flex items-center gap-2">
+                                    <Phone className="h-3 w-3" />
+                                    <span>{event.bookingPhoneNumber}</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          <div className="flex gap-2 pt-2">
+                            {(role as UserRole) === "promoter" ? (
+                              <>
+                                <Button 
+                                  size="sm" 
+                                  variant="outline"
+                                  className="flex-1 text-xs" 
+                                  onClick={() => handleCheckReport(event._id)}
+                                >
+                                  <BarChart3 className="h-3 w-3 mr-1" />
+                                  Report
                                 </Button>
-                              </DropdownMenuTrigger>                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                {(role as UserRole) === "promoter" ? (
-                                  <>                                    <DropdownMenuItem 
+                                <Button 
+                                  size="sm" 
+                                  className="flex-1 text-xs"
+                                  onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                                >
+                                  <DollarSign className="h-3 w-3 mr-1" />
+                                  Book
+                                </Button>
+                              </>
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button aria-haspopup="true" size="sm" variant="ghost" className="ml-auto">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Toggle menu</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem>Edit</DropdownMenuItem>
+                                  <DropdownMenuItem>Delete</DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+
+                {/* Desktop Table View (hidden on mobile) */}
+                <div className="hidden lg:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-border/50">
+                        <TableHead className="text-sm">Event Name</TableHead>
+                        <TableHead className="text-sm">Start Date</TableHead>
+                        <TableHead className="text-sm">Organizer</TableHead>
+                        <TableHead className="text-sm">Venue</TableHead>
+                        <TableHead className="text-sm">City</TableHead>
+                        {(role as UserRole) === "promoter" && (
+                          <>
+                            <TableHead className="text-sm">Category</TableHead>
+                            <TableHead className="text-sm">Phone</TableHead>
+                          </>
+                        )}
+                        <TableHead className="text-sm">Status</TableHead>
+                        <TableHead className="text-sm">
+                          <span className="sr-only">Actions</span>
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {currentEvents.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={(role as UserRole) === "promoter" ? 9 : 7} className="text-center py-12">
+                            <div className="space-y-4">
+                              <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
+                                <AlertCircle className="h-8 w-8 text-muted-foreground" />
+                              </div>
+                              <div className="space-y-2">
+                                <p className="text-base font-medium text-muted-foreground">No events found</p>
+                                <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
+                              </div>
+                              <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Refresh Events
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        currentEvents.map((event) => (
+                          <TableRow key={event._id} className="hover:bg-muted/30 transition-colors border-border/50">                            <TableCell className="font-medium text-sm max-w-[200px] truncate">{event.eventName}</TableCell>
+                            <TableCell className="text-sm">
+                              {event.eventStartDate ? formatDate(event.eventStartDate) : "N/A"}
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[150px] truncate">{event.organizerName || "N/A"}</TableCell>
+                            <TableCell className="text-sm max-w-[150px] truncate">{event.venueName || "N/A"}</TableCell>
+                            <TableCell className="text-sm">{event.city || "N/A"}</TableCell>
+                            {(role as UserRole) === "promoter" && (
+                              <>
+                                <TableCell className="text-sm">
+                                  {event.categoryName ? (
+                                    <Badge variant="outline" className="text-xs">
+                                      {event.categoryName}
+                                    </Badge>
+                                  ) : "N/A"}
+                                </TableCell>
+                                <TableCell className="text-sm">{event.bookingPhoneNumber || "N/A"}</TableCell>
+                              </>
+                            )}
+                            <TableCell>
+                              <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="text-xs">
+                                {normalizeEventStatus(event.eventStatus)}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {(role as UserRole) === "promoter" ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button aria-haspopup="true" size="icon" variant="ghost">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                      <span className="sr-only">Toggle menu</span>
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                    <DropdownMenuItem 
                                       onClick={() => handleCheckReport(event._id)}
                                     >
                                       <BarChart3 className="mr-2 h-4 w-4" />
                                       Check Report
-                                    </DropdownMenuItem>                                    <DropdownMenuItem 
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
                                       onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
                                     >
                                       <DollarSign className="mr-2 h-4 w-4" />
@@ -1090,9 +1301,17 @@ export default function EventsPage({ params }: EventsPageProps) {
                                       <Eye className="mr-2 h-4 w-4" />
                                       View Details
                                     </DropdownMenuItem>
-                                  </>
-                                ) : (
-                                  <>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button aria-haspopup="true" size="icon" variant="ghost">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                      <span className="sr-only">Toggle menu</span>
+                                    </Button>
+                                  </DropdownMenuTrigger>                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                     <DropdownMenuItem>View & Edit</DropdownMenuItem>
                                     <DropdownMenuItem>Booking</DropdownMenuItem>
                                     {(canAddEvent) && (
@@ -1101,59 +1320,62 @@ export default function EventsPage({ params }: EventsPageProps) {
                                     {(role as UserRole) === "superadmin" && (
                                       <DropdownMenuItem className="text-red-600">Disable</DropdownMenuItem>
                                     )}
-                                  </>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
 
+                {/* Pagination */}
                 {totalPages > 1 && (
-                  <Pagination className="mt-6">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            if (currentPage > 1) handlePageChange(currentPage - 1)
-                          }}
-                          className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                        />
-                      </PaginationItem>
-                      {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                        const pageNum = i + 1
-                        return (
-                          <PaginationItem key={pageNum}>
-                            <PaginationLink
-                              href="#"
-                              isActive={currentPage === pageNum}
-                              onClick={(e) => {
-                                e.preventDefault()
-                                handlePageChange(pageNum)
-                              }}
-                            >
-                              {pageNum}
-                            </PaginationLink>
-                          </PaginationItem>
-                        )
-                      })}
-                      <PaginationItem>
-                        <PaginationNext
-                          href="#"
-                          onClick={(e) => {
-                            e.preventDefault()
-                            if (currentPage < totalPages) handlePageChange(currentPage + 1)
-                          }}
-                          className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+                  <div className="p-4 border-t border-border/50">
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              if (currentPage > 1) handlePageChange(currentPage - 1)
+                            }}
+                            className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                        {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                          const pageNum = i + 1
+                          return (
+                            <PaginationItem key={pageNum}>
+                              <PaginationLink
+                                href="#"
+                                isActive={currentPage === pageNum}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  handlePageChange(pageNum)
+                                }}
+                              >
+                                {pageNum}
+                              </PaginationLink>
+                            </PaginationItem>
+                          )
+                        })}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              if (currentPage < totalPages) handlePageChange(currentPage + 1)
+                            }}
+                            className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
                 )}
               </CardContent>
             </Card>
