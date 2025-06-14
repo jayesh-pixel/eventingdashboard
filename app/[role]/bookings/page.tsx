@@ -123,11 +123,13 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           promoter_id: user.user_id
         }
       } else {
-        // For super admin and organizers, get all bookings or filtered by organizer
-        apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+        // For super admin and organizers, get latest bookings
+        apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
         requestPayload = {
           AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
           user_id: user.user_id,
+          page: currentPage.toString(),
+          limit: ITEMS_PER_PAGE.toString(),
         }
       }
 

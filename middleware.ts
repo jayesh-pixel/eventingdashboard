@@ -5,7 +5,15 @@ export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   // Define public paths that don't require authentication
-  const isPublicPath = path === "/login" || path === "/forgot-password" || path === "/reset-password"
+  const publicPaths = [
+    "/login",
+    "/login/admin",
+    "/login/organizer",
+    "/login/promoter",
+    "/forgot-password",
+    "/reset-password",
+  ]
+  const isPublicPath = publicPaths.includes(path)
 
   // Get the token from cookies
   const token = request.cookies.get("authToken")?.value || ""
@@ -13,7 +21,12 @@ export function middleware(request: NextRequest) {
   // Redirect logic
   if (isPublicPath && token) {
     // If user is on a public path but has a token, redirect to dashboard
-    return NextResponse.redirect(new URL("/superadmin/dashboard", request.url))
+    // Try to detect role from cookie or path, fallback to superadmin
+    let dashboardPath = "/superadmin/dashboard"
+    if (path === "/login/organizer") dashboardPath = "/organizer/dashboard"
+    if (path === "/login/promoter") dashboardPath = "/promoter/dashboard"
+    if (path === "/login/admin" || path === "/login") dashboardPath = "/superadmin/dashboard"
+    return NextResponse.redirect(new URL(dashboardPath, request.url))
   }
 
   if (!isPublicPath && !token && !path.includes("/api/")) {

@@ -146,3 +146,18 @@ export interface User {
   Username?: string
   Email?: string
 }
+
+// Ticket Type Constants
+export const TicketType = {
+  SingleDay: 1,
+  MultipleDay: 2,
+  SeasonPass: 3,
+  BulkTicket: 4,
+} as const
+
+// Event Type Constants
+export const EventType = {
+  Booking: 1,
+  Registration: 2,
+  WhatsApp: 3,
+} as const

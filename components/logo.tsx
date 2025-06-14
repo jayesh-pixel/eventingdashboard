@@ -1,7 +1,6 @@
 "use client"
 
-import Image from "next/image"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 interface LogoProps {
   collapsed?: boolean
@@ -9,35 +8,29 @@ interface LogoProps {
 }
 
 export function Logo({ collapsed = false, className = "" }: LogoProps) {
+  const [isClient, setIsClient] = useState(false)
   const [imageError, setImageError] = useState(false)
 
-  // Fallback text logo if image fails to load
-  const FallbackLogo = () => (
-    <div className={`font-bold text-white ${collapsed ? "text-lg" : "text-xl"} ${className}`}>
-      {collapsed ? "EC" : "EventingClub"}
-    </div>
-  )
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
-  if (imageError) {
-    return <FallbackLogo />
+  if (!isClient || imageError) {
+    // Render nothing if SSR or image fails
+    return null
   }
 
   return (
     <div className={className}>
-      <Image
+      <img
         src={collapsed ? "/images/eventing-club-logo.svg" : "/images/eventing-club-logo.svg"}
         alt="EventingClub Logo"
         width={collapsed ? 48 : 180}
         height={collapsed ? 48 : 60}
-        priority
         className="object-contain"
-        onError={() => {
-          console.warn("Logo image failed to load, using fallback")
-          setImageError(true)
-        }}
-        onLoad={() => {
-          console.log("Logo loaded successfully")
-        }}
+        onError={() => setImageError(true)}
+        loading="eager"
+        draggable={false}
       />
     </div>
   )

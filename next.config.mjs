@@ -12,11 +12,8 @@ const nextConfig = {
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
     unoptimized: true,
-  },
-  // Enable static file serving
+  },  // Enable static file serving
   trailingSlash: false,
-  // Optimize for development
-  swcMinify: true,
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

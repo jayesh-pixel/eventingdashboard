@@ -31,6 +31,8 @@ import {
   Eye,
   BarChart3,
   RefreshCw,
+  Star,
+  Phone,
 } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import {
@@ -56,164 +58,7 @@ interface EventsPageProps {
 const ITEMS_PER_PAGE = 9 // Changed to 9 for better card grid layout
 
 // Mock promoter-specific events with additional data
-const mockPromoterEvents = [
-  {
-    _id: "evt001",
-    eventName: "Summer Music Festival",
-    eventDescription: "A three-day music festival featuring top artists from around the world",
-    eventStatus: "Published",
-    eventType: "Multi-Day",
-    organizerId: "org001",
-    organizerName: "MusicFest Inc.",
-    venueId: "ven001",
-    venueName: "Central Park",
-    city: "New York",
-    eventStartDate: "2025-07-15T10:00:00.000Z",
-    eventEndDate: "2025-07-17T22:00:00.000Z",
-    createdAt: "2025-01-15T08:30:00.000Z",
-    updatedAt: "2025-01-20T14:45:00.000Z",
-    // Promoter-specific data
-    commissionRate: 15,
-    ticketsSold: 1250,
-    totalRevenue: 187500,
-    myCommission: 28125,
-    promoterLink: "https://eventingclub.com/promo/summer-music-fest?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Summer+Music+Festival",
-    ticketPrice: 150,
-    availableTickets: 2750,
-    totalTickets: 4000,
-  },
-  {
-    _id: "evt002",
-    eventName: "Tech Conference 2025",
-    eventDescription: "Annual technology conference with industry leaders and innovative workshops",
-    eventStatus: "Published",
-    eventType: "Single-Day",
-    organizerId: "org002",
-    organizerName: "TechMinds LLC",
-    venueId: "ven002",
-    venueName: "Convention Center",
-    city: "San Francisco",
-    eventStartDate: "2025-09-10T09:00:00.000Z",
-    eventEndDate: "2025-09-10T18:00:00.000Z",
-    createdAt: "2025-02-05T10:15:00.000Z",
-    updatedAt: "2025-02-10T16:30:00.000Z",
-    // Promoter-specific data
-    commissionRate: 12,
-    ticketsSold: 85,
-    totalRevenue: 25415,
-    myCommission: 3049.8,
-    promoterLink: "https://eventingclub.com/promo/tech-conf-2025?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Tech+Conference",
-    ticketPrice: 299,
-    availableTickets: 415,
-    totalTickets: 500,
-  },
-  {
-    _id: "evt003",
-    eventName: "Food & Wine Fair",
-    eventDescription: "Culinary event featuring top chefs and premium wineries from around the region",
-    eventStatus: "Published",
-    eventType: "Multi-Day",
-    organizerId: "org005",
-    organizerName: "Gourmet Events",
-    venueId: "ven005",
-    venueName: "Exhibition Hall",
-    city: "Miami",
-    eventStartDate: "2025-11-20T12:00:00.000Z",
-    eventEndDate: "2025-11-22T22:00:00.000Z",
-    createdAt: "2025-05-15T11:25:00.000Z",
-    updatedAt: "2025-05-20T16:40:00.000Z",
-    // Promoter-specific data
-    commissionRate: 18,
-    ticketsSold: 320,
-    totalRevenue: 24000,
-    myCommission: 4320,
-    promoterLink: "https://eventingclub.com/promo/food-wine-fair?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Food+Wine+Fair",
-    ticketPrice: 75,
-    availableTickets: 680,
-    totalTickets: 1000,
-  },
-  {
-    _id: "evt004",
-    eventName: "Art Gallery Opening",
-    eventDescription: "Exclusive opening of contemporary art exhibition featuring emerging artists",
-    eventStatus: "Published",
-    eventType: "Single-Day",
-    organizerId: "org003",
-    organizerName: "ArtWorld Org",
-    venueId: "ven003",
-    venueName: "City Gallery",
-    city: "Los Angeles",
-    eventStartDate: "2025-08-01T18:00:00.000Z",
-    eventEndDate: "2025-08-01T23:00:00.000Z",
-    createdAt: "2025-03-12T09:45:00.000Z",
-    updatedAt: "2025-03-15T11:20:00.000Z",
-    // Promoter-specific data
-    commissionRate: 20,
-    ticketsSold: 45,
-    totalRevenue: 2250,
-    myCommission: 450,
-    promoterLink: "https://eventingclub.com/promo/art-gallery-opening?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Art+Gallery",
-    ticketPrice: 50,
-    availableTickets: 155,
-    totalTickets: 200,
-  },
-  {
-    _id: "evt005",
-    eventName: "Business Networking Summit",
-    eventDescription: "Connect with industry leaders and expand your professional network",
-    eventStatus: "Published",
-    eventType: "Single-Day",
-    organizerId: "org006",
-    organizerName: "Business Connect",
-    venueId: "ven006",
-    venueName: "Business Center",
-    city: "Chicago",
-    eventStartDate: "2025-10-15T08:00:00.000Z",
-    eventEndDate: "2025-10-15T17:00:00.000Z",
-    createdAt: "2025-04-10T10:30:00.000Z",
-    updatedAt: "2025-04-15T14:20:00.000Z",
-    // Promoter-specific data
-    commissionRate: 10,
-    ticketsSold: 120,
-    totalRevenue: 12000,
-    myCommission: 1200,
-    promoterLink: "https://eventingclub.com/promo/business-summit?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Business+Summit",
-    ticketPrice: 100,
-    availableTickets: 180,
-    totalTickets: 300,
-  },
-  {
-    _id: "evt006",
-    eventName: "Charity Gala Night",
-    eventDescription: "Elegant charity event supporting local community initiatives",
-    eventStatus: "Published",
-    eventType: "Single-Day",
-    organizerId: "org007",
-    organizerName: "Hope Foundation",
-    venueId: "ven007",
-    venueName: "Grand Ballroom",
-    city: "Boston",
-    eventStartDate: "2025-12-05T19:00:00.000Z",
-    eventEndDate: "2025-12-05T23:30:00.000Z",
-    createdAt: "2025-06-01T12:00:00.000Z",
-    updatedAt: "2025-06-05T16:45:00.000Z",
-    // Promoter-specific data
-    commissionRate: 8,
-    ticketsSold: 75,
-    totalRevenue: 18750,
-    myCommission: 1500,
-    promoterLink: "https://eventingclub.com/promo/charity-gala?ref=PROMO123",
-    eventImage: "/placeholder.svg?height=200&width=300&text=Charity+Gala",
-    ticketPrice: 250,
-    availableTickets: 125,
-    totalTickets: 200,
-  },
-]
+
 
 export default function EventsPage({ params }: EventsPageProps) {
   // Handle params which might be a Promise
@@ -227,9 +72,9 @@ export default function EventsPage({ params }: EventsPageProps) {
   
   const { user } = useAuth()
   const { toast } = useToast()
-
   // State management
   const [loading, setLoading] = React.useState(true)
+  const [searchLoading, setSearchLoading] = React.useState(false)
   const [allEventsData, setAllEventsData] = React.useState<any[]>([])
   const [originalData, setOriginalData] = React.useState<any[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -237,7 +82,6 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
   const [viewMode, setViewMode] = React.useState<"cards" | "table">("cards")
-
   // Search state
   const [searchTerm, setSearchTerm] = React.useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
@@ -245,6 +89,12 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Filter state
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
   const [selectedCity, setSelectedCity] = React.useState("")
+  
+  // Date filter state
+  const [startDate, setStartDate] = React.useState<string | null>(null)
+  const [endDate, setEndDate] = React.useState<string | null>(null)
+  const [isManual, setIsManual] = React.useState(false)
+  const [dateFilterOption, setDateFilterOption] = React.useState("")
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -253,7 +103,6 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
     return status
   }
-
   // Helper function to normalize events data
   const normalizeEventsData = (events: any[]): any[] => {
     console.log("🔍 NORMALIZING EVENTS DATA:")
@@ -264,50 +113,81 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
     
     return events.map((event, index) => {
-      // Create a comprehensive mapping from API field names to frontend field names
+      // Handle the new API response structure
       const normalizedEvent = {
         // Core identifiers
         _id: event._id || event.id || event.EventId || event.event_id || `event_${index}`,
         
-        // Event basic info
-        eventName: event.eventName || event.EventName || event.Name || event.name || event.title || "Untitled Event",
-        eventDescription: event.eventDescription || event.EventDescription || event.Description || event.description || "No description available",
-        eventType: event.eventType || event.EventType || event.Type || event.type || "Single-Day",
+        // Event basic info from new API structure
+        eventName: event.EventName || event.eventName || event.Name || event.name || event.title || "Untitled Event",
+        eventDescription: event.EventDescription || event.eventDescription || event.Description || event.description || "No description available",
+        eventType: event.EventType === 1 ? "Single-Day" : "Multi-Day",
         
-        // Dates
-        eventStartDate: event.eventStartDate || event.EventStartDate || event.StartDate || event.start_date || event.startDate,
-        eventEndDate: event.eventEndDate || event.EventEndDate || event.EndDate || event.end_date || event.endDate,
+        // Dates from arrangedEventDateTime array
+        eventStartDate: event.arrangedEventDateTime?.[0]?.EventStartDateTime || event.eventStartDate || event.EventStartDate,
+        eventEndDate: event.arrangedEventDateTime?.[0]?.EventEndDateTime || event.eventEndDate || event.EventEndDate,
         createdAt: event.createdAt || event.CreatedAt || event.created_at || new Date().toISOString(),
         updatedAt: event.updatedAt || event.UpdatedAt || event.updated_at || new Date().toISOString(),
         
-        // Location info
-        city: event.city || event.City || event.location || event.Location || "Unknown City",
-        venueName: event.venueName || event.VenueName || event.Venue || event.venue || "Unknown Venue",
-        venueId: event.venueId || event.VenueId || event.venue_id,
+        // Location info from new API structure
+        city: event.VenueCity || event.city || event.City || event.location || event.Location || "Unknown City",
+        venueName: event.VenueName || event.venueName || event.Venue || event.venue || "Unknown Venue",
+        venueId: event.venue_id || event.venueId || event.VenueId,
         
-        // Organizer info
-        organizerId: event.organizerId || event.OrganizerId || event.organizer_id,
-        organizerName: event.organizerName || event.OrganizerName || event.Organizer || event.organizer || "Unknown Organizer",
+        // Organizer info from PopUpOrganizerData
+        organizerId: event.PopUpOrganizerData?.[0]?.organizer_id || event.organizerId || event.OrganizerId,
+        organizerName: event.PopUpOrganizerData?.[0]?.OrganizerName || event.organizerName || event.OrganizerName || "Unknown Organizer",
+        
+        // Promoter info from PopUpPromoterData
+        promoterId: event.PopUpPromoterData?.[0]?.promoter_id || event.promoterId,
+        promoterName: event.PopUpPromoterData?.[0]?.PromoterName || event.promoterName,
+        
+        // Category info
+        categoryName: event.categoryName || "Unknown Category",
         
         // Status (with normalization)
-        eventStatus: normalizeEventStatus(event.eventStatus || event.EventStatus || event.Status || event.status || "Draft"),
+        eventStatus: normalizeEventStatus(event.EventStatus || event.eventStatus || event.Status || event.status || 3),
         
-        // Promoter-specific fields (for promoter role)
-        commissionRate: event.commissionRate || event.CommissionRate || event.commission_rate || 0,
-        ticketsSold: event.ticketsSold || event.TicketsSold || event.tickets_sold || 0,
-        totalRevenue: event.totalRevenue || event.TotalRevenue || event.total_revenue || 0,
-        myCommission: event.myCommission || event.MyCommission || event.my_commission || event.earnings || 0,
-        promoterLink: event.promoterLink || event.PromoterLink || event.promoter_link || "#",
+        // Event flags and settings
+        featuredEvent: event.FeaturedEventFlag === 1,
+        eventVisibility: event.EventVisibility === 1,
+        venueEventFlag: event.VenueEventFlag === 1,
+        onlineEventFlag: event.OnlineEventFlag === 1,
+        onlineEventLink: event.Online_Event_Link,
+        venueToBeAnnounced: event.VenueToBeAnnounced === 1,
         
-        // Ticket info
-        ticketPrice: event.ticketPrice || event.TicketPrice || event.Price || event.price || 0,
-        availableTickets: event.availableTickets || event.AvailableTickets || event.available_tickets || 0,
-        totalTickets: event.totalTickets || event.TotalTickets || event.total_tickets || 0,
+        // Additional info
+        bestSuitedFor: event.BestSuitedFor,
+        eventLanguages: event.EventLanguages || [],
+        eventTermsCondition: event.EventTermsCondition,
+        eventFAQs: event.EventFAQs || [],
+        bookingPhoneNumber: event.BookingPhoneNumber,
+        convenienceFeeUnit: event.ConvinienceFeeUnit,
+        convenienceFeeValue: event.ConvinienceFeeValue,
+          // Images
+        eventImage: event.EventCarouselImages?.[0]?.image_path 
+          ? `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000'}/${event.EventCarouselImages[0].image_path}` 
+          : "/placeholder.svg",
+        carouselImages: event.EventCarouselImages || [],
+        galleryImages: event.EventGalleryImages || [],
         
-        // Images
-        eventImage: event.eventImage || event.EventImage || event.Image || event.image || "/placeholder.svg",
+        // Arrays for related entities
+        eventOrganizers: event.EventOrganizers || [],
+        eventCategories: event.EventCategories || [],
+        eventArtists: event.EventArtist || [],
+        eventGenres: event.EventGenre || [],
+        eventPromoters: event.EventPromoter || [],
         
-        // Keep any additional fields as-is
+        // Season pass info
+        seasonPassCount: event.SeasonPassCount || 0,
+          // For promoter-specific data (placeholder values for now)
+        commissionRate: 15, // Default commission rate
+        ticketsSold: 0, // This would come from booking reports
+        totalRevenue: 0, // This would come from booking reports
+        myCommission: 0, // This would be calculated from bookings
+        promoterLink: `/book/${event._id}?promoter=${event.PopUpPromoterData?.[0]?.promoter_id || ''}`,
+        
+        // Keep original event data
         ...event
       }
       
@@ -315,13 +195,6 @@ export default function EventsPage({ params }: EventsPageProps) {
         console.log("🔄 NORMALIZED EVENT SAMPLE:")
         console.log("- Original keys:", Object.keys(event))
         console.log("- Normalized keys:", Object.keys(normalizedEvent))
-        console.log("- Key mappings:")
-        console.log("  - eventName:", event.eventName || event.EventName || event.Name || "❌ MISSING")
-        console.log("  - eventStartDate:", event.eventStartDate || event.EventStartDate || event.StartDate || "❌ MISSING")
-        console.log("  - organizerName:", event.organizerName || event.OrganizerName || event.Organizer || "❌ MISSING")
-        console.log("  - venueName:", event.venueName || event.VenueName || event.Venue || "❌ MISSING")
-        console.log("  - city:", event.city || event.City || event.location || "❌ MISSING")
-        console.log("  - eventStatus:", event.eventStatus || event.EventStatus || event.Status || "❌ MISSING")
       }
       
       return normalizedEvent
@@ -566,12 +439,11 @@ export default function EventsPage({ params }: EventsPageProps) {
       setLoading(false)
     }
   }
-
   // Search with debounce
   React.useEffect(() => {
     const delay = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
-    }, 700)
+    }, 1000)
 
     return () => clearTimeout(delay)
   }, [searchTerm])
@@ -582,11 +454,166 @@ export default function EventsPage({ params }: EventsPageProps) {
       return
     }
 
-    const filtered = originalData.filter((event) =>
-      event.eventName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
-    )
-    setAllEventsData(filtered)
-  }, [debouncedSearchTerm, originalData])
+    // For promoter role, make API call with search keyword
+    if (role === "promoter" && debouncedSearchTerm.length >= 3) {
+      searchEventsWithKeyword(debouncedSearchTerm)
+    } else {
+      // For other roles, filter locally
+      const filtered = originalData.filter((event) =>
+        event.eventName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
+      )
+      setAllEventsData(filtered)
+    }
+  }, [debouncedSearchTerm, originalData, role])
+  // Search events with API call for promoters
+  const searchEventsWithKeyword = async (keyword: string) => {
+    try {
+      setSearchLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      const payload = {
+        AdminRole: 4, // Promoter role ID
+        user_id: user.user_id,
+        eventNameSearchKeyword: keyword,
+      }
+
+      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const eventsArray = data.data || []
+        const normalizedEvents = normalizeEventsData(eventsArray)
+        setAllEventsData(normalizedEvents)
+      } else {
+        setAllEventsData([])
+      }
+    } catch (error) {
+      console.error("Search error:", error)
+      toast({
+        title: "Error",
+        description: "Failed to search events",
+        variant: "destructive",
+      })
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Date filter functionality
+  const handleDateSelection = (option: string) => {
+    setDateFilterOption(option)
+    setIsManual(option === "Manual")
+
+    if (option !== "Manual") {
+      const currentDate = new Date()
+      let start: Date | null = null
+      let end: Date | null = null
+
+      switch (option) {
+        case "Today":
+          start = new Date(currentDate.setHours(0, 1, 1, 0))
+          end = new Date(currentDate.setHours(23, 59, 59, 999))
+          break
+        case "Yesterday":
+          start = new Date(currentDate.setDate(currentDate.getDate() - 1))
+          start.setHours(0, 1, 1, 0)
+          end = new Date(start)
+          end.setHours(23, 59, 59, 999)
+          break
+        case "Last 7 Days":
+          start = new Date(currentDate.setDate(currentDate.getDate() - 7))
+          start.setHours(0, 1, 1, 0)
+          end = new Date()
+          end.setHours(23, 59, 59, 999)
+          break
+        case "Last 1 Month":
+          start = new Date(currentDate.setMonth(currentDate.getMonth() - 1))
+          start.setHours(0, 1, 1, 0)
+          end = new Date()
+          end.setHours(23, 59, 59, 999)
+          break
+        default:
+          start = null
+          end = null
+      }
+
+      if (start && end) {
+        setStartDate(start.toISOString())
+        setEndDate(end.toISOString())
+        dateFilterApiCall(start.toISOString(), end.toISOString())
+      }
+    }
+  }
+
+  const handleManualDateChange = (value: string, type: "start" | "end") => {
+    if (type === "start") {
+      setStartDate(value)
+    } else {
+      setEndDate(value)
+    }
+  }
+
+  const handleManualSubmit = () => {
+    if (startDate && endDate) {
+      dateFilterApiCall(startDate, endDate)
+    }
+  }
+
+  const dateFilterApiCall = async (startDateApiCall: string, endDateApiCall: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      const payload = {
+        AdminRole: 4, // Promoter role ID
+        user_id: user.user_id,
+        startDate: startDateApiCall,
+        endDate: endDateApiCall,
+      }
+
+      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const eventsArray = data.data || []
+        const normalizedEvents = normalizeEventsData(eventsArray)
+        setAllEventsData(normalizedEvents)
+        toast({
+          title: "Success",
+          description: data.message || "Events filtered successfully",
+        })
+      } else {
+        setAllEventsData([])
+        toast({
+          title: "No Data",
+          description: "No events found for the selected date range",
+        })
+      }
+    } catch (error) {
+      console.error("Date filter error:", error)
+      setAllEventsData([])
+      toast({
+        title: "Error",
+        description: "Failed to filter events by date",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Initial data fetch
   React.useEffect(() => {
@@ -664,15 +691,52 @@ export default function EventsPage({ params }: EventsPageProps) {
       month: "short",
       day: "numeric",
       year: "numeric",
+    })  }
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return "N/A"
+    return new Date(dateString).toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "UTC",
     })
   }
 
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
+  const formatDateForDisplay = (dateString: string) => {
+    if (!dateString) return "N/A"
+    return new Date(dateString).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
     })
+  }
+
+  const resetFilters = () => {
+    setSearchTerm("")
+    setDebouncedSearchTerm("")
+    setStartDate(null)
+    setEndDate(null)
+    setIsManual(false)
+    setDateFilterOption("")
+    setAllEventsData(originalData)
+    toast({
+      title: "Filters Reset",
+      description: "All filters have been cleared",
+    })
+  }
+
+  const stripHtmlTags = (html: string) => {
+    return html.replace(/<[^>]*>/g, '').trim()  }
+
+  const handleCheckReport = (eventId: string) => {
+    // Navigate to reports page to check bookings for this event
+    window.open(`/${role}/events/${eventId}/report`, '_blank')
+  }
+
+  const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
+    // Navigate to booking page for this event with event date time data
+    window.open(`/${role}/events/${eventId}/booking-tickets`, '_blank')
   }
 
   if (loading) {
@@ -725,21 +789,70 @@ export default function EventsPage({ params }: EventsPageProps) {
             </Button>
           )}
         </div>
-      </div>
-
-      {/* Search Bar */}
+      </div>      {/* Search Bar and Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex flex-col md:flex-row gap-4 items-center justify-between">            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              {searchLoading && (
+                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
+              )}
               <Input
                 placeholder="Search by event name"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
+                className="pl-10 pr-10"
+                disabled={searchLoading}
               />
             </div>
+
+            {(role as UserRole) === "promoter" && (
+              <div className="flex gap-2 items-center">
+                {/* Date Filter Dropdown */}
+                <div className="relative">
+                  <select
+                    className="block w-full px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    value={dateFilterOption}
+                    onChange={(e) => handleDateSelection(e.target.value)}
+                  >
+                    <option value="">Select Date Filter</option>
+                    <option value="Today">Today</option>
+                    <option value="Yesterday">Yesterday</option>
+                    <option value="Last 7 Days">Last 7 Days</option>
+                    <option value="Last 1 Month">Last 1 Month</option>
+                    <option value="Manual">Manual</option>
+                  </select>
+                </div>
+
+                {/* Manual Date Selection */}
+                {isManual && (
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      type="date"
+                      value={startDate ? startDate.split('T')[0] : ''}
+                      onChange={(e) => handleManualDateChange(e.target.value, "start")}
+                      className="w-auto"
+                    />
+                    <Input
+                      type="date"
+                      value={endDate ? endDate.split('T')[0] : ''}
+                      onChange={(e) => handleManualDateChange(e.target.value, "end")}
+                      className="w-auto"
+                    />                    <Button onClick={handleManualSubmit} size="sm">
+                      Apply
+                    </Button>
+                  </div>
+                )}
+
+                {/* Reset Filters Button */}
+                {(searchTerm || dateFilterOption) && (
+                  <Button variant="outline" size="sm" onClick={resetFilters}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reset
+                  </Button>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button variant="outline">
@@ -774,8 +887,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   </div>
                 </div>
               ) : (
-                currentEvents.map((event) => (
-                  <Card key={event._id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                currentEvents.map((event) => (                  <Card key={event._id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <div className="relative">
                       <img
                         src={event.eventImage || "/placeholder.svg"}
@@ -787,18 +899,24 @@ export default function EventsPage({ params }: EventsPageProps) {
                           {normalizeEventStatus(event.eventStatus)}
                         </Badge>
                       </div>
-                      <div className="absolute bottom-4 left-4 bg-black/70 text-white px-2 py-1 rounded text-sm">
-                        {formatCurrency(event.ticketPrice)}
-                      </div>
-                    </div>
-
-                    <CardHeader className="pb-3">
+                      {event.featuredEvent && (
+                        <div className="absolute top-4 left-4 bg-yellow-500 text-white px-2 py-1 rounded text-sm font-medium">
+                          Featured
+                        </div>
+                      )}
+                    </div>                    <CardHeader className="pb-3">
                       <CardTitle className="text-lg line-clamp-1">{event.eventName}</CardTitle>
-                      <CardDescription className="line-clamp-2">{event.eventDescription}</CardDescription>
+                      <CardDescription 
+                        className="line-clamp-2 text-sm text-muted-foreground"
+                        dangerouslySetInnerHTML={{ 
+                          __html: event.eventDescription.length > 100 
+                            ? event.eventDescription.substring(0, 100) + '...' 
+                            : event.eventDescription 
+                        }}
+                      />
                     </CardHeader>
 
-                    <CardContent className="space-y-4">
-                      {/* Event Details */}
+                    <CardContent className="space-y-4">                      {/* Event Details */}
                       <div className="space-y-2">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Calendar className="h-4 w-4" />
@@ -816,44 +934,52 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Users className="h-4 w-4" />
-                          <span>
-                            {event.availableTickets} / {event.totalTickets} tickets available
-                          </span>
+                          <span>Organizer: {event.organizerName}</span>
                         </div>
+
+                        {event.categoryName && (
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <Badge variant="outline" className="text-xs">
+                              {event.categoryName}
+                            </Badge>
+                          </div>
+                        )}
                       </div>
 
-                      {/* Performance Stats */}
-                      <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
-                        <div className="text-center">
-                          <div className="text-lg font-semibold text-green-600">{event.commissionRate}%</div>
-                          <div className="text-xs text-muted-foreground">Commission</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-semibold">{event.ticketsSold}</div>
-                          <div className="text-xs text-muted-foreground">Sold by You</div>
-                        </div>
-                      </div>
-
-                      {/* Earnings */}
-                      <div className="p-3 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">Your Earnings</span>
-                          <div className="flex items-center gap-1">
-                            <DollarSign className="h-4 w-4 text-green-600" />
-                            <span className="font-semibold text-green-600">{formatCurrency(event.myCommission)}</span>
+                      {/* Best Suited For */}
+                      {event.bestSuitedFor && (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
+                          <div className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                            Best suited for age: {event.bestSuitedFor}+
                           </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Action Buttons */}
+                      {/* Contact Info */}
+                      {event.bookingPhoneNumber && (
+                        <div className="p-3 bg-gray-50 dark:bg-gray-900/20 rounded-lg">
+                          <div className="text-sm">
+                            <span className="font-medium">Booking Phone: </span>
+                            <span className="text-blue-600">{event.bookingPhoneNumber}</span>
+                          </div>
+                        </div>
+                      )}                      {/* Action Buttons */}
                       <div className="flex gap-2">
-                        <Button size="sm" className="flex-1" onClick={() => copyPromoterLink(event.promoterLink)}>
-                          <Share2 className="h-4 w-4 mr-2" />
-                          Copy Link
-                        </Button>
-                        <Button size="sm" variant="outline">
+                        <Button 
+                          size="sm" 
+                          className="flex-1" 
+                          onClick={() => handleCheckReport(event._id)}
+                        >
                           <BarChart3 className="h-4 w-4 mr-2" />
-                          Stats
+                          Check Report
+                        </Button>                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="flex-1"
+                          onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                        >
+                          <DollarSign className="h-4 w-4 mr-2" />
+                          Book Ticket
                         </Button>
                       </div>
                     </CardContent>
@@ -879,8 +1005,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                 <CardDescription>{filteredEvents.length} event(s) found</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
+                <Table>                  <TableHeader>
                     <TableRow>
                       <TableHead>Event Name</TableHead>
                       <TableHead className="hidden md:table-cell">Start Date</TableHead>
@@ -889,8 +1014,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <TableHead className="hidden lg:table-cell">City</TableHead>
                       {(role as UserRole) === "promoter" && (
                         <>
-                          <TableHead className="text-right">Commission</TableHead>
-                          <TableHead className="text-right">Earnings</TableHead>
+                          <TableHead className="hidden xl:table-cell">Category</TableHead>
+                          <TableHead className="hidden xl:table-cell">Phone</TableHead>
                         </>
                       )}
                       <TableHead>Status</TableHead>
@@ -900,8 +1025,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {currentEvents.length === 0 ? (
-                      <TableRow>
+                    {currentEvents.length === 0 ? (                      <TableRow>
                         <TableCell colSpan={(role as UserRole) === "promoter" ? 9 : 7} className="text-center py-8">
                           <div className="space-y-2">
                             <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto" />
@@ -913,8 +1037,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      currentEvents.map((event) => (
+                    ) : (                      currentEvents.map((event) => (
                         <TableRow key={event._id}>
                           <TableCell className="font-medium">{event.eventName}</TableCell>
                           <TableCell className="hidden md:table-cell">
@@ -925,11 +1048,11 @@ export default function EventsPage({ params }: EventsPageProps) {
                           <TableCell className="hidden lg:table-cell">{event.city || "N/A"}</TableCell>
                           {(role as UserRole) === "promoter" && (
                             <>
-                              <TableCell className="text-right">
-                                <Badge variant="secondary">{event.commissionRate}%</Badge>
+                              <TableCell className="hidden xl:table-cell">
+                                <Badge variant="outline">{event.categoryName || "N/A"}</Badge>
                               </TableCell>
-                              <TableCell className="text-right font-medium text-green-600">
-                                {formatCurrency(event.myCommission)}
+                              <TableCell className="hidden xl:table-cell">
+                                {event.bookingPhoneNumber || "N/A"}
                               </TableCell>
                             </>
                           )}
@@ -945,18 +1068,23 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   <MoreHorizontal className="h-4 w-4" />
                                   <span className="sr-only">Toggle menu</span>
                                 </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              </DropdownMenuTrigger>                              <DropdownMenuContent align="end">
                                 <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                 {(role as UserRole) === "promoter" ? (
-                                  <>
+                                  <>                                    <DropdownMenuItem 
+                                      onClick={() => handleCheckReport(event._id)}
+                                    >
+                                      <BarChart3 className="mr-2 h-4 w-4" />
+                                      Check Report
+                                    </DropdownMenuItem>                                    <DropdownMenuItem 
+                                      onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                                    >
+                                      <DollarSign className="mr-2 h-4 w-4" />
+                                      Book Ticket
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => copyPromoterLink(event.promoterLink)}>
                                       <Share2 className="mr-2 h-4 w-4" />
                                       Copy Promoter Link
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <BarChart3 className="mr-2 h-4 w-4" />
-                                      View Statistics
                                     </DropdownMenuItem>
                                     <DropdownMenuItem>
                                       <Eye className="mr-2 h-4 w-4" />

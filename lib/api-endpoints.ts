@@ -1,4 +1,4 @@
-const BASE_URL = "https://node.eventingclub.in"
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
 // AUTH ENDPOINTS
 export const authEndpoints = {
@@ -83,7 +83,9 @@ export const organizerEndpoint = {
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventTransactionBookingsDataforSuperAdminOrganizer",
   GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDataforSuperAdminOrganizer",
+    BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
+  GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
@@ -134,7 +136,7 @@ export const promoterEndPointPannel = {
   GET_ALL_EVENTS_DATA_BY_PROMOTER: BASE_URL + "/events/getAllEventsForPromotersDashboard",
   GET_ALL_EVENT_DATE_BY_EVENT_ID: BASE_URL + "/events/getbyId",
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
-  BOOKING_TICKET_BY_PROMOTER: BASE_URL + "/eventticketbooking/BookEventTicketsByPromoter",
+  BOOKING_TICKET_BY_PROMOTER: BASE_URL + "/eventticketsbooking/BookEventTicketsByPromoter",
   PROMOTER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/promoter/getpasswordresetlink",
   PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/promoter/resetPassword/",
   PROMOTER_CHANGE_PASSWORD_IN_PROFILE: BASE_URL + "/promoter/changepassword",

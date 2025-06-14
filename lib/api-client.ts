@@ -2,7 +2,7 @@
 
 interface ApiResponse<T = any> {
   success: boolean
-  data: T
+  data: T | null
   message?: string
   error?: string
 }
@@ -36,13 +36,13 @@ class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
     const url = endpoint.startsWith("http") ? endpoint : `${this.baseURL}${endpoint}`
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     }
 
     if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`
+      headers["Authorization"] = `Bearer ${this.token}`
     }
 
     try {
@@ -148,4 +148,4 @@ class ApiClient {
   }
 }
 
-export const apiClient = new ApiClient("https://node.eventingclub.in")
+export const apiClient = new ApiClient(process.env.NEXT_PUBLIC_API_BASE_URL ?? "")

@@ -26,18 +26,18 @@ interface RoleOption {
 }
 
 const roleOptions: RoleOption[] = [
-  // {
-  //   value: "superadmin",
-  //   label: "Super Admin",
-  //   description: "Full system access and management",
-  //   endpoint: authEndpoints.LOGIN_API,
-  // },
-  // {
-  //   value: "organizer",
-  //   label: "Organizer",
-  //   description: "Event creation and management",
-  //   endpoint: organizerEndpoint.ORGANIZER_LOGIN_API_URL,
-  // },
+  {
+    value: "superadmin",
+    label: "Super Admin",
+    description: "Full system access and management",
+    endpoint: authEndpoints.LOGIN_API,
+  },
+  {
+    value: "organizer",
+    label: "Organizer",
+    description: "Event creation and management",
+    endpoint: organizerEndpoint.ORGANIZER_LOGIN_API_URL,
+  },
   {
     value: "promoter",
     label: "Promoter",
@@ -315,118 +315,31 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary/80 via-accent/30 to-muted/80 relative overflow-hidden px-2 sm:px-4">
+      {/* Decorative background shapes */}
+      <div className="absolute -top-32 -left-32 w-[250px] h-[250px] sm:w-[400px] sm:h-[400px] bg-accent opacity-20 rounded-full blur-3xl z-0" />
+      <div className="absolute bottom-0 right-0 w-[180px] h-[180px] sm:w-[300px] sm:h-[300px] bg-primary opacity-10 rounded-full blur-2xl z-0" />
+      <Card className="w-full max-w-xs sm:max-w-md bg-white/80 dark:bg-card/80 shadow-2xl backdrop-blur-lg border-0 z-10 mx-auto">
         <CardHeader className="space-y-1 flex flex-col items-center">
-          <div className="mb-4 flex justify-center">
-            <Logo />
-          </div>
-          <CardTitle className="text-2xl text-center">Admin Login</CardTitle>
-          <CardDescription className="text-center">
-            Select your role and enter your credentials to access the admin panel
-          </CardDescription>
+          <Logo className="mb-4 w-32 sm:w-44" />
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-primary text-center">Welcome to EventingClub</CardTitle>
+          <CardDescription className="text-center text-sm sm:text-base text-muted-foreground">Select your login type to continue</CardDescription>
         </CardHeader>
-        <form onSubmit={handleLogin}>
-          <CardContent className="space-y-4">
-            {/* Role Selection */}
-            <div className="space-y-2">
-              <Label htmlFor="role">Login as</Label>
-              <Select value={selectedRole} onValueChange={(value: LoginRole) => setSelectedRole(value)}>
-                <SelectTrigger id="role">
-                  <SelectValue placeholder="Select your role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      <div className="flex items-center space-x-2">
-                        <UserCheck className="h-4 w-4" />
-                        <div>
-                          <div className="font-medium">{option.label}</div>
-                          <div className="text-xs text-muted-foreground">{option.description}</div>
-                        </div>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Username */}
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={isLoading}
-                required
-                autoComplete="username"
-              />
-            </div>
-
-            {/* Password */}
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={isLoading}
-                  required
-                  autoComplete="current-password"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
-                </Button>
-              </div>
-            </div>
-
-            {/* Selected Role Info */}
-            {selectedRole && (
-              <div className="p-3 bg-muted rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <UserCheck className="h-4 w-4 text-primary" />
-                  <div>
-                    <div className="text-sm font-medium">Logging in as {getSelectedRoleOption().label}</div>
-                    <div className="text-xs text-muted-foreground">{getSelectedRoleOption().description}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-          <CardFooter>
-            <Button type="submit" className="w-full" disabled={isLoading || !selectedRole}>
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...
-                </>
-              ) : (
-                <>
-                  <UserCheck className="mr-2 h-4 w-4" />
-                  Sign in as {getSelectedRoleOption().label}
-                </>
-              )}
+        <CardContent className="space-y-6">
+          <div className="flex flex-col gap-4">
+            <Button variant="outline" className="w-full flex items-center gap-2 py-4 sm:py-6 text-base sm:text-lg font-semibold border-primary/30 hover:bg-primary/10 transition" onClick={() => router.push("/login/admin")}> 
+              Login as Admin
             </Button>
-          </CardFooter>
-        </form>
-        <div className="px-8 pb-6 text-center">
-          <Link href="#" className="text-sm text-primary hover:underline">
-            Forgot password?
-          </Link>
-        </div>
+            <Button variant="outline" className="w-full flex items-center gap-2 py-4 sm:py-6 text-base sm:text-lg font-semibold border-accent/30 hover:bg-accent/10 transition" onClick={() => router.push("/login/organizer")}> 
+              Login as Organizer
+            </Button>
+            <Button variant="outline" className="w-full flex items-center gap-2 py-4 sm:py-6 text-base sm:text-lg font-semibold border-secondary/30 hover:bg-secondary/20 transition" onClick={() => router.push("/login/promoter")}> 
+              Login as Promoter
+            </Button>
+          </div>
+        </CardContent>
       </Card>
     </div>
   )
 }
+  
