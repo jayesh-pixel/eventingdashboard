@@ -62,9 +62,8 @@ export function BookingsTable({
             <th scope="col" className="px-2 py-3 min-w-[150px] hidden xl:table-cell">Email</th>
             <th scope="col" className="px-2 py-3 min-w-[120px]">Event</th>
             <th scope="col" className="px-2 py-3 min-w-[100px]">Booking Date & Time</th>
-            <th scope="col" className="px-2 py-3 min-w-[60px] text-center">Quantity</th>
-            <th scope="col" className="px-2 py-3 min-w-[90px] hidden lg:table-cell">Ticket Price</th>
-            <th scope="col" className="px-2 py-3 min-w-[80px]">Status</th>
+            <th scope="col" className="px-2 py-3 min-w-[60px] text-center">Quantity</th>            <th scope="col" className="px-2 py-3 min-w-[90px] hidden lg:table-cell">Ticket Price</th>
+            <th scope="col" className="px-2 py-3 min-w-[120px]">Venue</th>
             <th scope="col" className="px-2 py-3 min-w-[100px] text-center">Actions</th>
           </tr>
         </thead>
@@ -107,10 +106,8 @@ export function BookingsTable({
                 </td>                <td className="px-2 py-3 font-medium text-gray-900 dark:text-gray-100 hidden lg:table-cell text-xs">
                   {(booking.TicketPrice ?? booking.ticketPrice) ? formatCurrency(booking.TicketPrice ?? booking.ticketPrice ?? 0) : "-"}
                 </td>
-                <td className="px-2 py-3">
-                  <Badge variant={getStatusBadgeVariant(booking.bookingStatus)} className="text-xs whitespace-nowrap">
-                    {booking.bookingStatus}
-                  </Badge>
+                <td className="px-2 py-3 text-gray-700 dark:text-gray-300 max-w-[120px] truncate" title={booking.EventVenueName || booking.venue}>
+                  {booking.EventVenueName || booking.venue || "-"}
                 </td>
                 <td className="px-2 py-3 text-center">
                   <Button
@@ -258,11 +255,10 @@ export function BookingsTable({
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     ID: {booking.Booking_id || booking._id.slice(-6)}
                   </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant={getStatusBadgeVariant(booking.bookingStatus)} className="text-xs">
-                    {booking.bookingStatus}
-                  </Badge>
+                </div>                <div className="flex items-center gap-2">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    Venue: <span className="text-gray-900 dark:text-white font-medium">{booking.EventVenueName || booking.venue || "-"}</span>
+                  </div>
                   <Button
                     variant="outline"
                     size="sm"

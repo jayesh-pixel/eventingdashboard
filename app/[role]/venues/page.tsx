@@ -35,114 +35,155 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
+import { venueEndPoint } from "@/lib/api-endpoints"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
+import { getNumericAdminRole } from "@/lib/api-constants"
 
 interface VenuesPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
 interface Venue {
   _id: string
-  venueName: string
-  venueDescription: string
-  venueAddress: string
-  city: string
-  state: string
-  country: string
-  venueCapacity: number
-  venueImage?: string
-  status: "Active" | "Inactive"
-  amenities: string[]
-  contactEmail: string
-  contactPhone: string
+  VenueName: string
+  VenueDescription: string | null
+  VenueAddress: string
+  VenueCity: string
+  VenueState: string
+  VenueCountry: string
+  VenueCapacity: number
+  Images: Array<{
+    image_path: string
+    _id: string
+  }>
+  status: number
+  ContactEmail: string
+  ContactPhone: string
+  Amenities: string[]
   createdAt: string
-  updatedAt: string
+  FilterationDateTime: string
+  Priority: number
+  __v?: number
+}
+
+interface ApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: number
+    totalVenues: number
+    VenueData: Venue[]
+  }
 }
 
 const mockVenues: Venue[] = [
   {
     _id: "ven001",
-    venueName: "Central Park",
-    venueDescription: "Large outdoor venue in the heart of the city",
-    venueAddress: "Central Park West",
-    city: "New York",
-    state: "NY",
-    country: "USA",
-    venueCapacity: 10000,
-    venueImage: "/placeholder.svg?height=100&width=100&text=Central+Park",
-    status: "Active",
-    amenities: ["Parking", "Food Court", "Restrooms", "Security"],
-    contactEmail: "info@centralpark.com",
-    contactPhone: "+1-555-0101",
-    createdAt: "2025-01-02T08:30:00.000Z",
-    updatedAt: "2025-01-07T14:45:00.000Z",
+    VenueName: "Central Park",
+    VenueDescription: "Large outdoor venue in the heart of the city",
+    VenueAddress: "Central Park West",
+    VenueCity: "New York",
+    VenueState: "NY",
+    VenueCountry: "USA",
+    VenueCapacity: 10000,
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Central+Park", _id: "img001" }],
+    status: 1,
+    Amenities: ["Parking", "Food Court", "Restrooms", "Security"],
+    ContactEmail: "info@centralpark.com",
+    ContactPhone: "+1-555-0101",
+    FilterationDateTime: "2025-01-02T08:30:00.000Z",
+    createdAt: "02-01-2025 08:30:00",
+    Priority: 1,
+    __v: 0,
   },
   {
     _id: "ven002",
-    venueName: "Convention Center",
-    venueDescription: "Modern convention center with multiple halls",
-    venueAddress: "123 Market Street",
-    city: "San Francisco",
-    state: "CA",
-    country: "USA",
-    venueCapacity: 5000,
-    venueImage: "/placeholder.svg?height=100&width=100&text=Convention+Center",
-    status: "Active",
-    amenities: ["WiFi", "A/V Equipment", "Catering", "Parking", "Accessibility"],
-    contactEmail: "events@conventioncenter.com",
-    contactPhone: "+1-555-0102",
-    createdAt: "2025-01-20T10:15:00.000Z",
-    updatedAt: "2025-01-25T16:30:00.000Z",
+    VenueName: "Convention Center",
+    VenueDescription: "Modern convention center with multiple halls",
+    VenueAddress: "123 Market Street",
+    VenueCity: "San Francisco",
+    VenueState: "CA",
+    VenueCountry: "USA",
+    VenueCapacity: 5000,
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Convention+Center", _id: "img002" }],
+    status: 1,
+    Amenities: ["WiFi", "A/V Equipment", "Catering", "Parking", "Accessibility"],
+    ContactEmail: "events@conventioncenter.com",
+    ContactPhone: "+1-555-0102",
+    FilterationDateTime: "2025-01-20T10:15:00.000Z",
+    createdAt: "20-01-2025 10:15:00",
+    Priority: 2,
+    __v: 0,
   },
   {
     _id: "ven003",
-    venueName: "City Gallery",
-    venueDescription: "Contemporary art gallery in downtown",
-    venueAddress: "456 Arts Avenue",
-    city: "Los Angeles",
-    state: "CA",
-    country: "USA",
-    venueCapacity: 1000,
-    venueImage: "/placeholder.svg?height=100&width=100&text=City+Gallery",
-    status: "Active",
-    amenities: ["Climate Control", "Security", "Lighting", "Sound System"],
-    contactEmail: "bookings@citygallery.com",
-    contactPhone: "+1-555-0103",
-    createdAt: "2025-02-10T09:45:00.000Z",
-    updatedAt: "2025-02-15T11:20:00.000Z",
+    VenueName: "City Gallery",
+    VenueDescription: "Contemporary art gallery in downtown",
+    VenueAddress: "456 Arts Avenue",
+    VenueCity: "Los Angeles",
+    VenueState: "CA",
+    VenueCountry: "USA",
+    VenueCapacity: 1000,
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=City+Gallery", _id: "img003" }],
+    status: 1,
+    Amenities: ["Climate Control", "Security", "Lighting", "Sound System"],
+    ContactEmail: "bookings@citygallery.com",
+    ContactPhone: "+1-555-0103",
+    FilterationDateTime: "2025-02-10T09:45:00.000Z",
+    createdAt: "10-02-2025 09:45:00",
+    Priority: 3,
+    __v: 0,
   },
   {
     _id: "ven004",
-    venueName: "Grand Ballroom",
-    venueDescription: "Elegant ballroom for formal events",
-    venueAddress: "789 Luxury Lane",
-    city: "Chicago",
-    state: "IL",
-    country: "USA",
-    venueCapacity: 800,
-    venueImage: "/placeholder.svg?height=100&width=100&text=Grand+Ballroom",
-    status: "Inactive",
-    amenities: ["Valet Parking", "Full Bar", "Dance Floor", "Stage"],
-    contactEmail: "events@grandballroom.com",
-    contactPhone: "+1-555-0104",
-    createdAt: "2025-03-01T12:00:00.000Z",
-    updatedAt: "2025-03-15T16:15:00.000Z",
+    VenueName: "Grand Ballroom",
+    VenueDescription: "Elegant ballroom for formal events",
+    VenueAddress: "789 Luxury Lane",
+    VenueCity: "Chicago",
+    VenueState: "IL",
+    VenueCountry: "USA",
+    VenueCapacity: 800,
+    Images: [],
+    status: 0,
+    Amenities: ["Valet Parking", "Full Bar", "Dance Floor", "Stage"],
+    ContactEmail: "events@grandballroom.com",
+    ContactPhone: "+1-555-0104",
+    FilterationDateTime: "2025-03-01T12:00:00.000Z",
+    createdAt: "01-03-2025 12:00:00",
+    Priority: 4,
+    __v: 0,
   },
 ]
 
 const ITEMS_PER_PAGE = 10
 
 export default function VenuesPage({ params }: VenuesPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
+
   const { toast } = useToast()
+  const { user } = useAuth()
 
   // State management
-  const [venues, setVenues] = React.useState<Venue[]>(mockVenues)
+  const [venues, setVenues] = React.useState<Venue[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalVenues, setTotalVenues] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedVenue, setSelectedVenue] = React.useState<Venue | null>(null)
+  const [useMockData, setUseMockData] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -158,19 +199,101 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     amenities: "",
     venueImage: null as File | null,
   })
+  // API function to fetch venues
+  const fetchVenues = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+    try {
+      setLoading(true)
+      setApiError(null)
 
-  // Filter venues based on search
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.warn("No user or auth token available, using mock data")
+        setVenues(mockVenues)
+        setUseMockData(true)
+        setTotalPages(1)
+        setTotalVenues(mockVenues.length)
+        return
+      }
+
+      console.log("Fetching venues with pagination:")
+      console.log("- Page:", page)
+      console.log("- Limit:", limit)
+      console.log("- User role:", role)
+      console.log("- AdminRole:", getNumericAdminRole(user.AdminRole || role))
+
+      const response = await fetch(venueEndPoint.VENUES_PAGINATED_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          AdminRole: getNumericAdminRole(user.AdminRole || role),
+          user_id: user.user_id,
+          page: page,
+          limit: limit.toString(),
+        }),
+      })
+
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: ApiResponse = await response.json()
+      console.log("Venues API response:", data)
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch venues")
+      }
+
+      // Set the data from API
+      setVenues(data.data.VenueData || [])
+      setTotalPages(data.data.totalPages || 1)
+      setTotalVenues(data.data.totalVenues || 0)
+      setCurrentPage(data.data.currentPage || 1)
+      setUseMockData(false)
+
+      toast({
+        title: "Success",
+        description: data.message || "Venues fetched successfully",
+      })
+    } catch (error) {
+      console.error("Venues fetch failed:", error)
+      setApiError("Could not fetch venues from server")
+      
+      // Fall back to mock data
+      setVenues(mockVenues)
+      setUseMockData(true)
+      setTotalPages(1)
+      setTotalVenues(mockVenues.length)
+      
+      toast({        title: "API Error",
+        description: "Could not fetch venues from server. Using sample data instead.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [user, role]) // Dependencies for useCallback
+
+  // Initial data fetch
+  React.useEffect(() => {
+    fetchVenues(currentPage)
+  }, [currentPage, fetchVenues])
+  // Filter venues based on search (now works on current page data)
   const filteredVenues = React.useMemo(() => {
     if (!searchTerm) return venues
     return venues.filter(
       (venue) =>
-        venue.venueName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        venue.city.toLowerCase().includes(searchTerm.toLowerCase()),
+        venue.VenueName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        venue.VenueCity.toLowerCase().includes(searchTerm.toLowerCase()),
     )
   }, [venues, searchTerm])
 
-  const totalPages = Math.ceil(filteredVenues.length / ITEMS_PER_PAGE)
-  const currentVenues = filteredVenues.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  // For paginated API, we don't slice here since API handles pagination
+  const currentVenues = filteredVenues
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -189,6 +312,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     setLoading(true)
     try {
       // Simulate API call
+      // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
       const amenitiesArray = formData.amenities
@@ -198,22 +322,23 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       const newVenue: Venue = {
         _id: `ven${Date.now()}`,
-        venueName: formData.venueName,
-        venueDescription: formData.venueDescription,
-        venueAddress: formData.venueAddress,
-        city: formData.city,
-        state: formData.state,
-        country: formData.country,
-        venueCapacity: Number.parseInt(formData.venueCapacity),
-        contactEmail: formData.contactEmail,
-        contactPhone: formData.contactPhone,
-        amenities: amenitiesArray,
-        venueImage: formData.venueImage
-          ? `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.venueName)}`
-          : undefined,
-        status: "Active",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        VenueName: formData.venueName,
+        VenueDescription: formData.venueDescription,
+        VenueAddress: formData.venueAddress,
+        VenueCity: formData.city,
+        VenueState: formData.state,
+        VenueCountry: formData.country,
+        VenueCapacity: Number.parseInt(formData.venueCapacity),ContactEmail: formData.contactEmail,
+        ContactPhone: formData.contactPhone,
+        Amenities: amenitiesArray,
+        Images: formData.venueImage
+          ? [{ image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.venueName)}`, _id: `img${Date.now()}` }]
+          : [],
+        FilterationDateTime: new Date().toISOString(),
+        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
+        status: 1,
+        Priority: venues.length + 1,
+        __v: 0,
       }
 
       setVenues([newVenue, ...venues])
@@ -344,15 +469,15 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const handleToggleStatus = async (venueId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
+      // Simulate API call      // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
       const updatedVenues = venues.map((venue) =>
         venue._id === venueId
           ? {
               ...venue,
-              status: venue.status === "Active" ? ("Inactive" as const) : ("Active" as const),
-              updatedAt: new Date().toISOString(),
+              status: venue.status === 1 ? 0 : 1,
+              FilterationDateTime: new Date().toISOString(),
             }
           : venue,
       )
@@ -373,20 +498,19 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       setLoading(false)
     }
   }
-
   const openEditDialog = (venue: Venue) => {
     setSelectedVenue(venue)
     setFormData({
-      venueName: venue.venueName,
-      venueDescription: venue.venueDescription,
-      venueAddress: venue.venueAddress,
-      city: venue.city,
-      state: venue.state,
-      country: venue.country,
-      venueCapacity: venue.venueCapacity.toString(),
-      contactEmail: venue.contactEmail,
-      contactPhone: venue.contactPhone,
-      amenities: venue.amenities.join(", "),
+      venueName: venue.VenueName,
+      venueDescription: venue.VenueDescription || "",
+      venueAddress: venue.VenueAddress,
+      city: venue.VenueCity,
+      state: venue.VenueState,
+      country: venue.VenueCountry,
+      venueCapacity: venue.VenueCapacity.toString(),
+      contactEmail: venue.ContactEmail,
+      contactPhone: venue.ContactPhone,
+      amenities: venue.Amenities.join(", "),
       venueImage: null,
     })
     setIsEditDialogOpen(true)
@@ -407,6 +531,23 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       venueImage: null,
     })
     setSelectedVenue(null)
+  }
+
+  // Helper function to get venue image
+  const getVenueImage = (venue: Venue): string => {
+    if (venue.Images && venue.Images.length > 0) {
+      return venue.Images[0].image_path.startsWith('http') 
+        ? venue.Images[0].image_path 
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/${venue.Images[0].image_path}`
+    }
+    return "/placeholder.svg"
+  }
+
+  // Helper function to get status display
+  const getStatusDisplay = (status: number): { text: string; variant: "default" | "secondary" } => {
+    return status === 1 
+      ? { text: "Active", variant: "default" } 
+      : { text: "Inactive", variant: "secondary" }
   }
 
   if (role !== "superadmin") {
@@ -600,12 +741,11 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 </TableRow>
               ) : (
                 currentVenues.map((venue) => (
-                  <TableRow key={venue._id}>
-                    <TableCell>
-                      {venue.venueImage ? (
+                  <TableRow key={venue._id}>                    <TableCell>
+                      {getVenueImage(venue) !== "/placeholder.svg" ? (
                         <img
-                          src={venue.venueImage || "/placeholder.svg"}
-                          alt={venue.venueName}
+                          src={getVenueImage(venue)}
+                          alt={venue.VenueName}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
                       ) : (
@@ -613,28 +753,28 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                           <Upload className="h-6 w-6 text-muted-foreground" />
                         </div>
                       )}
-                    </TableCell>
-                    <TableCell className="font-medium">{venue.venueName}</TableCell>
+                    </TableCell>                    <TableCell className="font-medium">{venue.VenueName}</TableCell>
                     <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-1">
                         <MapPin className="h-4 w-4" />
-                        {venue.city}, {venue.state}
+                        {venue.VenueCity}, {venue.VenueState}
                       </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
+                    </TableCell>                    <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-1">
                         <Users className="h-4 w-4" />
-                        {venue.venueCapacity.toLocaleString()}
+                        {venue.VenueCapacity ? venue.VenueCapacity.toLocaleString() : 'N/A'}
                       </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <div className="text-sm">
-                        <div>{venue.contactEmail}</div>
-                        <div className="text-muted-foreground">{venue.contactPhone}</div>
+                        <div>{venue.ContactEmail}</div>
+                        <div className="text-muted-foreground">{venue.ContactPhone}</div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={venue.status === "Active" ? "default" : "secondary"}>{venue.status}</Badge>
+                      <Badge variant={getStatusDisplay(venue.status).variant}>
+                        {getStatusDisplay(venue.status).text}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -649,9 +789,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                           <DropdownMenuItem onClick={() => openEditDialog(venue)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleStatus(venue._id)}>
-                            {venue.status === "Active" ? "Deactivate" : "Activate"}
+                          </DropdownMenuItem>                          <DropdownMenuItem onClick={() => handleToggleStatus(venue._id)}>
+                            {venue.status === 1 ? "Deactivate" : "Activate"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteVenue(venue._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />

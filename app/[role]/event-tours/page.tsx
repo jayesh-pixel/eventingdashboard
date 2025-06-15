@@ -36,82 +36,103 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
+import { eventTourEndPoint } from "@/lib/api-endpoints"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
 
 interface EventToursPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
 interface EventTour {
   _id: string
-  tourName: string
-  tourDescription: string
-  artistId: string
-  artistName: string
-  totalEvents: number
-  startDate: string
-  endDate: string
-  status: "Active" | "Completed" | "Cancelled"
-  cities: string[]
+  Name?: string
+  tourName?: string  // For backward compatibility
+  Description?: string | null
+  tourDescription?: string  // For backward compatibility
+  artistId?: string
+  artistName?: string
+  totalEvents?: number
+  startDate?: string
+  endDate?: string
+  FilterationDateTime?: string
   createdAt: string
-  updatedAt: string
+  status: number
+  cities?: string[]
+  __v?: number
+}
+
+interface ApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: number
+    totalEventTours: number
+    EventTourData?: EventTour[]
+  }
 }
 
 const mockEventTours: EventTour[] = [
   {
     _id: "tour001",
-    tourName: "Summer Rock Festival Tour 2025",
-    tourDescription: "Multi-city rock festival tour featuring top rock bands",
+    Name: "Summer Rock Festival Tour 2025",
+    Description: "Multi-city rock festival tour featuring top rock bands",
     artistId: "art001",
     artistName: "The Rockers",
     totalEvents: 8,
     startDate: "2025-06-01T00:00:00.000Z",
     endDate: "2025-08-31T00:00:00.000Z",
-    status: "Active",
+    FilterationDateTime: "2025-01-15T08:30:00.000Z",
+    createdAt: "15-01-2025 08:30:00",
+    status: 1,
     cities: ["New York", "Los Angeles", "Chicago", "Miami", "Seattle", "Denver", "Austin", "Boston"],
-    createdAt: "2025-01-15T08:30:00.000Z",
-    updatedAt: "2025-01-20T14:45:00.000Z",
+    __v: 0,
   },
   {
     _id: "tour002",
-    tourName: "Electronic Music World Tour",
-    tourDescription: "Global electronic music tour across major cities",
+    Name: "Electronic Music World Tour",
+    Description: "Global electronic music tour across major cities",
     artistId: "art002",
     artistName: "DJ Sparkle",
     totalEvents: 12,
     startDate: "2025-09-01T00:00:00.000Z",
     endDate: "2025-12-31T00:00:00.000Z",
-    status: "Active",
+    FilterationDateTime: "2025-02-10T10:15:00.000Z",
+    createdAt: "10-02-2025 10:15:00",
+    status: 1,
     cities: ["Las Vegas", "Miami", "New York", "Los Angeles", "San Francisco", "Atlanta"],
-    createdAt: "2025-02-10T10:15:00.000Z",
-    updatedAt: "2025-02-15T16:30:00.000Z",
+    __v: 0,
   },
   {
     _id: "tour003",
-    tourName: "Jazz Heritage Tour",
-    tourDescription: "Classic jazz performances in historic venues",
+    Name: "Jazz Heritage Tour",
+    Description: "Classic jazz performances in historic venues",
     artistId: "art003",
     artistName: "Smooth Jazz Trio",
     totalEvents: 6,
     startDate: "2025-03-01T00:00:00.000Z",
     endDate: "2025-05-31T00:00:00.000Z",
-    status: "Completed",
+    FilterationDateTime: "2024-12-01T09:45:00.000Z",
+    createdAt: "01-12-2024 09:45:00",
+    status: 0,
     cities: ["New Orleans", "Chicago", "New York", "San Francisco", "Detroit", "Memphis"],
-    createdAt: "2024-12-01T09:45:00.000Z",
-    updatedAt: "2025-05-31T11:20:00.000Z",
+    __v: 0,
   },
   {
     _id: "tour004",
-    tourName: "Indie Rock Circuit",
-    tourDescription: "Independent rock music tour supporting emerging artists",
+    Name: "Indie Rock Circuit",
+    Description: "Independent rock music tour supporting emerging artists",
     artistId: "art004",
     artistName: "Indie Collective",
     totalEvents: 10,
     startDate: "2025-07-01T00:00:00.000Z",
     endDate: "2025-09-30T00:00:00.000Z",
-    status: "Cancelled",
+    FilterationDateTime: "2025-03-20T12:00:00.000Z",
+    createdAt: "20-03-2025 12:00:00",
+    status: 2,
     cities: ["Portland", "Seattle", "San Francisco", "Los Angeles", "Phoenix", "Denver"],
-    createdAt: "2025-03-20T12:00:00.000Z",
-    updatedAt: "2025-04-15T16:15:00.000Z",
+    __v: 0,
   },
 ]
 
@@ -126,17 +147,30 @@ const mockArtists = [
 const ITEMS_PER_PAGE = 10
 
 export default function EventToursPage({ params }: EventToursPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
+
   const { toast } = useToast()
+  const { user } = useAuth()
 
   // State management
-  const [eventTours, setEventTours] = React.useState<EventTour[]>(mockEventTours)
+  const [eventTours, setEventTours] = React.useState<EventTour[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalEventTours, setTotalEventTours] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedTour, setSelectedTour] = React.useState<EventTour | null>(null)
+  const [useMockData, setUseMockData] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -148,18 +182,99 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     cities: "",
   })
 
-  // Filter tours based on search
+  // API function to fetch event tours
+  const fetchEventTours = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+    try {
+      setLoading(true)
+      setApiError(null)
+
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.warn("No user or auth token available, using mock data")
+        setEventTours(mockEventTours)
+        setUseMockData(true)
+        setTotalPages(1)
+        setTotalEventTours(mockEventTours.length)
+        return
+      }
+
+      console.log("Fetching event tours with pagination:")
+      console.log("- Page:", page)
+      console.log("- Limit:", limit)
+
+      const response = await fetch(eventTourEndPoint.EVENT_TOURS_PAGINATED_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          page: page,
+          limit: limit.toString(),
+        }),
+      })
+
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: ApiResponse = await response.json()
+      console.log("Event Tours API response:", data)
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch event tours")
+      }
+
+      // Set the data from API
+      setEventTours(data.data.EventTourData || [])
+      setTotalPages(data.data.totalPages || 1)
+      setTotalEventTours(data.data.totalEventTours || 0)
+      setCurrentPage(data.data.currentPage || 1)
+      setUseMockData(false)
+
+      toast({
+        title: "Success",
+        description: data.message || "Event tours fetched successfully",
+      })
+    } catch (error) {
+      console.error("Event tours fetch failed:", error)
+      setApiError("Could not fetch event tours from server")
+      
+      // Fall back to mock data
+      setEventTours(mockEventTours)
+      setUseMockData(true)
+      setTotalPages(1)
+      setTotalEventTours(mockEventTours.length)
+      
+      toast({
+        title: "API Error",
+        description: "Could not fetch event tours from server. Using sample data instead.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [user, toast])
+
+  // Initial data fetch
+  React.useEffect(() => {
+    fetchEventTours(currentPage)
+  }, [currentPage, fetchEventTours])
+
+  // Filter tours based on search (now works on current page data)
   const filteredTours = React.useMemo(() => {
     if (!searchTerm) return eventTours
     return eventTours.filter(
       (tour) =>
-        tour.tourName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tour.artistName.toLowerCase().includes(searchTerm.toLowerCase()),
+        getEventTourName(tour).toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (tour.artistName && tour.artistName.toLowerCase().includes(searchTerm.toLowerCase())),
     )
   }, [eventTours, searchTerm])
 
-  const totalPages = Math.ceil(filteredTours.length / ITEMS_PER_PAGE)
-  const currentTours = filteredTours.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  // For paginated API, we don't slice here since API handles pagination
+  const currentTours = filteredTours
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -188,29 +303,23 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
       const newTour: EventTour = {
         _id: `tour${Date.now()}`,
-        tourName: formData.tourName,
-        tourDescription: formData.tourDescription,
+        Name: formData.tourName,
+        Description: formData.tourDescription,
         artistId: formData.artistId,
         artistName: selectedArtist?.artistName || "Unknown Artist",
         totalEvents: citiesArray.length,
-        startDate: formData.startDate,
-        endDate: formData.endDate,
-        status: "Active",
+        startDate: new Date(formData.startDate).toISOString(),
+        endDate: new Date(formData.endDate).toISOString(),
+        FilterationDateTime: new Date().toISOString(),
+        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
+        status: 1,
         cities: citiesArray,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        __v: 0,
       }
 
       setEventTours([newTour, ...eventTours])
       setIsCreateDialogOpen(false)
-      setFormData({
-        tourName: "",
-        tourDescription: "",
-        artistId: "",
-        startDate: "",
-        endDate: "",
-        cities: "",
-      })
+      setFormData({ tourName: "", tourDescription: "", artistId: "", startDate: "", endDate: "", cities: "" })
 
       toast({
         title: "Success",
@@ -252,12 +361,12 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         tour._id === selectedTour._id
           ? {
               ...tour,
-              tourName: formData.tourName,
-              tourDescription: formData.tourDescription,
+              Name: formData.tourName,
+              Description: formData.tourDescription,
               artistId: formData.artistId,
               artistName: selectedArtist?.artistName || "Unknown Artist",
-              startDate: formData.startDate,
-              endDate: formData.endDate,
+              startDate: new Date(formData.startDate).toISOString(),
+              endDate: new Date(formData.endDate).toISOString(),
               cities: citiesArray,
               totalEvents: citiesArray.length,
               updatedAt: new Date().toISOString(),
@@ -315,7 +424,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     }
   }
 
-  const handleToggleStatus = async (tourId: string, newStatus: "Active" | "Completed" | "Cancelled") => {
+  const handleToggleStatus = async (tourId: string, newStatus: number) => {
     setLoading(true)
     try {
       // Simulate API call
@@ -351,12 +460,12 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   const openEditDialog = (tour: EventTour) => {
     setSelectedTour(tour)
     setFormData({
-      tourName: tour.tourName,
-      tourDescription: tour.tourDescription,
-      artistId: tour.artistId,
-      startDate: tour.startDate.split("T")[0],
-      endDate: tour.endDate.split("T")[0],
-      cities: tour.cities.join(", "),
+      tourName: getEventTourName(tour),
+      tourDescription: getEventTourDescription(tour),
+      artistId: tour.artistId || "",
+      startDate: tour.startDate ? tour.startDate.split("T")[0] : "",
+      endDate: tour.endDate ? tour.endDate.split("T")[0] : "",
+      cities: tour.cities ? tour.cities.join(", ") : "",
     })
     setIsEditDialogOpen(true)
   }
@@ -373,16 +482,24 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     setSelectedTour(null)
   }
 
-  const getStatusBadgeVariant = (status: string) => {
+  const getEventTourName = (tour: EventTour): string => {
+    return tour.Name || tour.tourName || "Untitled Tour"
+  }
+
+  const getEventTourDescription = (tour: EventTour): string => {
+    return tour.Description || tour.tourDescription || "No description available"
+  }
+
+  const getStatusDisplay = (status: number): { text: string; variant: "default" | "secondary" | "destructive" } => {
     switch (status) {
-      case "Active":
-        return "default"
-      case "Completed":
-        return "secondary"
-      case "Cancelled":
-        return "destructive"
+      case 1:
+        return { text: "Active", variant: "default" }
+      case 0:
+        return { text: "Completed", variant: "secondary" }
+      case 2:
+        return { text: "Cancelled", variant: "destructive" }
       default:
-        return "outline"
+        return { text: "Unknown", variant: "secondary" }
     }
   }
 
@@ -536,67 +653,78 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                currentTours.map((tour) => (
-                  <TableRow key={tour._id}>
-                    <TableCell className="font-medium">{tour.tourName}</TableCell>
-                    <TableCell>{tour.artistName}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-1">
-                        <Calendar className="h-4 w-4" />
-                        {tour.totalEvents}
-                      </div>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {new Date(tour.startDate).toLocaleDateString()} - {new Date(tour.endDate).toLocaleDateString()}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        <span className="truncate max-w-xs">{tour.cities.slice(0, 3).join(", ")}</span>
-                        {tour.cities.length > 3 && <span>+{tour.cities.length - 3} more</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusBadgeVariant(tour.status)}>{tour.status}</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost">
-                            <MoreHorizontal className="h-4 w-4" />
-                            <span className="sr-only">Toggle menu</span>
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => openEditDialog(tour)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          {tour.status === "Active" && (
-                            <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, "Completed")}>
-                              Mark as Completed
-                            </DropdownMenuItem>
+                currentTours.map((tour) => {
+                  const statusDisplay = getStatusDisplay(tour.status)
+                  return (
+                    <TableRow key={tour._id}>
+                      <TableCell className="font-medium">{getEventTourName(tour)}</TableCell>
+                      <TableCell>{tour.artistName}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-4 w-4" />
+                          {tour.totalEvents}
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {tour.startDate ? new Date(tour.startDate).toLocaleDateString() : "N/A"} -{" "}
+                        {tour.endDate ? new Date(tour.endDate).toLocaleDateString() : "N/A"}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-4 w-4" />
+                          <span className="truncate max-w-xs">
+                            {tour.cities ? tour.cities.slice(0, 3).join(", ") : "No cities"}
+                          </span>
+                          {tour.cities && tour.cities.length > 3 && (
+                            <span>+{tour.cities.length - 3} more</span>
                           )}
-                          {tour.status === "Active" && (
-                            <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, "Cancelled")}>
-                              Cancel Tour
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={statusDisplay.variant}>{statusDisplay.text}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                              <MoreHorizontal className="h-4 w-4" />
+                              <span className="sr-only">Toggle menu</span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => openEditDialog(tour)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
                             </DropdownMenuItem>
-                          )}
-                          {tour.status !== "Active" && (
-                            <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, "Active")}>
-                              Reactivate Tour
+                            {tour.status === 1 && (
+                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 0)}>
+                                Mark as Completed
+                              </DropdownMenuItem>
+                            )}
+                            {tour.status === 1 && (
+                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 2)}>
+                                Cancel Tour
+                              </DropdownMenuItem>
+                            )}
+                            {tour.status !== 1 && (
+                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 1)}>
+                                Reactivate Tour
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteTour(tour._id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
                             </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => handleDeleteTour(tour._id)} className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>

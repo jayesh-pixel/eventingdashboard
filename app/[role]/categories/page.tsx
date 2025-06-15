@@ -35,6 +35,9 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
+import { categorieEndPoint } from "@/lib/api-endpoints"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
 
 interface CategoriesPageProps {
   params: { role: UserRole }
@@ -42,50 +45,74 @@ interface CategoriesPageProps {
 
 interface Category {
   _id: string
-  categoryName: string
-  categoryDescription: string
-  categoryImage?: string
-  status: "Active" | "Inactive"
+  Name: string
+  Description: string | null
+  Images: Array<{
+    image_path: string
+    _id: string
+  }>
+  FilterationDateTime: string
   createdAt: string
-  updatedAt: string
+  status: number
+  Priority: number
+  __v?: number
+}
+
+interface ApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: number
+    totalCategories: number
+    CategoryData: Category[]
+  }
 }
 
 const mockCategories: Category[] = [
   {
     _id: "cat001",
-    categoryName: "Music",
-    categoryDescription: "Music events including concerts, festivals, and performances",
-    categoryImage: "/placeholder.svg?height=100&width=100&text=Music",
-    status: "Active",
-    createdAt: "2025-01-05T08:30:00.000Z",
-    updatedAt: "2025-01-10T14:45:00.000Z",
+    Name: "Music",
+    Description: "Music events including concerts, festivals, and performances",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Music", _id: "img001" }],
+    FilterationDateTime: "2025-01-05T08:30:00.000Z",
+    createdAt: "05-01-2025 08:30:00",
+    status: 1,
+    Priority: 1,
+    __v: 0,
   },
   {
     _id: "cat002",
-    categoryName: "Technology",
-    categoryDescription: "Tech events including conferences, workshops, and hackathons",
-    categoryImage: "/placeholder.svg?height=100&width=100&text=Tech",
-    status: "Active",
-    createdAt: "2025-02-01T10:15:00.000Z",
-    updatedAt: "2025-02-05T16:30:00.000Z",
+    Name: "Technology",
+    Description: "Tech events including conferences, workshops, and hackathons",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Tech", _id: "img002" }],
+    FilterationDateTime: "2025-02-01T10:15:00.000Z",
+    createdAt: "01-02-2025 10:15:00",
+    status: 1,
+    Priority: 2,
+    __v: 0,
   },
   {
     _id: "cat003",
-    categoryName: "Art & Culture",
-    categoryDescription: "Art exhibitions, cultural festivals, and creative workshops",
-    categoryImage: "/placeholder.svg?height=100&width=100&text=Art",
-    status: "Active",
-    createdAt: "2025-03-10T09:45:00.000Z",
-    updatedAt: "2025-03-12T11:20:00.000Z",
+    Name: "Art & Culture",
+    Description: "Art exhibitions, cultural festivals, and creative workshops",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Art", _id: "img003" }],
+    FilterationDateTime: "2025-03-10T09:45:00.000Z",
+    createdAt: "10-03-2025 09:45:00",
+    status: 1,
+    Priority: 3,
+    __v: 0,
   },
   {
     _id: "cat004",
-    categoryName: "Sports",
-    categoryDescription: "Sports events, tournaments, and fitness activities",
-    categoryImage: "/placeholder.svg?height=100&width=100&text=Sports",
-    status: "Inactive",
-    createdAt: "2025-04-15T12:00:00.000Z",
-    updatedAt: "2025-04-20T16:15:00.000Z",
+    Name: "Sports",
+    Description: "Sports events, tournaments, and fitness activities",
+    Images: [],
+    FilterationDateTime: "2025-04-15T12:00:00.000Z",
+    createdAt: "15-04-2025 12:00:00",
+    status: 0,
+    Priority: 4,
+    __v: 0,
   },
 ]
 
@@ -94,15 +121,20 @@ const ITEMS_PER_PAGE = 10
 export default function CategoriesPage({ params }: CategoriesPageProps) {
   const { role } = params
   const { toast } = useToast()
+  const { user } = useAuth()
 
   // State management
-  const [categories, setCategories] = React.useState<Category[]>(mockCategories)
+  const [categories, setCategories] = React.useState<Category[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalCategories, setTotalCategories] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedCategory, setSelectedCategory] = React.useState<Category | null>(null)
+  const [useMockData, setUseMockData] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -111,14 +143,122 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     categoryImage: null as File | null,
   })
 
-  // Filter categories based on search
+  // API function to fetch categories
+  const fetchCategories = async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+    try {
+      setLoading(true)
+      setApiError(null)
+
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.warn("No user or auth token available, using mock data")
+        setCategories(mockCategories)
+        setUseMockData(true)
+        setTotalPages(1)
+        setTotalCategories(mockCategories.length)
+        return
+      }
+
+      console.log("Fetching categories with pagination:")
+      console.log("- Page:", page)
+      console.log("- Limit:", limit)
+
+      const response = await fetch(categorieEndPoint.CATEGORIES_PAGINATED_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          page: page,
+          limit: limit.toString(),
+        }),
+      })
+
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: ApiResponse = await response.json()
+      console.log("Categories API response:", data)
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch categories")
+      }
+
+      // Set the data from API
+      setCategories(data.data.CategoryData || [])
+      setTotalPages(data.data.totalPages || 1)
+      setTotalCategories(data.data.totalCategories || 0)
+      setCurrentPage(data.data.currentPage || 1)
+      setUseMockData(false)
+
+      toast({
+        title: "Success",
+        description: data.message || "Categories fetched successfully",
+      })
+    } catch (error) {
+      console.error("Categories fetch failed:", error)
+      setApiError("Could not fetch categories from server")
+      
+      // Fall back to mock data
+      setCategories(mockCategories)
+      setUseMockData(true)
+      setTotalPages(1)
+      setTotalCategories(mockCategories.length)
+      
+      toast({
+        title: "API Error",
+        description: "Could not fetch categories from server. Using sample data instead.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Initial data fetch
+  React.useEffect(() => {
+    fetchCategories(currentPage)
+  }, [currentPage])
+
+  // Helper function to get category image
+  const getCategoryImage = (category: Category): string => {
+    if (category.Images && category.Images.length > 0) {
+      return category.Images[0].image_path.startsWith('http') 
+        ? category.Images[0].image_path 
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/${category.Images[0].image_path}`
+    }
+    return "/placeholder.svg"
+  }
+
+  // Helper function to get status display
+  const getStatusDisplay = (status: number): { text: string; variant: "default" | "secondary" } => {
+    return status === 1 
+      ? { text: "Active", variant: "default" } 
+      : { text: "Inactive", variant: "secondary" }
+  }
+
+  const handleEditClick = (category: Category) => {
+    setSelectedCategory(category)
+    setFormData({
+      categoryName: category.Name,
+      categoryDescription: category.Description || "",
+      categoryImage: null,
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  // Filter categories based on search (now works on current page data)
   const filteredCategories = React.useMemo(() => {
     if (!searchTerm) return categories
-    return categories.filter((category) => category.categoryName.toLowerCase().includes(searchTerm.toLowerCase()))
+    return categories.filter((category) => category.Name.toLowerCase().includes(searchTerm.toLowerCase()))
   }, [categories, searchTerm])
 
-  const totalPages = Math.ceil(filteredCategories.length / ITEMS_PER_PAGE)
-  const currentCategories = filteredCategories.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  // For paginated API, we don't slice here since API handles pagination
+  const currentCategories = filteredCategories
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -141,14 +281,16 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
 
       const newCategory: Category = {
         _id: `cat${Date.now()}`,
-        categoryName: formData.categoryName,
-        categoryDescription: formData.categoryDescription,
-        categoryImage: formData.categoryImage
-          ? `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.categoryName)}`
-          : undefined,
-        status: "Active",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        Name: formData.categoryName,
+        Description: formData.categoryDescription,
+        Images: formData.categoryImage
+          ? [{ image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.categoryName)}`, _id: `img${Date.now()}` }]
+          : [],
+        FilterationDateTime: new Date().toISOString(),
+        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
+        status: 1,
+        Priority: categories.length + 1,
+        __v: 0,
       }
 
       setCategories([newCategory, ...categories])
@@ -189,9 +331,9 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         category._id === selectedCategory._id
           ? {
               ...category,
-              categoryName: formData.categoryName,
-              categoryDescription: formData.categoryDescription,
-              updatedAt: new Date().toISOString(),
+              Name: formData.categoryName,
+              Description: formData.categoryDescription,
+              FilterationDateTime: new Date().toISOString(),
             }
           : category,
       )
@@ -222,7 +364,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      setCategories(categories.filter((category) => category._id !== categoryId))
+      const updatedCategories = categories.filter((category) => category._id !== categoryId)
+      setCategories(updatedCategories)
 
       toast({
         title: "Success",
@@ -249,8 +392,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         category._id === categoryId
           ? {
               ...category,
-              status: category.status === "Active" ? ("Inactive" as const) : ("Active" as const),
-              updatedAt: new Date().toISOString(),
+              status: category.status === 1 ? 0 : 1,
+              FilterationDateTime: new Date().toISOString(),
             }
           : category,
       )
@@ -275,8 +418,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   const openEditDialog = (category: Category) => {
     setSelectedCategory(category)
     setFormData({
-      categoryName: category.categoryName,
-      categoryDescription: category.categoryDescription,
+      categoryName: category.Name,
+      categoryDescription: category.Description || "",
       categoryImage: null,
     })
     setIsEditDialogOpen(true)
@@ -399,10 +542,10 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 currentCategories.map((category) => (
                   <TableRow key={category._id}>
                     <TableCell>
-                      {category.categoryImage ? (
+                      {getCategoryImage(category) !== "/placeholder.svg" ? (
                         <img
-                          src={category.categoryImage || "/placeholder.svg"}
-                          alt={category.categoryName}
+                          src={getCategoryImage(category)}
+                          alt={category.Name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
                       ) : (
@@ -411,12 +554,14 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">{category.categoryName}</TableCell>
+                    <TableCell className="font-medium">{category.Name}</TableCell>
                     <TableCell className="hidden md:table-cell max-w-xs truncate">
-                      {category.categoryDescription || "No description"}
+                      {category.Description || "No description"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={category.status === "Active" ? "default" : "secondary"}>{category.status}</Badge>
+                      <Badge variant={getStatusDisplay(category.status).variant}>
+                        {getStatusDisplay(category.status).text}
+                      </Badge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {new Date(category.createdAt).toLocaleDateString()}
@@ -431,12 +576,12 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => openEditDialog(category)}>
+                          <DropdownMenuItem onClick={() => handleEditClick(category)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleStatus(category._id)}>
-                            {category.status === "Active" ? "Deactivate" : "Activate"}
+                            {category.status === 1 ? "Deactivate" : "Activate"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteCategory(category._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />

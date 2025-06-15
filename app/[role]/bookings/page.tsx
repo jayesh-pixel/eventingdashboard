@@ -360,11 +360,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
-
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "USD",
+      currency: "INR",
     }).format(amount)
   }
 

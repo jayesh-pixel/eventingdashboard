@@ -714,11 +714,10 @@ export default function EventsPage({ params }: EventsPageProps) {
       description: "Promoter link copied to clipboard!",
     })
   }
-
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
       style: "currency",
-      currency: "USD",
+      currency: "INR",
     }).format(amount)
   }
 
@@ -798,7 +797,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold">
-          {(role as UserRole) === "promoter" ? "Available Events to Promote" : "Events Management"}
+          {(role as UserRole) === "promoter" ? "" : "Events Management"}
         </h1>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
           {(role as UserRole) === "promoter" && (
@@ -913,7 +912,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                       Reset
                     </Button>
                   )}
-                  
+                            {(role as UserRole) !== "promoter" && (
+
                   <Button 
                     variant="outline" 
                     size="sm" 
@@ -921,6 +921,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   >
                     <Download className="mr-2 h-4 w-4" /> Export
                   </Button>
+                            )}
                 </div>
               </div>
             )}
@@ -942,24 +943,29 @@ export default function EventsPage({ params }: EventsPageProps) {
       </Card>      {/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
+                  {(role as UserRole) !== "promoter" && (
+
           <TabsTrigger 
             value="all" 
             className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
           >
             All ({allEventsData.length})
           </TabsTrigger>
-          <TabsTrigger 
-            value="published" 
-            className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
-          >
-            Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
-          </TabsTrigger>
+                  )}
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="published" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-visible">
               {currentEvents.length === 0 ? (                
                 <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
@@ -978,178 +984,78 @@ export default function EventsPage({ params }: EventsPageProps) {
                     </Button>
                   </div>
                 </div>
-              ) : (
-                currentEvents.map((event) => (
-                  <Card
+              ) : (                currentEvents.map((event) => (                  <Card
                     key={event._id}
-                    className="group overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
-                    style={{ maxWidth: 410, minWidth: 340, width: "100%" }} // Increased card width
+                    className="group hover:shadow-lg transition-all duration-300 border border-border/50 bg-card hover:bg-card/90 cursor-pointer overflow-hidden"
+                    style={{ maxWidth: 320, minWidth: 280, width: "100%" }}
                   >
-                    {/* Enhanced Image Section with Overlay Effects */}
+                    {/* Compact Image Section */}
                     <div className="relative overflow-hidden">
-                      <div className="aspect-[16/10] overflow-hidden">
+                      <div className="aspect-[16/9] overflow-hidden">
                         <img
                           src={event.eventImage || "/placeholder.svg"}
                           alt={event.eventName}
-                          className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+                          className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
                         />
                       </div>
                       
-                      {/* Gradient overlays */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-70 transition-opacity duration-300" />
-                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />                      
-                      {/* Status Badge with enhanced styling */}
-                      <div className="absolute top-4 right-4">
+                      {/* Status Badge */}
+                      <div className="absolute top-2 right-2">
                         <Badge 
                           variant={getStatusBadgeVariant(event.eventStatus)} 
-                          className="shadow-lg backdrop-blur-md bg-background/90 border-background/20 text-xs font-medium px-3 py-1"
+                          className="text-xs bg-background/90 backdrop-blur-sm"
                         >
                           {normalizeEventStatus(event.eventStatus)}
                         </Badge>
                       </div>
+                    </div>
 
-                      {/* Featured Badge with enhanced styling */}
-                      {event.featuredEvent && (
-                        <div className="absolute top-4 left-4">
-                          <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm">
-                            <Star className="h-3 w-3 fill-current" />
-                            Featured
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Quick Action Overlay with improved positioning */}
-                      <div className="absolute bottom-4 left-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            className="flex-1 bg-white/95 hover:bg-white text-black border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200" 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCheckReport(event._id)
-                            }}
-                          >
-                            <BarChart3 className="h-3 w-3 mr-1.5" />
-                            Analytics
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            className="flex-1 bg-primary/95 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleBookTicket(event._id, event.arrangedEventDateTime)
-                            }}
-                          >
-                            <DollarSign className="h-3 w-3 mr-1.5" />
-                            Book Now
-                          </Button>
-                        </div>
-                      </div>
-                    </div>                    {/* Enhanced Content Section */}
-                    <div className="p-5 space-y-4 overflow-visible">
-                      {/* Header with improved typography */}
-                      <div className="space-y-2">
-                        <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
-                          {event.eventName}
-                        </h3>
-                        <div 
-                          className="text-sm text-muted-foreground line-clamp-3 leading-relaxed"
-                          dangerouslySetInnerHTML={{ 
-                            __html: stripHtmlTags(event.eventDescription).length > 100 
-                              ? stripHtmlTags(event.eventDescription).substring(0, 100) + '...' 
-                              : stripHtmlTags(event.eventDescription)
-                          }}
-                        />
+                    {/* Compact Content Section */}
+                    <div className="p-4 space-y-3">
+                      {/* Event Title */}
+                      <h3 className="font-bold text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
+                        {event.eventName}
+                      </h3>
+                      
+                      {/* Event Description */}
+                      <div className="text-sm text-muted-foreground line-clamp-4 leading-relaxed">
+                        {stripHtmlTags(event.eventDescription)}
                       </div>
 
-                      {/* Event Details Grid with enhanced styling */}
-                      <div className="space-y-3">
-                        {/* Date & Time */}
-                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
-                          <div className="flex items-center gap-2 flex-1">
-                            <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
-                            <span className="font-medium">{formatDate(event.eventStartDate)}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-primary flex-shrink-0" />
-                            <span className="font-medium">{formatTime(event.eventStartDate)}</span>
-                          </div>
+                      {/* Event Details - Date, Time, Location */}
+                      <div className="space-y-2 text-sm">
+                        <div className="font-medium text-foreground">
+                          {formatDateForDisplay(event.eventStartDate)}
                         </div>
-
-                        {/* Location */}
-                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
-                          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                          <div className="flex-1">
-                            <span className="font-medium block truncate">
-                              {event.venueName}
-                            </span>
-                            <span className="text-muted-foreground text-xs">
-                              {event.city}
-                            </span>
-                          </div>
+                        <div className="font-medium text-foreground">
+                          {formatTime(event.eventStartDate)}
                         </div>
-
-                        {/* Organizer */}
-                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
-                          <Users className="h-4 w-4 text-primary flex-shrink-0" />
-                          <span className="font-medium truncate">{event.organizerName}</span>
+                        <div className="text-muted-foreground">
+                          {event.city}
                         </div>
                       </div>
-                      {/* Enhanced badges and info sections */}
-                      <div className="space-y-3">
-                        {/* Category */}
-                        {event.categoryName && (
-                          <div className="flex items-center justify-center">
-                            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 font-medium px-3 py-1">
-                              🎯 {event.categoryName}
-                            </Badge>
-                          </div>
-                        )}
 
-                        {/* Additional Info sections with improved styling */}
-                        {event.bestSuitedFor && (
-                          <div className="p-3 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
-                            <div className="text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
-                              👥 Best suited for age {event.bestSuitedFor}+
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Contact Info */}
-                        {event.bookingPhoneNumber && (
-                          <div className="p-3 bg-gradient-to-r from-green-50/80 to-green-100/80 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
-                            <div className="flex items-center justify-center gap-2 text-sm">
-                              <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
-                              <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Desktop Action Buttons with improved styling */}
-                      <div className="flex gap-3 pt-2 overflow-visible">
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 pt-2">
                         <Button 
                           size="sm" 
                           variant="outline"
-                          className="flex-1 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 font-medium" 
+                          className="flex-1 text-xs h-8 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200" 
                           onClick={(e) => {
                             e.stopPropagation()
                             handleCheckReport(event._id)
                           }}
                         >
-                          <BarChart3 className="h-4 w-4 mr-2" />
-                          View Report
+                          Check Report
                         </Button>
                         <Button 
                           size="sm" 
-                          className="flex-1 text-sm bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/85 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-                          style={{ minWidth: 0, whiteSpace: "nowrap" }}
+                          className="flex-1 text-xs h-8 bg-primary hover:bg-primary/90 transition-all duration-200"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleBookTicket(event._id, event.arrangedEventDateTime)
                           }}
                         >
-                          <DollarSign className="h-4 w-4 mr-2" />
                           Book Tickets
                         </Button>
                       </div>

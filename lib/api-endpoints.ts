@@ -27,6 +27,7 @@ export const artistEndpoints = {
 export const categorieEndPoint = {
   CATEGORIE_CREATION_URL: BASE_URL + "/category/create",
   CATEGORIES_DATA_URL: BASE_URL + "/category/getall",
+  CATEGORIES_PAGINATED_URL: BASE_URL + "/category/getallpaginatedData",
   CATEGORIES_DATA_BY_ID_URL: BASE_URL + "/category/getbyId",
   CATEGORIES_UPLOAD_IMAGE: BASE_URL + "/category/upload/image",
   CATEGORIES_IMAGE_REMOVE: BASE_URL + "/category/deleteCategory/image",
@@ -38,6 +39,7 @@ export const categorieEndPoint = {
 export const genreEndPoint = {
   GENRE_CREATION_URL: BASE_URL + "/genre/create",
   GENRE_DATA_URL: BASE_URL + "/genre/getall",
+  GENRE_PAGINATED_URL: BASE_URL + "/genre/getallpaginatedData",
   GENRE_DATA_BY_ID_URL: BASE_URL + "/genre/getById",
   GENRE_UPLOAD_IMAGE: BASE_URL + "/genre/upload/image",
   GENRE_IMAGE_REMOVE: BASE_URL + "/genre/deleteGenre/image",
@@ -49,11 +51,23 @@ export const genreEndPoint = {
 export const venueEndPoint = {
   VENUE_CREATION_URL: BASE_URL + "/venue/create",
   ALL_VENUE_DATA_LIST: BASE_URL + "/venue/getall",
+  VENUES_PAGINATED_URL: BASE_URL + "/venue/getAllPaginatedData",
   VENUE_GET_DATA_BY_ID: BASE_URL + "/venue/getById",
   VENUE_UPLOAD_IMAGE: BASE_URL + "/venue/upload/image",
   VENUE_IMAGE_REMOVE: BASE_URL + "/venue/deleteVenue/image",
   VENUE_DATA_UPDATED: BASE_URL + "/venue/update/data",
   VENUE_SEARCH_BY_NAME: BASE_URL + "/venue/getVenueDataBySearchKeyword",
+}
+
+// Event Tour API
+export const eventTourEndPoint = {
+  EVENT_TOUR_CREATION_URL: BASE_URL + "/eventtour/create",
+  ALL_EVENT_TOURS_DATA_URL: BASE_URL + "/eventtour/getall",
+  EVENT_TOURS_PAGINATED_URL: BASE_URL + "/eventtour/getallpaginatedData",
+  EVENT_TOUR_DATA_BY_ID_URL: BASE_URL + "/eventtour/getbyId",
+  EVENT_TOUR_DATA_UPDATED: BASE_URL + "/eventtour/update/data",
+  EVENT_TOUR_SEARCH_BY_NAME: BASE_URL + "/eventtour/getEventTourDataBySearchKeyword",
+  EVENT_TOUR_DELETE: BASE_URL + "/eventtour/delete",
 }
 
 // Organizer API Endpoints
@@ -166,14 +180,14 @@ export const getallcityDataEndPoint = {
 }
 
 // Debug function to log all endpoints
-export const debugEndpoints = () => {
-  console.log("All API Endpoints:", {
+export const debugEndpoints = () => {  console.log("All API Endpoints:", {
     authEndpoints,
     dashboard,
     artistEndpoints,
     categorieEndPoint,
     genreEndPoint,
     venueEndPoint,
+    eventTourEndPoint,
     organizerEndpoint,
     promoterEndpoint,
     eventEndPoint,

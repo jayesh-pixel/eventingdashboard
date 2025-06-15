@@ -7,8 +7,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Search, Loader2, Filter, AlertCircle } from "lucide-react"
+import { Download, Search, Loader2, Filter, AlertCircle, Eye } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
@@ -30,9 +38,17 @@ interface GlobalReportsPageProps {
 // Types for API response
 interface Event {
   _id: string
-  eventName: string
-  eventDate?: string
-  eventDateTime?: string
+  EventName: string
+  eventName?: string
+  VenueName?: string
+  VenueCity?: string
+  arrangedEventDateTime?: Array<{
+    EventStartDateTime: string
+    EventEndDateTime: string
+  }>
+  PopUpOrganizerData?: Array<{
+    OrganizerName: string
+  }>
 }
 
 interface SummaryReportData {
@@ -51,10 +67,34 @@ interface TransactionReportData {
 }
 
 // Mock data for fallback
-const mockEventsListForReports = [
-  { _id: "evt001", eventName: "Summer Music Festival" },
-  { _id: "evt002", eventName: "Tech Conference 2025" },
-  { _id: "evt003", eventName: "Art Expo Downtown" },
+const mockEventsListForReports: Event[] = [
+  { 
+    _id: "evt001", 
+    EventName: "Summer Music Festival",
+    eventName: "Summer Music Festival",
+    VenueName: "Central Park",
+    VenueCity: "New York",
+    arrangedEventDateTime: [],
+    PopUpOrganizerData: []
+  },
+  { 
+    _id: "evt002", 
+    EventName: "Tech Conference 2025",
+    eventName: "Tech Conference 2025",
+    VenueName: "Convention Center",
+    VenueCity: "San Francisco",
+    arrangedEventDateTime: [],
+    PopUpOrganizerData: []
+  },
+  { 
+    _id: "evt003", 
+    EventName: "Art Expo Downtown",
+    eventName: "Art Expo Downtown",
+    VenueName: "Gallery District",
+    VenueCity: "Los Angeles",
+    arrangedEventDateTime: [],
+    PopUpOrganizerData: []
+  },
 ]
 
 const mockSummaryReportData: SummaryReportData[] = [
@@ -112,7 +152,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
   const { user } = useAuth()
   const { toast } = useToast()
-
   // State management
   const [eventNameInput, setEventNameInput] = React.useState("")
   const [dateInput, setDateInput] = React.useState("")
@@ -123,6 +162,10 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
+  
+  // Transaction details modal state
+  const [selectedTransaction, setSelectedTransaction] = React.useState<any>(null)
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false)
 
   // Search for events by name and date using API
   const handleSearchEvent = async () => {
@@ -143,7 +186,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       if (!user || !authToken) {
         console.warn("No user or auth token available, using mock data")
         // Fall back to mock search
-        handleMockSearch()
         return
       }      console.log("Searching for events with:")
       console.log("- Event name:", eventNameInput)
@@ -151,23 +193,22 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("- User role:", role)
 
       let apiEndpoint = ""
-      let requestPayload: any = {}
-
-      // Determine the correct search endpoint based on role
+      let requestPayload: any = {}      // Determine the correct search endpoint based on role
       if ((role as UserRole) === "promoter") {
-        apiEndpoint = promoterEndpoint.EVENT_REPORT_BY_DATE_AND_SEARCH
+        apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
         requestPayload = {
-          event_name: eventNameInput.trim(),
-          event_date: dateInput,
+          AdminRole: 4, // Promoter role ID
+          user_id: user.user_id,
+          eventNameSearchKeyword: eventNameInput.trim(),
         }
       } else {
-        // For superadmin/organizer - use a more generic search approach
-        apiEndpoint = promoterEndpoint.EVENT_REPORT_BY_DATE_AND_SEARCH
+        // For superadmin/organizer - use the paginated events endpoint
+        apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
         requestPayload = {
-          event_name: eventNameInput.trim(),
-          event_date: dateInput,
           AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
           user_id: user.user_id,
+          page: "1",
+          limit: "50",
         }
       }
 
@@ -197,19 +238,29 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }
 
       const data = await response.json()
-      console.log("Search response data:", data)
-
-      // Handle API response structure
+      console.log("Search response data:", data)      // Handle API response structure
       let eventsArray = []
       
-      if (data && data.data && Array.isArray(data.data)) {
+      if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
+        // Paginated endpoint response structure
+        eventsArray = data.data.EventsData
+      } else if (data && data.data && Array.isArray(data.data)) {
+        // Standard response structure
         eventsArray = data.data
       } else if (data && Array.isArray(data)) {
+        // Direct array response
         eventsArray = data
       } else {
         console.warn("Unexpected response format, using mock search")
-        handleMockSearch()
         return
+      }
+
+      // Filter events by name if needed (for non-promoter roles that don't support search)
+      if ((role as UserRole) !== "promoter") {
+        eventsArray = eventsArray.filter((event: any) => {
+          const eventName = event.EventName || event.eventName || event.Name || event.name || ""
+          return eventName.toLowerCase().includes(eventNameInput.toLowerCase().trim())
+        })
       }
 
       if (eventsArray.length > 0) {
@@ -217,13 +268,17 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         const foundEvent = eventsArray[0]
         const normalizedEvent: Event = {
           _id: foundEvent._id || foundEvent.id || "unknown",
-          eventName: foundEvent.eventName || foundEvent.event_name || foundEvent.EventName || eventNameInput,
-          eventDate: foundEvent.eventDate || foundEvent.event_date || dateInput,
+          EventName: foundEvent.EventName || foundEvent.eventName || foundEvent.Name || foundEvent.name || eventNameInput,
+          eventName: foundEvent.eventName || foundEvent.EventName || foundEvent.Name || foundEvent.name || eventNameInput,
+          VenueName: foundEvent.VenueName || foundEvent.venueName || foundEvent.Venue || foundEvent.venue,
+          VenueCity: foundEvent.VenueCity || foundEvent.city || foundEvent.City || foundEvent.location,
+          arrangedEventDateTime: foundEvent.arrangedEventDateTime || [],
+          PopUpOrganizerData: foundEvent.PopUpOrganizerData || [],
         }
 
         setMatchedEvent(normalizedEvent)
         setUseMockData(false)
-        toast({ title: "Event Found", description: `Select a report type for ${normalizedEvent.eventName}.` })
+        toast({ title: "Event Found", description: `Select a report type for ${normalizedEvent.EventName}.` })
       } else {
         setMatchedEvent(null)
         toast({ title: "Not Found", description: "No event matched your criteria.", variant: "destructive" })
@@ -232,7 +287,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.error("Event search failed:", error)
       setApiError("Could not search events from server")
       // Fall back to mock search
-      handleMockSearch()
       
       toast({
         title: "API Error",
@@ -245,21 +299,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       setLoading(false)
     }
   }
-
-  // Mock search fallback
-  const handleMockSearch = () => {
-    const foundEvent = mockEventsListForReports.find(
-      (event) => event.eventName.toLowerCase() === eventNameInput.toLowerCase().trim()
-    )
-    if (foundEvent) {
-      setMatchedEvent(foundEvent)
-      setUseMockData(true)
-      toast({ title: "Event Found", description: `Select a report type for ${foundEvent.eventName}. (Using sample data)` })
-    } else {
-      setMatchedEvent(null)
-      toast({ title: "Not Found", description: "No event matched your criteria.", variant: "destructive" })
-    }
-  }
+ 
 
   // Generate reports using API
   const handleGenerateReport = async () => {
@@ -285,7 +325,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           }
           setCurrentPage(1)
           setLoading(false)
-          toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.eventName} is ready. (Using sample data)` })
+          toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready. (Using sample data)` })
         }, 1500)
         return
       }
@@ -296,9 +336,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("- User role:", role)
 
       let apiEndpoint = ""
-      let requestPayload: any = {}
-
-      // Determine the correct endpoint based on role and report type
+      let requestPayload: any = {}      // Determine the correct endpoint based on role and report type
       if ((role as UserRole) === "promoter") {
         if (reportType === "Summary") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
@@ -314,22 +352,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           }
         }
       } else {
-        // For superadmin/organizer - use the promoter payload structure you provided
+        // For superadmin/organizer
         if (reportType === "Summary") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
           requestPayload = {
             AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
             user_id: user.user_id,
-            EventName: matchedEvent.eventName,
-            DateTime: dateInput + "T00:00:00.000Z",
+            event_id: matchedEvent._id,
           }
         } else if (reportType === "Transaction") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
           requestPayload = {
             AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
             user_id: user.user_id,
-            EventName: matchedEvent.eventName,
-            DateTime: dateInput + "T00:00:00.000Z",
+            event_id: matchedEvent._id,
           }
         }
       }
@@ -360,45 +396,63 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }
 
       const data = await response.json()
-      console.log("Report response data:", data)
-
-      // Handle API response structure
+      console.log("Report response data:", data)      // Handle API response structure based on report type
       let reportArray = []
       
-      if (data && data.data && Array.isArray(data.data)) {
-        reportArray = data.data
-      } else if (data && Array.isArray(data)) {
-        reportArray = data
-      } else {
-        console.warn("Unexpected response format, using mock data")
-        throw new Error("Unexpected response format from server")
-      }
-
-      // Normalize the data based on report type
       if (reportType === "Summary") {
-        // Transform API data to summary format
+        // For summary reports, data is in data.TicketsData
+        if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
+          reportArray = data.data.TicketsData
+        } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
+          reportArray = data.TicketsData
+        } else {
+          console.warn("Unexpected summary response format:", data)
+          throw new Error("Unexpected response format from server for summary report")
+        }
+      } else {
+        // For transaction reports, use the standard structure
+        if (data && data.data && Array.isArray(data.data)) {
+          reportArray = data.data
+        } else if (data && Array.isArray(data)) {
+          reportArray = data
+        } else {
+          console.warn("Unexpected transaction response format:", data)
+          throw new Error("Unexpected response format from server for transaction report")
+        }
+      }      // Normalize the data based on report type
+      if (reportType === "Summary") {
+        // Transform API data to summary format using the TicketsData structure
         const summaryData = reportArray.map((item: any) => ({
-          ticketType: item.ticketType || item.ticket_type || item.TicketType || "Standard",
-          quantitySold: item.quantitySold || item.quantity_sold || item.Quantity || item.quantity || 0,
-          totalRevenue: item.totalRevenue || item.total_revenue || item.TotalAmount || item.amount || 0,
+          ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
+          ticketType: item.TicketName || item.ticketName || item.ticket_name || "Standard",
+          quantitySold: Number(item.Quantity || item.quantity || item.quantity_sold || 0),
+          ticketPrice: Number(item.TicketPrice || item.ticketPrice || item.ticket_price || 0),
+          ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
+          totalRevenue: Number(item.TotalAmount || item.totalAmount || item.total_amount || 0),
         }))
         setReportData(summaryData)
       } else if (reportType === "Transaction") {
         // Transform API data to transaction format
         const transactionData = reportArray.map((item: any) => ({
           bookingId: item.bookingId || item.booking_id || item.Booking_id || item._id || "N/A",
-          customerName: item.customerName || item.customer_name || item.CustomerName || "N/A",
+          phoneNumber: item.phoneNumber || item.phone_number || item.PhoneNumber || item.mobile || "N/A",
+          email: item.email || item.Email || item.customer_email || item.customerEmail || "N/A",
+          bookingDate: item.bookingDate || item.booking_date || item.BookingDateTime || item.date || item.created_at || new Date().toISOString(),
+          eventName: item.eventName || item.event_name || item.EventName || "N/A",
+          ticketDate: item.ticketDate || item.ticket_date || item.TicketDate || null,
+          quantity: Number(item.quantity || item.Quantity || item.TicketQuantity || 0),
+          ticketName: item.ticketName || item.ticket_name || item.TicketName || "N/A",
           ticketType: item.ticketType || item.ticket_type || item.TicketType || "Standard",
-          quantity: item.quantity || item.Quantity || item.TicketQuantity || 1,
-          amount: item.amount || item.Amount || item.TotalAmount || item.total_amount || 0,
-          date: item.date || item.booking_date || item.BookingDateTime || item.created_at || new Date().toISOString(),
+          ticketPrice: Number(item.ticketPrice || item.ticket_price || item.TicketPrice || 0),
+          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),
+          remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
+          status: item.status || item.Status || item.booking_status || item.bookingStatus || "N/A",
+          customerName: item.customerName || item.customer_name || item.CustomerName || "N/A", // Keep for backward compatibility
         }))
         setReportData(transactionData)
-      }
-
-      setCurrentPage(1)
+      }setCurrentPage(1)
       setUseMockData(false)
-      toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.eventName} is ready.` })
+      toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
     } catch (error) {
       console.error("Report generation failed:", error)
       setApiError("Could not generate report from server")
@@ -422,6 +476,12 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     }
   }
 
+  // Handle viewing transaction details
+  const handleViewTransactionDetails = (transaction: any) => {
+    setSelectedTransaction(transaction)
+    setIsDetailsModalOpen(true)
+  }
+
   const totalPages = Math.ceil(reportData.length / ITEMS_PER_PAGE)
   const currentReportData = reportData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
   const handlePageChange = (page: number) => setCurrentPage(page)
@@ -430,13 +490,14 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">
-        {(role as UserRole) === "promoter" ? "My Event Reports" : "Global Event Reports"}
+    <div className="flex flex-col gap-6">      <h1 className="text-2xl font-semibold">
+        {(role as UserRole) === "promoter" ? "My Event Reports" : "Event Reports"}
       </h1>
       <CardDescription>
         Generate summary or transaction reports for specific events.
         {(role as UserRole) === "promoter" && " View reports for events you're promoting."}
+        {(role as UserRole) === "organizer" && " View reports for events you're organizing."}
+        {(role as UserRole) === "superadmin" && " View reports for all events in the system."}
       </CardDescription>
 
       {/* Error Alert */}
@@ -494,7 +555,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       {matchedEvent && (
         <Card>
           <CardHeader>
-            <CardTitle>Generate Report for: {matchedEvent.eventName}</CardTitle>
+            <CardTitle>Generate Report for: {matchedEvent.EventName}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
@@ -531,7 +592,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>
-                {reportType} Report: {matchedEvent.eventName}
+                {reportType} Report: {matchedEvent.EventName}
               </CardTitle>
               <CardDescription>
                 {currentReportData.length} record(s) found
@@ -551,45 +612,58 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
               <>
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      {reportType === "Summary" && (
+                    <TableRow>                      {reportType === "Summary" && (
                         <>
-                          <TableHead>Ticket Type</TableHead>
-                          <TableHead className="text-right">Quantity Sold</TableHead>
-                          <TableHead className="text-right">Total Revenue</TableHead>
+                          <TableHead>Ticket Name</TableHead>
+                          <TableHead className="text-center">Quantity</TableHead>
+                          <TableHead className="text-right">Ticket Price</TableHead>
+                          <TableHead className="text-center">Ticket Date</TableHead>
+                          <TableHead className="text-right">Total Amount</TableHead>
                         </>
-                      )}
-                      {reportType === "Transaction" && (
+                      )}                      {reportType === "Transaction" && (
                         <>
                           <TableHead>Booking ID</TableHead>
-                          <TableHead>Customer Name</TableHead>
-                          <TableHead className="hidden md:table-cell">Ticket Type</TableHead>
+                          <TableHead>Phone No.</TableHead>
+                          <TableHead>Booking Date & Time</TableHead>
                           <TableHead className="text-center">Quantity</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead className="hidden lg:table-cell">Date</TableHead>
+                          <TableHead className="text-right">Total Amount</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead className="text-center">Action</TableHead>
                         </>
                       )}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {currentReportData.map((item, index) => (
-                      <TableRow key={index}>
-                        {reportType === "Summary" && (
+                      <TableRow key={index}>                        {reportType === "Summary" && (
                           <>
-                            <TableCell>{item.ticketType}</TableCell>
-                            <TableCell className="text-right">{item.quantitySold.toLocaleString()}</TableCell>
-                            <TableCell className="text-right">${item.totalRevenue.toLocaleString()}</TableCell>
+                            <TableCell>{item.ticketName || item.ticketType || "N/A"}</TableCell>
+                            <TableCell className="text-center">{(item.quantitySold || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-right">₹{(item.ticketPrice || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-center">{item.ticketDate ? new Date(item.ticketDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell className="text-right">₹{(item.totalRevenue || 0).toLocaleString()}</TableCell>
                           </>
-                        )}
-                        {reportType === "Transaction" && (
+                        )}                        {reportType === "Transaction" && (
                           <>
                             <TableCell className="font-medium">{item.bookingId}</TableCell>
-                            <TableCell>{item.customerName}</TableCell>
-                            <TableCell className="hidden md:table-cell">{item.ticketType}</TableCell>
-                            <TableCell className="text-center">{item.quantity}</TableCell>
-                            <TableCell className="text-right">${item.amount.toLocaleString()}</TableCell>
-                            <TableCell className="hidden lg:table-cell">
-                              {new Date(item.date).toLocaleDateString()}
+                            <TableCell>{item.phoneNumber || "N/A"}</TableCell>
+                            <TableCell>{item.bookingDate ? new Date(item.bookingDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell className="text-center">{item.quantity || 0}</TableCell>
+                            <TableCell className="text-right">₹{(item.amount || 0).toLocaleString()}</TableCell>
+                            <TableCell>
+                              <Badge variant={item.status === "Confirmed" ? "default" : item.status === "Cancelled" ? "destructive" : "secondary"}>
+                                {item.status || "N/A"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-center">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleViewTransactionDetails(item)}
+                                className="text-xs"
+                              >
+                                View Details
+                              </Button>
                             </TableCell>
                           </>
                         )}
@@ -641,7 +715,108 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             )}
           </CardContent>
         </Card>
-      )}
+      )}      {/* Transaction Details Modal */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Transaction Details</DialogTitle>
+            <DialogDescription>
+              Complete details of booking ID: {selectedTransaction?.bookingId}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-4">
+            {selectedTransaction && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Booking ID</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.bookingId || "N/A"}</div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Status</Label>
+                    <div className="p-2">
+                      <Badge variant={selectedTransaction.status === "Confirmed" ? "default" : selectedTransaction.status === "Cancelled" ? "destructive" : "secondary"}>
+                        {selectedTransaction.status || "N/A"}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Phone Number</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.phoneNumber || "N/A"}</div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Email</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.email || "N/A"}</div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Booking Date & Time</Label>
+                    <div className="p-2 bg-muted rounded text-sm">
+                      {selectedTransaction.bookingDate ? new Date(selectedTransaction.bookingDate).toLocaleDateString() : "N/A"}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Event Name</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.eventName || "N/A"}</div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Ticket Date</Label>
+                    <div className="p-2 bg-muted rounded text-sm">
+                      {selectedTransaction.ticketDate ? new Date(selectedTransaction.ticketDate).toLocaleDateString() : "N/A"}
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Quantity</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.quantity || 0}</div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Ticket Name</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.ticketName || "N/A"}</div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Ticket Type</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.ticketType || "N/A"}</div>
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium">Ticket Price</Label>
+                    <div className="p-2 bg-muted rounded text-sm font-medium">₹{(selectedTransaction.ticketPrice || 0).toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium">Total Amount</Label>
+                    <div className="p-2 bg-muted rounded text-sm font-medium text-green-600">₹{(selectedTransaction.amount || 0).toLocaleString()}</div>
+                  </div>
+                </div>
+                
+                {selectedTransaction.remark && selectedTransaction.remark !== "N/A" && (
+                  <div>
+                    <Label className="text-sm font-medium">Remark</Label>
+                    <div className="p-2 bg-muted rounded text-sm">{selectedTransaction.remark}</div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

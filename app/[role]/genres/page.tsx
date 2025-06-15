@@ -35,83 +35,119 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
+import { genreEndPoint } from "@/lib/api-endpoints"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
 
 interface GenresPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
 interface Genre {
   _id: string
-  genreName: string
-  genreDescription: string
-  genreImage?: string
-  status: "Active" | "Inactive"
+  Name: string
+  Description: string | null
+  Images: Array<{
+    image_path: string
+    _id: string
+  }>
+  FilterationDateTime: string
   createdAt: string
-  updatedAt: string
+  status: number
+  __v?: number
+}
+
+interface ApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: number
+    totalGenres: number
+    GenreData: Genre[]
+  }
 }
 
 const mockGenres: Genre[] = [
   {
     _id: "gen001",
-    genreName: "Rock",
-    genreDescription: "Rock music events and concerts",
-    genreImage: "/placeholder.svg?height=100&width=100&text=Rock",
-    status: "Active",
-    createdAt: "2025-01-03T08:30:00.000Z",
-    updatedAt: "2025-01-08T14:45:00.000Z",
+    Name: "Rock",
+    Description: "Rock music events and concerts",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Rock", _id: "img001" }],
+    FilterationDateTime: "2025-01-03T08:30:00.000Z",
+    createdAt: "03-01-2025 08:30:00",
+    status: 1,
+    __v: 0,
   },
   {
     _id: "gen002",
-    genreName: "Electronic Dance Music",
-    genreDescription: "Electronic dance music events and festivals",
-    genreImage: "/placeholder.svg?height=100&width=100&text=EDM",
-    status: "Active",
-    createdAt: "2025-01-25T10:15:00.000Z",
-    updatedAt: "2025-01-30T16:30:00.000Z",
+    Name: "Electronic Dance Music",
+    Description: "Electronic dance music events and festivals",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=EDM", _id: "img002" }],
+    FilterationDateTime: "2025-01-25T10:15:00.000Z",
+    createdAt: "25-01-2025 10:15:00",
+    status: 1,
+    __v: 0,
   },
   {
     _id: "gen003",
-    genreName: "Jazz",
-    genreDescription: "Jazz music performances and festivals",
-    genreImage: "/placeholder.svg?height=100&width=100&text=Jazz",
-    status: "Active",
-    createdAt: "2025-02-15T09:45:00.000Z",
-    updatedAt: "2025-02-20T11:20:00.000Z",
+    Name: "Jazz",
+    Description: "Jazz music performances and festivals",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Jazz", _id: "img003" }],
+    FilterationDateTime: "2025-02-15T09:45:00.000Z",
+    createdAt: "15-02-2025 09:45:00",
+    status: 1,
+    __v: 0,
   },
   {
     _id: "gen004",
-    genreName: "Classical",
-    genreDescription: "Classical music concerts and orchestral performances",
-    genreImage: "/placeholder.svg?height=100&width=100&text=Classical",
-    status: "Inactive",
-    createdAt: "2025-03-05T12:00:00.000Z",
-    updatedAt: "2025-03-10T16:15:00.000Z",
+    Name: "Classical",
+    Description: "Classical music concerts and orchestral performances",
+    Images: [],
+    FilterationDateTime: "2025-03-05T12:00:00.000Z",
+    createdAt: "05-03-2025 12:00:00",
+    status: 0,
+    __v: 0,
   },
   {
     _id: "gen005",
-    genreName: "Hip Hop",
-    genreDescription: "Hip hop concerts and rap battles",
-    genreImage: "/placeholder.svg?height=100&width=100&text=HipHop",
-    status: "Active",
-    createdAt: "2025-03-20T14:30:00.000Z",
-    updatedAt: "2025-03-25T18:45:00.000Z",
+    Name: "Hip Hop",
+    Description: "Hip hop concerts and rap battles",
+    Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=HipHop", _id: "img005" }],
+    FilterationDateTime: "2025-03-20T14:30:00.000Z",
+    createdAt: "20-03-2025 14:30:00",
+    status: 1,
+    __v: 0,
   },
 ]
 
 const ITEMS_PER_PAGE = 10
 
 export default function GenresPage({ params }: GenresPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
+
   const { toast } = useToast()
+  const { user } = useAuth()
 
   // State management
-  const [genres, setGenres] = React.useState<Genre[]>(mockGenres)
+  const [genres, setGenres] = React.useState<Genre[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalGenres, setTotalGenres] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedGenre, setSelectedGenre] = React.useState<Genre | null>(null)
+  const [useMockData, setUseMockData] = React.useState(false)
+  const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -120,14 +156,112 @@ export default function GenresPage({ params }: GenresPageProps) {
     genreImage: null as File | null,
   })
 
-  // Filter genres based on search
+  // API function to fetch genres
+  const fetchGenres = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+    try {
+      setLoading(true)
+      setApiError(null)
+
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.warn("No user or auth token available, using mock data")
+        setGenres(mockGenres)
+        setUseMockData(true)
+        setTotalPages(1)
+        setTotalGenres(mockGenres.length)
+        return
+      }
+
+      console.log("Fetching genres with pagination:")
+      console.log("- Page:", page)
+      console.log("- Limit:", limit)
+
+      const response = await fetch(genreEndPoint.GENRE_PAGINATED_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          page: page,
+          limit: limit.toString(),
+        }),
+      })
+
+      console.log("Response status:", response.status)
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data: ApiResponse = await response.json()
+      console.log("Genres API response:", data)
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch genres")
+      }
+
+      // Set the data from API
+      setGenres(data.data.GenreData || [])
+      setTotalPages(data.data.totalPages || 1)
+      setTotalGenres(data.data.totalGenres || 0)
+      setCurrentPage(data.data.currentPage || 1)
+      setUseMockData(false)
+
+      toast({
+        title: "Success",
+        description: data.message || "Genres fetched successfully",
+      })
+    } catch (error) {
+      console.error("Genres fetch failed:", error)
+      setApiError("Could not fetch genres from server")
+      
+      // Fall back to mock data
+      setGenres(mockGenres)
+      setUseMockData(true)
+      setTotalPages(1)
+      setTotalGenres(mockGenres.length)
+      
+      toast({
+        title: "API Error",
+        description: "Could not fetch genres from server. Using sample data instead.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }, [user, toast])
+
+  // Initial data fetch
+  React.useEffect(() => {
+    fetchGenres(currentPage)
+  }, [currentPage, fetchGenres])
+
+  // Helper function to get genre image
+  const getGenreImage = (genre: Genre): string => {
+    if (genre.Images && genre.Images.length > 0) {
+      return genre.Images[0].image_path.startsWith('http') 
+        ? genre.Images[0].image_path 
+        : `${process.env.NEXT_PUBLIC_API_BASE_URL}/${genre.Images[0].image_path}`
+    }
+    return "/placeholder.svg"
+  }
+
+  // Helper function to get status display
+  const getStatusDisplay = (status: number): { text: string; variant: "default" | "secondary" } => {
+    return status === 1 
+      ? { text: "Active", variant: "default" } 
+      : { text: "Inactive", variant: "secondary" }
+  }
+
+  // Filter genres based on search (now works on current page data)
   const filteredGenres = React.useMemo(() => {
     if (!searchTerm) return genres
-    return genres.filter((genre) => genre.genreName.toLowerCase().includes(searchTerm.toLowerCase()))
+    return genres.filter((genre) => genre.Name.toLowerCase().includes(searchTerm.toLowerCase()))
   }, [genres, searchTerm])
 
-  const totalPages = Math.ceil(filteredGenres.length / ITEMS_PER_PAGE)
-  const currentGenres = filteredGenres.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  // For paginated API, we don't slice here since API handles pagination
+  const currentGenres = filteredGenres
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -150,14 +284,15 @@ export default function GenresPage({ params }: GenresPageProps) {
 
       const newGenre: Genre = {
         _id: `gen${Date.now()}`,
-        genreName: formData.genreName,
-        genreDescription: formData.genreDescription,
-        genreImage: formData.genreImage
-          ? `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.genreName)}`
-          : undefined,
-        status: "Active",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        Name: formData.genreName,
+        Description: formData.genreDescription,
+        Images: formData.genreImage
+          ? [{ image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.genreName)}`, _id: `img${Date.now()}` }]
+          : [],
+        FilterationDateTime: new Date().toISOString(),
+        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
+        status: 1,
+        __v: 0,
       }
 
       setGenres([newGenre, ...genres])
@@ -198,9 +333,9 @@ export default function GenresPage({ params }: GenresPageProps) {
         genre._id === selectedGenre._id
           ? {
               ...genre,
-              genreName: formData.genreName,
-              genreDescription: formData.genreDescription,
-              updatedAt: new Date().toISOString(),
+              Name: formData.genreName,
+              Description: formData.genreDescription,
+              FilterationDateTime: new Date().toISOString(),
             }
           : genre,
       )
@@ -253,13 +388,13 @@ export default function GenresPage({ params }: GenresPageProps) {
     try {
       // Simulate API call
       await new Promise((resolve) => setTimeout(resolve, 1000))
-
+      
       const updatedGenres = genres.map((genre) =>
         genre._id === genreId
           ? {
               ...genre,
-              status: genre.status === "Active" ? ("Inactive" as const) : ("Active" as const),
-              updatedAt: new Date().toISOString(),
+              status: genre.status === 1 ? 0 : 1,
+              FilterationDateTime: new Date().toISOString(),
             }
           : genre,
       )
@@ -284,8 +419,8 @@ export default function GenresPage({ params }: GenresPageProps) {
   const openEditDialog = (genre: Genre) => {
     setSelectedGenre(genre)
     setFormData({
-      genreName: genre.genreName,
-      genreDescription: genre.genreDescription,
+      genreName: genre.Name,
+      genreDescription: genre.Description || "",
       genreImage: null,
     })
     setIsEditDialogOpen(true)
@@ -408,10 +543,10 @@ export default function GenresPage({ params }: GenresPageProps) {
                 currentGenres.map((genre) => (
                   <TableRow key={genre._id}>
                     <TableCell>
-                      {genre.genreImage ? (
+                      {getGenreImage(genre) !== "/placeholder.svg" ? (
                         <img
-                          src={genre.genreImage || "/placeholder.svg"}
-                          alt={genre.genreName}
+                          src={getGenreImage(genre)}
+                          alt={genre.Name}
                           className="w-12 h-12 rounded-lg object-cover"
                         />
                       ) : (
@@ -420,12 +555,14 @@ export default function GenresPage({ params }: GenresPageProps) {
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">{genre.genreName}</TableCell>
+                    <TableCell className="font-medium">{genre.Name}</TableCell>
                     <TableCell className="hidden md:table-cell max-w-xs truncate">
-                      {genre.genreDescription || "No description"}
+                      {genre.Description || "No description"}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={genre.status === "Active" ? "default" : "secondary"}>{genre.status}</Badge>
+                      <Badge variant={getStatusDisplay(genre.status).variant}>
+                        {getStatusDisplay(genre.status).text}
+                      </Badge>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       {new Date(genre.createdAt).toLocaleDateString()}
@@ -445,7 +582,7 @@ export default function GenresPage({ params }: GenresPageProps) {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleToggleStatus(genre._id)}>
-                            {genre.status === "Active" ? "Deactivate" : "Activate"}
+                            {genre.status === 1 ? "Deactivate" : "Activate"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteGenre(genre._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
