@@ -11,7 +11,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -19,7 +18,6 @@ import {
   Download,
   Loader2,
   Search,
-  AlertCircle,
   Filter,
   ChevronDown,
   ChevronUp,
@@ -31,6 +29,8 @@ import { promoterEndPointPannel } from "@/lib/api-endpoints"
 import { getValidToken } from "@/lib/token-utils"
 import { useRouter } from "next/navigation"
 import type { UserRole } from "@/lib/navigation"
+import { BookingsTable } from "@/components/bookings-table"
+import type { Booking } from "@/lib/types"
 
 interface EventReportPageProps {
   params: { role: UserRole; eventId: string } | Promise<{ role: UserRole; eventId: string }>
@@ -432,17 +432,110 @@ export default function EventReportPage({ params }: EventReportPageProps) {
 
     if (debouncedSearchTerm) {
       fetchSearchData()
-    }
-  }, [debouncedSearchTerm, selectedBookingType, eventId, user])
+    }  }, [debouncedSearchTerm, selectedBookingType, eventId, user])
 
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("en-GB", {
+  const formatDate = (date: Date | string | number) => {
+    if (!date) return "N/A"
+    return new Date(date).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
     })
   }
+
+  const formatCurrency = (amount: number) => {
+    return `₹${amount.toLocaleString()}`
+  }
+
+  const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status?.toLowerCase()) {
+      case "confirmed":
+      case "success":
+      case "completed":
+        return "default"
+      case "pending":
+      case "processing":
+        return "secondary"
+      case "cancelled":
+      case "failed":
+        return "destructive"
+      default:
+        return "outline"
+    }
+  }
+  // Transform data for BookingsTable component
+  const transformedSummaryData: Booking[] = eventTicketsData.map((ticket, index) => ({
+    _id: `summary-${index}`,
+    eventId: eventId,
+    eventName: ticket.TicketName || "N/A",
+    customerId: "N/A",
+    customerName: "N/A", // Summary data doesn't have customer info
+    customerEmail: "",
+    phoneNumber: "",
+    bookingChannel: "Online" as const,
+    bookingStatus: "Confirmed" as const,
+    totalAmount: ticket.TotalAmount || 0,
+    ticketPrice: ticket.TicketPrice,
+    bookingDate: ticket.TicketDate || new Date().toISOString(),
+    ticketDate: ticket.TicketDate,
+    quantity: ticket.Quantity,
+    ticketName: ticket.TicketName,
+    ticketType: "Summary",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // Additional fields for compatibility
+    Booking_id: `SUM-${index + 1}`,
+    CustomerName: "N/A",
+    PhoneNumber: "",
+    Email: "",
+    BookingDateTime: ticket.TicketDate,
+    EventName: ticket.TicketName,
+    TicketDate: ticket.TicketDate,
+    TicketQuantity: ticket.Quantity,
+    TicketName: ticket.TicketName,
+    EventTicketType: "Summary",
+    TicketPrice: ticket.TicketPrice,
+    TotalAmount: ticket.TotalAmount,
+  }))
+
+  const transformedTransactionData: Booking[] = allTransactionBookingData.map((transaction) => ({
+    _id: transaction._id || transaction.Booking_id || `trans-${Math.random()}`,
+    eventId: eventId,
+    eventName: transaction.EventName || "N/A",
+    customerId: transaction.CustomerId || "N/A",
+    customerName: transaction.CustomerName || "N/A",
+    customerEmail: transaction.Email || "",
+    phoneNumber: transaction.PhoneNumber,
+    bookingChannel: "Online" as const,
+    bookingStatus: transaction.Status === "2" ? "Cancelled" : "Confirmed",
+    totalAmount: transaction.TotalAmount || 0,
+    ticketPrice: transaction.TicketPrice,
+    bookingDate: transaction.BookingDateTime || new Date().toISOString(),
+    ticketDate: transaction.TicketDate,
+    city: transaction.EventCityName,
+    venue: transaction.EventVenueName,
+    quantity: transaction.TicketQuantity,
+    ticketName: transaction.TicketName,
+    ticketType: transaction.EventTicketType,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    // Additional fields for compatibility
+    Booking_id: transaction.Booking_id,
+    CustomerName: transaction.CustomerName,
+    PhoneNumber: transaction.PhoneNumber,
+    Email: transaction.Email,
+    BookingDateTime: transaction.BookingDateTime,
+    EventName: transaction.EventName,
+    TicketDate: transaction.TicketDate,
+    EventCityName: transaction.EventCityName,
+    EventVenueName: transaction.EventVenueName,
+    TicketQuantity: transaction.TicketQuantity,
+    TicketName: transaction.TicketName,
+    EventTicketType: transaction.EventTicketType,
+    TicketPrice: transaction.TicketPrice,
+    TotalAmount: transaction.TotalAmount,
+    Check_In: transaction.Check_In,
+  }))
 
   if (loading) {
     return (
@@ -625,88 +718,29 @@ export default function EventReportPage({ params }: EventReportPageProps) {
               : `${allTransactionBookingData.length} transaction record(s) found`
             }
           </CardDescription>
-        </CardHeader>
-        <CardContent>
+        </CardHeader>        <CardContent>
           {selectedBookingType === 1 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Ticket Name</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Ticket Price</TableHead>
-                  <TableHead>Ticket Date</TableHead>
-                  <TableHead>Total Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {eventTicketsData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-muted-foreground">No summary booking data available</p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  eventTicketsData.map((ticket, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{ticket.TicketName}</TableCell>
-                      <TableCell>{ticket.Quantity}</TableCell>
-                      <TableCell>₹{ticket.TicketPrice}</TableCell>
-                      <TableCell>{formatDate(ticket.TicketDate)}</TableCell>
-                      <TableCell>₹{ticket.TotalAmount}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <BookingsTable
+              bookings={transformedSummaryData}
+              role={role}
+              searchTerm=""
+              statusFilter="all"
+              channelFilter="all"
+              formatDate={formatDate}
+              formatCurrency={formatCurrency}
+              getStatusBadgeVariant={getStatusBadgeVariant}
+            />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Customer Name</TableHead>
-                  <TableHead>Booking ID</TableHead>
-                  <TableHead>Phone No.</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Booking Date</TableHead>
-                  <TableHead>Event Name</TableHead>
-                  <TableHead>Start Date</TableHead>
-                  <TableHead>Quantity</TableHead>
-                  <TableHead>Check In</TableHead>
-                  <TableHead>Ticket Name</TableHead>
-                  <TableHead>Ticket Type</TableHead>
-                  <TableHead>Ticket Price</TableHead>
-                  <TableHead>Total Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allTransactionBookingData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={13} className="text-center py-8">
-                      <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-muted-foreground">No transaction booking data available</p>
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  allTransactionBookingData.map((transaction, index) => (
-                    <TableRow key={index} className={transaction.Status === "2" ? "bg-red-50" : ""}>
-                      <TableCell className="font-medium">{transaction.CustomerName}</TableCell>
-                      <TableCell>{transaction.Booking_id}</TableCell>
-                      <TableCell>{transaction.PhoneNumber}</TableCell>
-                      <TableCell>{transaction.Email}</TableCell>
-                      <TableCell>{transaction.BookingDateTime}</TableCell>
-                      <TableCell>{transaction.EventName}</TableCell>
-                      <TableCell>{formatDate(transaction.TicketDate)}</TableCell>
-                      <TableCell>{transaction.TicketQuantity}</TableCell>
-                      <TableCell>{transaction.Check_In}</TableCell>
-                      <TableCell>{transaction.TicketName}</TableCell>
-                      <TableCell>{transaction.EventTicketType}</TableCell>
-                      <TableCell>₹{transaction.TicketPrice}</TableCell>
-                      <TableCell>₹{transaction.TotalAmount}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+            <BookingsTable
+              bookings={transformedTransactionData}
+              role={role}
+              searchTerm={searchTerm}
+              statusFilter="all"
+              channelFilter="all"
+              formatDate={formatDate}
+              formatCurrency={formatCurrency}
+              getStatusBadgeVariant={getStatusBadgeVariant}
+            />
           )}
         </CardContent>
       </Card>
