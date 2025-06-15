@@ -11,7 +11,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "EventingClub Admin",
   description: "Event Management System Admin Panel",
-    generator: 'v0.dev'
+    generator: 'codex'
 }
 
 export default function RootLayout({

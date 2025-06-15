@@ -112,14 +112,40 @@ export interface Booking {
   customerId: string
   customerName: string
   customerEmail: string
+  phoneNumber?: string
+  email?: string
   promoterId?: string
   promoterName?: string
   bookingChannel: "Online" | "Promoter" | "Bulk"
-  bookingStatus: "Confirmed" | "Pending" | "Cancelled"
+  bookingStatus: "Confirmed" | "Pending" | "Cancelled" | "Booked"
   totalAmount: number
+  ticketPrice?: number
   bookingDate: string
+  ticketDate?: string
+  city?: string
+  venue?: string
+  quantity?: number
+  ticketName?: string
+  ticketType?: string
   createdAt: string
   updatedAt: string
+  // Additional fields from API response
+  Booking_id?: string
+  CustomerName?: string
+  PhoneNumber?: string
+  Email?: string
+  BookingDateTime?: string
+  EventName?: string
+  TicketDate?: string
+  EventCityName?: string
+  EventVenueName?: string
+  PromoterName?: string
+  TicketQuantity?: number
+  TicketName?: string
+  EventTicketType?: string
+  TicketPrice?: number
+  TotalAmount?: number
+  status?: number
 }
 
 export interface DashboardStats {
