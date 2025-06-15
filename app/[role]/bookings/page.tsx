@@ -454,17 +454,19 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       <SelectItem value="Cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
-                  <Select value={channelFilter} onValueChange={setChannelFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Channel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Channels</SelectItem>
-                      <SelectItem value="Online">Online</SelectItem>
-                      <SelectItem value="Promoter">Promoter</SelectItem>
-                      <SelectItem value="Bulk">Bulk</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {(role as UserRole) !== "promoter" && (
+                    <Select value={channelFilter} onValueChange={setChannelFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by Channel" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Channels</SelectItem>
+                        <SelectItem value="Online">Online</SelectItem>
+                        <SelectItem value="Promoter">Promoter</SelectItem>
+                        <SelectItem value="Bulk">Bulk</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -580,7 +582,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                               {booking.ticketType && (
                                 <div className="mt-1">
                                   <p className="text-xs text-green-600 dark:text-green-400">Type</p>
-                                  <p className="text-sm text-green-800 dark:text-green-200">{booking.ticketType}</p>
+                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">{booking.ticketType}</p>
                                 </div>
                               )}
                             </div>
