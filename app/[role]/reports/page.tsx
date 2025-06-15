@@ -161,11 +161,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [useMockData, setUseMockData] = React.useState(false)
-  const [apiError, setApiError] = React.useState<string | null>(null)
+  
+  // Error popup state
+  const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
+  const [errorMessage, setErrorMessage] = React.useState<string>("")
   
   // Transaction details modal state
   const [selectedTransaction, setSelectedTransaction] = React.useState<any>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false)
+
+  // Helper function to show error popup
+  const showErrorPopup = (message: string) => {
+    setErrorMessage(message)
+    setIsErrorDialogOpen(true)
+  }
 
   // Search for events by name and date using API
   const handleSearchEvent = async () => {
@@ -178,7 +187,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     }
 
     setLoading(true)
-    setApiError(null)
 
     try {
       const authToken = localStorage.getItem("authToken")
@@ -195,11 +203,12 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       let apiEndpoint = ""
       let requestPayload: any = {}      // Determine the correct search endpoint based on role
       if ((role as UserRole) === "promoter") {
-        apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
+        apiEndpoint = promoterEndPointPannel.GET_EVENTS_BY_NAME_AND_DATETIME
         requestPayload = {
           AdminRole: 4, // Promoter role ID
           user_id: user.user_id,
-          eventNameSearchKeyword: eventNameInput.trim(),
+          EventName: eventNameInput.trim(),
+          DateTime: dateInput ? new Date(dateInput).toISOString() : new Date().toISOString(),
         }
       } else {
         // For superadmin/organizer - use the paginated events endpoint
@@ -235,10 +244,14 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           console.log("Could not read error response body")
         }
         throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
-      }
-
-      const data = await response.json()
-      console.log("Search response data:", data)      // Handle API response structure
+      }      const data = await response.json()
+      console.log("Search response data:", data)
+      console.log("Response structure analysis:")
+      console.log("- data exists:", !!data)
+      console.log("- data.data exists:", !!(data && data.data))
+      console.log("- data.data type:", data && data.data ? typeof data.data : "undefined")
+      console.log("- data.data is array:", !!(data && data.data && Array.isArray(data.data)))
+      console.log("- data.data has _id:", !!(data && data.data && data.data._id))// Handle API response structure
       let eventsArray = []
       
       if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
@@ -247,11 +260,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       } else if (data && data.data && Array.isArray(data.data)) {
         // Standard response structure
         eventsArray = data.data
+      } else if (data && data.data && typeof data.data === 'object' && data.data._id) {
+        // Single event object response (for promoter search)
+        eventsArray = [data.data]
       } else if (data && Array.isArray(data)) {
         // Direct array response
         eventsArray = data
       } else {
-        console.warn("Unexpected response format, using mock search")
+        console.warn("Unexpected response format:", data)
+        console.warn("Expected an array or single event object, got:", typeof data.data)
+        toast({
+          title: "Error",
+          description: "Unexpected response format from server",
+          variant: "destructive"
+        })
         return
       }
 
@@ -261,11 +283,12 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           const eventName = event.EventName || event.eventName || event.Name || event.name || ""
           return eventName.toLowerCase().includes(eventNameInput.toLowerCase().trim())
         })
-      }
-
-      if (eventsArray.length > 0) {
+      }      if (eventsArray.length > 0) {
+        console.log("✅ Events found:", eventsArray.length)
         // Take the first matching event
         const foundEvent = eventsArray[0]
+        console.log("📍 Using first event:", foundEvent)
+        
         const normalizedEvent: Event = {
           _id: foundEvent._id || foundEvent.id || "unknown",
           EventName: foundEvent.EventName || foundEvent.eventName || foundEvent.Name || foundEvent.name || eventNameInput,
@@ -276,16 +299,17 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           PopUpOrganizerData: foundEvent.PopUpOrganizerData || [],
         }
 
+        console.log("📋 Normalized event:", normalizedEvent)
         setMatchedEvent(normalizedEvent)
         setUseMockData(false)
         toast({ title: "Event Found", description: `Select a report type for ${normalizedEvent.EventName}.` })
       } else {
+        console.log("❌ No events found")
         setMatchedEvent(null)
         toast({ title: "Not Found", description: "No event matched your criteria.", variant: "destructive" })
-      }
-    } catch (error) {
+      }    } catch (error) {
       console.error("Event search failed:", error)
-      setApiError("Could not search events from server")
+      showErrorPopup("Could not search events from server")
       // Fall back to mock search
       
       toast({
@@ -300,7 +324,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     }
   }
  
-
   // Generate reports using API
   const handleGenerateReport = async () => {
     if (!matchedEvent || !reportType) {
@@ -308,8 +331,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       return
     }
 
+    console.log("🚀 Starting report generation...")
+    console.log("- Matched event:", matchedEvent)
+    console.log("- Report type:", reportType)
+    console.log("- User role:", role)
     setLoading(true)
-    setApiError(null)
 
     try {
       const authToken = localStorage.getItem("authToken")
@@ -400,13 +426,27 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       let reportArray = []
       
       if (reportType === "Summary") {
-        // For summary reports, data is in data.TicketsData
+        // For summary reports, check multiple possible data sources
         if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
           reportArray = data.data.TicketsData
+          console.log("📊 Using TicketsData array:", reportArray.length, "items")
         } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
           reportArray = data.TicketsData
+          console.log("📊 Using TicketsData array (direct):", reportArray.length, "items")
+        } else if (data && data.data && data.data.TicketNamesArray && Array.isArray(data.data.TicketNamesArray)) {
+          // Handle case where TicketsData is empty but we have TicketNamesArray
+          console.log("📊 TicketsData is empty, creating placeholder data from TicketNamesArray")
+          reportArray = data.data.TicketNamesArray.map((ticketName: string) => ({
+            TicketName: ticketName,
+            Quantity: 0,
+            TicketPrice: 0,
+            TotalAmount: 0,
+            TicketDate: data.data.EventDateTimeData?.[0]?.EventStartDateTime || null
+          }))
+          console.log("📊 Created placeholder summary data:", reportArray)
         } else {
           console.warn("Unexpected summary response format:", data)
+          console.warn("Available data keys:", data && data.data ? Object.keys(data.data) : "no data.data")
           throw new Error("Unexpected response format from server for summary report")
         }
       } else {
@@ -422,15 +462,38 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }      // Normalize the data based on report type
       if (reportType === "Summary") {
         // Transform API data to summary format using the TicketsData structure
-        const summaryData = reportArray.map((item: any) => ({
-          ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
-          ticketType: item.TicketName || item.ticketName || item.ticket_name || "Standard",
-          quantitySold: Number(item.Quantity || item.quantity || item.quantity_sold || 0),
-          ticketPrice: Number(item.TicketPrice || item.ticketPrice || item.ticket_price || 0),
-          ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
-          totalRevenue: Number(item.TotalAmount || item.totalAmount || item.total_amount || 0),
-        }))
+        const summaryData = reportArray.map((item: any) => {
+          const quantitySold = Number(item.Quantity || item.quantity || item.quantity_sold || 0)
+          const ticketPrice = Number(item.TicketPrice || item.ticketPrice || item.ticket_price || 0)
+          const totalRevenue = Number(item.TotalAmount || item.totalAmount || item.total_amount || (quantitySold * ticketPrice))
+          
+          return {
+            ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
+            ticketType: item.TicketName || item.ticketName || item.ticket_name || "Standard",
+            quantitySold: quantitySold,
+            ticketPrice: ticketPrice,
+            ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
+            totalRevenue: totalRevenue,
+          }
+        })
+        
+        console.log("📈 Processed summary data:", summaryData)
         setReportData(summaryData)
+          // Show appropriate message based on data availability
+        if (summaryData.length > 0 && summaryData.some((item: any) => item.quantitySold > 0)) {
+          toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
+        } else if (summaryData.length > 0) {
+          toast({ 
+            title: "Report Generated", 
+            description: `${reportType} report shows available ticket types for ${matchedEvent.EventName}. No bookings found yet.`,
+          })
+        } else {
+          toast({ 
+            title: "Report Generated", 
+            description: `No ticket data available for ${matchedEvent.EventName}.`,
+            variant: "destructive"
+          })
+        }
       } else if (reportType === "Transaction") {
         // Transform API data to transaction format
         const transactionData = reportArray.map((item: any) => ({
@@ -444,18 +507,18 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           ticketName: item.ticketName || item.ticket_name || item.TicketName || "N/A",
           ticketType: item.ticketType || item.ticket_type || item.TicketType || "Standard",
           ticketPrice: Number(item.ticketPrice || item.ticket_price || item.TicketPrice || 0),
-          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),
-          remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
+          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),          remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
           status: item.status || item.Status || item.booking_status || item.bookingStatus || "N/A",
           customerName: item.customerName || item.customer_name || item.CustomerName || "N/A", // Keep for backward compatibility
         }))
         setReportData(transactionData)
-      }setCurrentPage(1)
-      setUseMockData(false)
-      toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
-    } catch (error) {
+        toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
+      }
+
+      setCurrentPage(1)
+      setUseMockData(false)    } catch (error) {
       console.error("Report generation failed:", error)
-      setApiError("Could not generate report from server")
+      showErrorPopup("Could not generate report from server")
       
       // Fall back to mock data
       if (reportType === "Summary") {
@@ -497,18 +560,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         Generate summary or transaction reports for specific events.
         {(role as UserRole) === "promoter" && " View reports for events you're promoting."}
         {(role as UserRole) === "organizer" && " View reports for events you're organizing."}
-        {(role as UserRole) === "superadmin" && " View reports for all events in the system."}
-      </CardDescription>
-
-      {/* Error Alert */}
-      {apiError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>API Error:</strong> {apiError}
-          </AlertDescription>
-        </Alert>
-      )}
+        {(role as UserRole) === "superadmin" && " View reports for all events in the system."}      </CardDescription>
 
       {/* Mock Data Warning */}
       {useMockData && (
@@ -813,6 +865,31 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           <div className="flex justify-end gap-2 mt-6">
             <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
               Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Error Dialog */}
+      <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              API Error
+            </DialogTitle>
+            <DialogDescription>
+              An error occurred while communicating with the server.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive font-medium">{errorMessage}</p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => setIsErrorDialogOpen(false)}>
+              OK
             </Button>
           </div>
         </DialogContent>

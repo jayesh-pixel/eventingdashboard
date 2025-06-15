@@ -10,12 +10,22 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { MoreHorizontal, Download, Filter, Loader2, AlertCircle } from "lucide-react"
+import * as XLSX from "xlsx"
 import type { UserRole } from "@/lib/navigation"
 import type { Booking } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
@@ -57,15 +67,30 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
-  const [activeTab, setActiveTab] = React.useState("all")
+  const [activeTab, setActiveTab] = React.useState(role === "promoter" ? "my-bookings" : "all")
   const [useMockData, setUseMockData] = React.useState(false)
-  const [apiError, setApiError] = React.useState<string | null>(null)
+
+  // Error popup state
+  const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
+  const [errorMessage, setErrorMessage] = React.useState<string>("")
 
   // Search and filter state
   const [searchTerm, setSearchTerm] = React.useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [channelFilter, setChannelFilter] = React.useState<string>("all")
+  const [cityFilter, setCityFilter] = React.useState<string>("all")
+  const [venueFilter, setVenueFilter] = React.useState<string>("all")
+  const [eventNameFilter, setEventNameFilter] = React.useState<string>("all")
+
+  // Helper function to show error popup
+  const showErrorPopup = (message: string) => {
+    setErrorMessage(message)
+    setIsErrorDialogOpen(true)
+  }
+
+  // Filter popup state
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
 
   // Helper function to normalize booking data
   const normalizeBookingData = (bookings: any[]): Booking[] => {
@@ -129,20 +154,35 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         ticketName: ticketName,
         ticketType: ticketType,
         city: city,
-        venue: venue,
-        ticketDate: ticketDate,
+        venue: venue,        ticketDate: ticketDate,
         bookingDate: bookingDate,
         createdAt: booking.createdAt || booking.created_at || bookingDate || new Date().toISOString(),
         updatedAt: booking.updatedAt || booking.updated_at || bookingDate || new Date().toISOString(),
+        // Additional API fields for compatibility
+        Booking_id: booking.Booking_id || booking.booking_id,
+        CustomerName: booking.CustomerName || booking.customerName,
+        PhoneNumber: booking.PhoneNumber || booking.phoneNumber,
+        Email: booking.Email || booking.email,
+        BookingDateTime: booking.BookingDateTime || booking.bookingDate,
+        EventName: booking.EventName || booking.eventName,
+        TicketDate: booking.TicketDate || booking.ticketDate,
+        EventCityName: booking.EventCityName || booking.city,
+        EventVenueName: booking.EventVenueName || booking.venue,
+        PromoterName: booking.PromoterName || booking.promoterName,
+        TicketQuantity: booking.TicketQuantity || booking.quantity,
+        TicketName: booking.TicketName || booking.ticketName,
+        EventTicketType: booking.EventTicketType || booking.ticketType,
+        TicketPrice: booking.TicketPrice || booking.ticketPrice,
+        TotalAmount: booking.TotalAmount || booking.totalAmount,
+        status: booking.status,
+        Remark: booking.Remark || booking.remark,
       }
     })
   }
 
   // Fetch bookings data
-  const fetchBookingsData = async () => {
-    try {
+  const fetchBookingsData = async () => {    try {
       setLoading(true)
-      setApiError(null)
 
       const authToken = localStorage.getItem("authToken")
 
@@ -240,9 +280,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       } else {
         console.error("❌ No valid bookings array found")
         throw new Error("No valid bookings array found in response")
-      }
-    } catch (error) {
-      setApiError("Could not fetch bookings from server")
+      }    } catch (error) {
+      showErrorPopup("Could not fetch bookings from server")
       setBookingsData(mockBookings)
       setOriginalData(mockBookings)
       setUseMockData(true)
@@ -264,10 +303,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
     return () => clearTimeout(delay)
   }, [searchTerm])
-
   // Filter bookings based on search term
   React.useEffect(() => {
-    if (debouncedSearchTerm === "" && statusFilter === "all" && channelFilter === "all") {
+    if (debouncedSearchTerm === "" && statusFilter === "all" && channelFilter === "all" && 
+        cityFilter === "all" && venueFilter === "all" && eventNameFilter === "all") {
       setBookingsData(originalData)
       return
     }
@@ -298,9 +337,21 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       filtered = filtered.filter((booking) => booking.bookingChannel === channelFilter)
     }
 
+    if (cityFilter !== "all") {
+      filtered = filtered.filter((booking) => booking.city === cityFilter)
+    }
+
+    if (venueFilter !== "all") {
+      filtered = filtered.filter((booking) => booking.venue === venueFilter)
+    }
+
+    if (eventNameFilter !== "all") {
+      filtered = filtered.filter((booking) => booking.eventName === eventNameFilter)
+    }
+
     setBookingsData(filtered)
     setCurrentPage(1)
-  }, [debouncedSearchTerm, statusFilter, channelFilter, originalData])
+  }, [debouncedSearchTerm, statusFilter, channelFilter, cityFilter, venueFilter, eventNameFilter, originalData])
 
   // Initial data fetch
   React.useEffect(() => {
@@ -322,11 +373,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     if ((role as UserRole) === "promoter") {
       console.log("👤 Promoter role - returning all bookings")
       return filtered
-    }
-
-    switch (activeTab) {
+    }    switch (activeTab) {
       case "all":
         console.log("📊 All tab - returning", filtered.length, "bookings")
+        return filtered
+      case "my-bookings":
+        console.log("👤 My Bookings tab - returning", filtered.length, "bookings")
         return filtered
       case "promoter":
         const promoterBookings = filtered.filter((booking) => booking.bookingChannel === "Promoter")
@@ -360,6 +412,134 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
+  // Helper functions to get unique filter options
+  const getUniqueCities = React.useMemo(() => {
+    const cities = originalData
+      .map((booking) => booking.city)
+      .filter((city): city is string => Boolean(city && city.trim() !== "" && city !== "N/A"))
+    return [...new Set(cities)].sort()
+  }, [originalData])
+
+  const getUniqueVenues = React.useMemo(() => {
+    const venues = originalData
+      .map((booking) => booking.venue)
+      .filter((venue): venue is string => Boolean(venue && venue.trim() !== "" && venue !== "N/A"))
+    return [...new Set(venues)].sort()
+  }, [originalData])
+
+  const getUniqueEventNames = React.useMemo(() => {
+    const events = originalData
+      .map((booking) => booking.eventName)
+      .filter((event): event is string => Boolean(event && event.trim() !== "" && event !== "N/A"))
+    return [...new Set(events)].sort()
+  }, [originalData])
+
+  // Reset all filters
+  const resetAllFilters = () => {
+    setSearchTerm("")
+    setStatusFilter("all")
+    setChannelFilter("all")
+    setCityFilter("all")
+    setVenueFilter("all")
+    setEventNameFilter("all")
+  }
+  // Export filtered bookings to Excel
+  const exportToExcel = () => {
+    try {
+      // Prepare data for export
+      const exportData = filteredBookings.map((booking) => ({
+        "Booking ID": booking.Booking_id || booking._id || "N/A",
+        "Event Name": booking.eventName || booking.EventName || "N/A",
+        "Customer Name": booking.customerName || booking.CustomerName || "N/A",
+        "Customer Email": booking.customerEmail || booking.Email || "N/A",
+        "Customer Phone": booking.phoneNumber || booking.PhoneNumber || "N/A",
+        "Ticket Type": booking.ticketType || booking.EventTicketType || "N/A",
+        "Quantity": booking.quantity || booking.TicketQuantity || 0,
+        "Total Amount": `₹${booking.totalAmount || booking.TotalAmount || 0}`,
+        "Booking Status": booking.bookingStatus || "N/A",
+        "Booking Channel": booking.bookingChannel || "N/A",        "Booking Date": formatDateForExport(booking.bookingDate || booking.BookingDateTime || ""),
+        "Ticket Date": formatDateForExport(booking.ticketDate || booking.TicketDate || ""),
+        "City": booking.city || booking.EventCityName || "N/A",
+        "Venue": booking.venue || booking.EventVenueName || "N/A",
+        "Promoter": booking.promoterName || booking.PromoterName || "N/A",
+        "Remark": booking.remark || booking.Remark || "N/A"
+      }))
+
+      // Create workbook and worksheet
+      const ws = XLSX.utils.json_to_sheet(exportData)
+      const wb = XLSX.utils.book_new()
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, "Bookings")
+
+      // Auto-size columns
+      const range = XLSX.utils.decode_range(ws['!ref']!)
+      const colWidths = []
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        let maxWidth = 0
+        for (let R = range.s.r; R <= range.e.r; ++R) {
+          const cellRef = XLSX.utils.encode_cell({ c: C, r: R })
+          const cell = ws[cellRef]
+          if (cell && cell.v) {
+            const cellValue = cell.v.toString()
+            maxWidth = Math.max(maxWidth, cellValue.length)
+          }
+        }
+        colWidths.push({ wch: Math.min(maxWidth + 2, 50) })
+      }
+      ws['!cols'] = colWidths
+
+      // Generate filename with current date and applied filters
+      const currentDate = new Date().toISOString().split('T')[0]
+      let filename = `bookings_export_${currentDate}`
+      
+      // Add filter info to filename
+      const activeFilters = []
+      if (searchTerm) activeFilters.push(`search_${searchTerm.replace(/[^a-zA-Z0-9]/g, '_')}`)
+      if (statusFilter !== "all") activeFilters.push(`status_${statusFilter}`)
+      if (channelFilter !== "all") activeFilters.push(`channel_${channelFilter}`)
+      if (cityFilter !== "all") activeFilters.push(`city_${cityFilter.replace(/[^a-zA-Z0-9]/g, '_')}`)
+      if (venueFilter !== "all") activeFilters.push(`venue_${venueFilter.replace(/[^a-zA-Z0-9]/g, '_')}`)
+      if (eventNameFilter !== "all") activeFilters.push(`event_${eventNameFilter.replace(/[^a-zA-Z0-9]/g, '_')}`)
+      
+      if (activeFilters.length > 0) {
+        filename += `_${activeFilters.join('_')}`
+      }
+
+      // Write file
+      XLSX.writeFile(wb, `${filename}.xlsx`)
+      
+      console.log(`Successfully exported ${filteredBookings.length} bookings to Excel`)
+    } catch (error) {
+      console.error('Error exporting to Excel:', error)
+      // You could show a toast notification here if you have a toast system
+    }
+  }
+
+  // Helper function to format dates for Excel export
+  const formatDateForExport = (date: Date | string | number) => {
+    if (!date || date === "N/A" || date === "") {
+      return "N/A"
+    }
+    
+    try {
+      const dateObj = new Date(date)
+      if (isNaN(dateObj.getTime())) {
+        return "N/A"
+      }
+      
+      return dateObj.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    } catch (error) {
+      return "N/A"
+    }
+  }
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -427,20 +607,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           <h1 className="text-2xl font-semibold">
             {(role as UserRole) === "promoter" ? "My Bookings" : "Bookings Management"}
           </h1>
-        </div>
-
-        {apiError && (
-          <div className="px-4 sm:px-6">
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>API Error:</strong> {apiError}
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
-
-        {useMockData && (
+        </div>        {useMockData && (
           <div className="px-4 sm:px-6">
             <Alert>
               <AlertCircle className="h-4 w-4" />
@@ -453,30 +620,111 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
         <div className="w-full max-w-full overflow-hidden">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex items-center justify-between px-4 sm:px-6">
-              <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 lg:w-auto">
-                <TabsTrigger value="all" className="text-xs lg:text-sm">
-                  All Bookings ({filteredBookings.length})
-                </TabsTrigger>
+            <div className="flex items-center justify-between px-4 sm:px-6">              <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 lg:w-auto">
+                
+                {(role as UserRole) !== "promoter" && (
+                  <TabsTrigger value="all" className="text-xs lg:text-sm">
+                    All Bookings ({filteredBookings.length})
+                  </TabsTrigger>
+                )}
+                {(role as UserRole) === "promoter" && (
+                  <TabsTrigger value="my-bookings" className="text-xs lg:text-sm">
+                    My Bookings ({filteredBookings.length})
+                  </TabsTrigger>
+                )}
                 {(role as UserRole) === "superadmin" && (
                   <TabsTrigger value="promoter" className="text-xs lg:text-sm">
                     Promoter ({bookingsData.filter((b) => b.bookingChannel === "Promoter").length})
                   </TabsTrigger>
                 )}
-                <TabsTrigger value="online" className="text-xs lg:text-sm">
-                  Online ({bookingsData.filter((b) => b.bookingChannel === "Online").length})
-                </TabsTrigger>
+                {(role as UserRole) !== "promoter" && (
+                  <TabsTrigger value="online" className="text-xs lg:text-sm">
+                    Online ({bookingsData.filter((b) => b.bookingChannel === "Online").length})
+                  </TabsTrigger>
+                )}
                 {(role as UserRole) === "superadmin" && (
                   <TabsTrigger value="bulk" className="text-xs lg:text-sm">
                     Bulk ({bookingsData.filter((b) => b.bookingChannel === "Bulk").length})
                   </TabsTrigger>
                 )}
-              </TabsList>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Filter className="mr-2 h-4 w-4" /> Filters
-                </Button>
-                <Button variant="outline" size="sm">
+              </TabsList>              <div className="flex items-center gap-2">
+                <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Filter className="mr-2 h-4 w-4" /> Filters
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Event Filter</DialogTitle>
+                      <DialogDescription>
+                        Filter bookings by city, venue, and event name
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">City</label>
+                        <Select value={cityFilter} onValueChange={setCityFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select City" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Cities</SelectItem>
+                            {getUniqueCities.map((city) => (
+                              <SelectItem key={city} value={city}>
+                                {city}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Venue</label>
+                        <Select value={venueFilter} onValueChange={setVenueFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Venue" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Venues</SelectItem>
+                            {getUniqueVenues.map((venue) => (
+                              <SelectItem key={venue} value={venue}>
+                                {venue}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Event Name</label>
+                        <Select value={eventNameFilter} onValueChange={setEventNameFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Event names" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Events</SelectItem>
+                            {getUniqueEventNames.map((eventName) => (
+                              <SelectItem key={eventName} value={eventName}>
+                                {eventName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={resetAllFilters}
+                        className="mr-2"
+                      >
+                        Reset All
+                      </Button>
+                      <Button onClick={() => setIsFilterDialogOpen(false)}>
+                        Apply Filters
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>                </Dialog>
+                <Button variant="outline" size="sm" onClick={exportToExcel}>
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
               </div>
@@ -518,14 +766,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         <SelectItem value="Bulk">Bulk</SelectItem>
                       </SelectContent>
                     </Select>
-                  )}
-                  <Button
+                  )}                  <Button
                     variant="outline"
-                    onClick={() => {
-                      setSearchTerm("")
-                      setStatusFilter("all")
-                      setChannelFilter("all")
-                    }}
+                    onClick={resetAllFilters}
                   >
                     Clear Filters
                   </Button>
@@ -535,15 +778,16 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
             <TabsContent value={activeTab} className="mt-4">
               <Card>
-                <CardHeader>
-                  <CardTitle>
+                <CardHeader>                  <CardTitle>
                     {activeTab === "all"
                       ? "All Bookings"
-                      : activeTab === "promoter"
-                        ? "Promoter Bookings"
-                        : activeTab === "online"
-                          ? "Online Bookings"
-                          : "Bulk Bookings"}
+                      : activeTab === "my-bookings"
+                        ? "My Bookings"
+                        : activeTab === "promoter"
+                          ? "Promoter Bookings"
+                          : activeTab === "online"
+                            ? "Online Bookings"
+                            : "Bulk Bookings"}
                   </CardTitle>
                   <CardDescription>
                     {filteredBookings.length} booking(s) found
@@ -552,128 +796,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 </CardHeader>
                 <CardContent className="p-0 overflow-x-hidden">
                   {/* Mobile Card View */}
-                  <div className="block md:hidden p-6 space-y-4">
-                    {currentBookings.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                        {searchTerm || statusFilter !== "all" || channelFilter !== "all"
-                          ? "No bookings found matching your filters"
-                          : "No bookings found"}
-                      </div>
-                    ) : (
-                      currentBookings.map((booking) => (
-                        <Card 
-                          key={booking._id} 
-                          className={`p-4 ${
-                            booking.bookingStatus === "Cancelled" 
-                              ? "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950" 
-                              : "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-                          }`}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <h3 className="font-semibold text-lg text-gray-900 dark:text-gray-100">{booking.customerName}</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 font-mono">ID: {booking._id.slice(-8)}</p>
-                              </div>
-                              <Badge variant={getStatusBadgeVariant(booking.bookingStatus)} className="text-xs">
-                                {booking.bookingStatus}
-                              </Badge>
-                            </div>
-
-                            <div className="bg-blue-50 dark:bg-blue-950 p-3 rounded-lg">
-                              <p className="font-medium text-blue-900 dark:text-blue-100">{booking.eventName}</p>
-                              <div className="mt-1 space-y-1">
-                                {booking.city && (
-                                  <p className="text-sm text-blue-700 dark:text-blue-300">📍 {booking.city}</p>
-                                )}
-                                {booking.venue && (
-                                  <p className="text-sm text-blue-700 dark:text-blue-300">🏢 {booking.venue}</p>
-                                )}
-                                {booking.ticketDate && (
-                                  <p className="text-sm text-blue-700 dark:text-blue-300">
-                                    🎫 {new Date(booking.ticketDate).toLocaleDateString("en-US", {
-                                      day: "numeric",
-                                      month: "short",
-                                      year: "numeric"
-                                    })}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 gap-2">
-                              {booking.phoneNumber && (
-                                <div className="flex items-center">
-                                  <span className="text-xs text-gray-500 dark:text-gray-400 w-16">Phone:</span>
-                                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{booking.phoneNumber}</span>
-                                </div>
-                              )}
-                              <div className="flex items-center">
-                                <span className="text-xs text-gray-500 dark:text-gray-400 w-16">Email:</span>
-                                <span className="text-sm font-medium truncate text-gray-900 dark:text-gray-100">{booking.customerEmail}</span>
-                              </div>
-                            </div>
-
-                            <div className="bg-green-50 dark:bg-green-950 p-3 rounded-lg">
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <p className="text-xs text-green-600 dark:text-green-400">Quantity</p>
-                                  <p className="font-bold text-green-800 dark:text-green-200">{booking.quantity}</p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-green-600 dark:text-green-400">Total Amount</p>
-                                  <p className="font-bold text-green-800 dark:text-green-200">{formatCurrency(booking.totalAmount)}</p>
-                                </div>
-                              </div>
-                              {booking.ticketName && (
-                                <div className="mt-2">
-                                  <p className="text-xs text-green-600 dark:text-green-400">Ticket</p>
-                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">{booking.ticketName}</p>
-                                </div>
-                              )}
-                              {booking.ticketType && (
-                                <div className="mt-1">
-                                  <p className="text-xs text-green-600 dark:text-green-400">Type</p>
-                                  <p className="text-sm font-medium text-green-800 dark:text-green-200">{booking.ticketType}</p>
-                                </div>
-                              )}
-                            </div>
-
-                            {booking.promoterName && (role as UserRole) !== "promoter" && (
-                              <div className="bg-purple-50 dark:bg-purple-950 p-2 rounded">
-                                <p className="text-xs text-purple-600 dark:text-purple-400">Promoter</p>
-                                <p className="text-sm font-medium text-purple-800 dark:text-purple-200">{booking.promoterName}</p>
-                              </div>
-                            )}
-
-                            <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-600">
-                              <div>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">Booked on</p>
-                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{formatDate(booking.bookingDate)}</p>
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button aria-haspopup="true" size="icon" variant="outline" className="h-8 w-8 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                    <span className="sr-only">Toggle menu</span>
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700">
-                                  <DropdownMenuLabel className="text-gray-900 dark:text-gray-100">Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">View Details</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Download Ticket</DropdownMenuItem>
-                                  <DropdownMenuItem className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">Resend Confirmation</DropdownMenuItem>
-                                  {booking.bookingStatus !== "Cancelled" && (
-                                    <DropdownMenuItem className="text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950">Cancel Booking</DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                        </Card>
-                      ))
-                    )}
-                  </div>                  {/* Desktop Table View */}
+                                 {/* Desktop Table View */}
                   <div className="w-full">
                     <BookingsTable 
                       bookings={currentBookings}
@@ -743,6 +866,31 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             </TabsContent>
           </Tabs>
         </div>
+
+        {/* Error Dialog */}
+        <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-destructive" />
+                API Error
+              </DialogTitle>
+              <DialogDescription>
+                An error occurred while communicating with the server.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
+                <p className="text-sm text-destructive font-medium">{errorMessage}</p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setIsErrorDialogOpen(false)}>
+                OK
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

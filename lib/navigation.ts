@@ -1,5 +1,4 @@
 import {
-  LayoutDashboard,
   CalendarDays,
   Users,
   Ticket,
@@ -28,12 +27,6 @@ export type NavItem = {
 export type UserRole = "superadmin" | "organizer" | "promoter"
 
 export const navItems: NavItem[] = [
-  {
-    title: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    roleAccess: ["superadmin", "organizer", "promoter"],
-  },
   {
     title: "Events",
     href: "/events",

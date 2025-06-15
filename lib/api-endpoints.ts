@@ -148,6 +148,9 @@ export const eventEndPoint = {
 export const promoterEndPointPannel = {
   LOGIN_PROMOTER_URL: BASE_URL + "/promoter/login",
   GET_ALL_EVENTS_DATA_BY_PROMOTER: BASE_URL + "/events/getAllEventsForPromotersDashboard",
+  GET_EVENTS_BY_NAME_AND_DATETIME: BASE_URL + "/events/getEventsByNameandDateTime",
+    GET_EVENTS_BY_NAME_AND_DATETIME_REPORTS: BASE_URL + "/events/getEventsByNameandDateTime",
+
   GET_ALL_EVENT_DATE_BY_EVENT_ID: BASE_URL + "/events/getbyId",
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
   BOOKING_TICKET_BY_PROMOTER: BASE_URL + "/eventticketsbooking/BookEventTicketsByPromoter",

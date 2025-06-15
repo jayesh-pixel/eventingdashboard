@@ -205,8 +205,7 @@ export function BookingsTable({
                     <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Promoter</td>
                     <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{selectedBooking.promoterName}</td>
                   </tr>
-                )}
-                <tr className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
+                )}                <tr className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Status</td>
                   <td className="px-3 py-2">
                     <Badge variant={getStatusBadgeVariant(selectedBooking.bookingStatus)} className="text-xs">
@@ -214,6 +213,16 @@ export function BookingsTable({
                     </Badge>
                   </td>
                 </tr>
+                {(selectedBooking.Remark || selectedBooking.remark) && (
+                  <tr className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+                    <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Remark</td>
+                    <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
+                      <span className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded text-xs">
+                        {selectedBooking.Remark || selectedBooking.remark}
+                      </span>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

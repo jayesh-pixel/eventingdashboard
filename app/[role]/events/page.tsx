@@ -737,13 +737,14 @@ export default function EventsPage({ params }: EventsPageProps) {
       timeZone: "UTC",
     })
   }
-
   const formatDateForDisplay = (dateString: string) => {
     if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("en-GB", {
+    const date = new Date(dateString)
+    return date.toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
+      timeZone: "UTC"
     })
   }
 

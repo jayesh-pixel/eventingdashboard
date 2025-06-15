@@ -128,8 +128,7 @@ export interface Booking {
   ticketName?: string
   ticketType?: string
   createdAt: string
-  updatedAt: string
-  // Additional fields from API response
+  updatedAt: string  // Additional fields from API response
   Booking_id?: string
   CustomerName?: string
   PhoneNumber?: string
@@ -146,6 +145,8 @@ export interface Booking {
   TicketPrice?: number
   TotalAmount?: number
   status?: number
+  Remark?: string
+  remark?: string
 }
 
 export interface DashboardStats {

@@ -17,16 +17,15 @@ export function middleware(request: NextRequest) {
 
   // Get the token from cookies
   const token = request.cookies.get("authToken")?.value || ""
-
   // Redirect logic
   if (isPublicPath && token) {
-    // If user is on a public path but has a token, redirect to dashboard
+    // If user is on a public path but has a token, redirect to events
     // Try to detect role from cookie or path, fallback to superadmin
-    let dashboardPath = "/superadmin/dashboard"
-    if (path === "/login/organizer") dashboardPath = "/organizer/dashboard"
-    if (path === "/login/promoter") dashboardPath = "/promoter/dashboard"
-    if (path === "/login/admin" || path === "/login") dashboardPath = "/superadmin/dashboard"
-    return NextResponse.redirect(new URL(dashboardPath, request.url))
+    let eventsPath = "/superadmin/events"
+    if (path === "/login/organizer") eventsPath = "/organizer/events"
+    if (path === "/login/promoter") eventsPath = "/promoter/events"
+    if (path === "/login/admin" || path === "/login") eventsPath = "/superadmin/events"
+    return NextResponse.redirect(new URL(eventsPath, request.url))
   }
 
   if (!isPublicPath && !token && !path.includes("/api/")) {

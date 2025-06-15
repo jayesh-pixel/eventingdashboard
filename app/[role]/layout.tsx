@@ -140,21 +140,24 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
   ))
 
   SidebarContent.displayName = "SidebarContent"
-
   return (
     <AuthGuard requiredRole={normalizedRole}>
-      <div className="grid min-h-screen w-full lg:grid-cols-[auto_1fr]">
-        {/* Desktop Sidebar */}
+      <div className="min-h-screen w-full">
+        {/* Desktop Sidebar - Fixed Position */}
         <div
           className={cn(
-            "hidden border-r border-gray-200 lg:flex lg:flex-col transition-all duration-300 ease-in-out",
+            "fixed top-0 left-0 z-40 h-screen border-r border-gray-200 hidden lg:flex lg:flex-col transition-all duration-300 ease-in-out",
             isSidebarOpen ? "lg:w-64" : "lg:w-16",
           )}
         >
           <SidebarContent isCollapsed={!isSidebarOpen} />
         </div>
 
-        <div className="flex flex-col">
+        {/* Main Content Area */}
+        <div className={cn(
+          "flex flex-col transition-all duration-300 ease-in-out",
+          isSidebarOpen ? "lg:ml-64" : "lg:ml-16"
+        )}>
           <header className="flex h-16 items-center gap-4 border-b bg-background px-4 md:px-6 sticky top-0 z-30">
             {/* Mobile Menu */}
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
@@ -185,10 +188,10 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
 
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <Button variant="ghost" size="icon" className="rounded-full">
+              {/* <Button variant="ghost" size="icon" className="rounded-full">
                 <Bell className="h-5 w-5" />
                 <span className="sr-only">Toggle notifications</span>
-              </Button>
+              </Button> */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -213,8 +216,7 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-          </header>
-          <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 bg-muted/40">
+          </header>          <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 bg-muted/40">
             <TokenExpirationWarning />
             {children}
           </main>
