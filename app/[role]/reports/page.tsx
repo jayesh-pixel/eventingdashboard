@@ -13,7 +13,7 @@ import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { getNumericAdminRole } from "@/lib/api-constants"
-import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { promoterEndpoint, promoterEndPointPannel, eventEndPoint } from "@/lib/api-endpoints"
 import {
   Pagination,
   PaginationContent,
@@ -145,17 +145,30 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         // Fall back to mock search
         handleMockSearch()
         return
-      }
-
-      console.log("Searching for events with:")
+      }      console.log("Searching for events with:")
       console.log("- Event name:", eventNameInput)
       console.log("- Event date:", dateInput)
+      console.log("- User role:", role)
 
-      const apiEndpoint = promoterEndpoint.EVENT_REPORT_BY_DATE_AND_SEARCH
-      const requestPayload = {
-        event_name: eventNameInput.trim(),
-        event_date: dateInput,
-        // Could also include event_time if needed
+      let apiEndpoint = ""
+      let requestPayload: any = {}
+
+      // Determine the correct search endpoint based on role
+      if ((role as UserRole) === "promoter") {
+        apiEndpoint = promoterEndpoint.EVENT_REPORT_BY_DATE_AND_SEARCH
+        requestPayload = {
+          event_name: eventNameInput.trim(),
+          event_date: dateInput,
+        }
+      } else {
+        // For superadmin/organizer - use a more generic search approach
+        apiEndpoint = promoterEndpoint.EVENT_REPORT_BY_DATE_AND_SEARCH
+        requestPayload = {
+          event_name: eventNameInput.trim(),
+          event_date: dateInput,
+          AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
+          user_id: user.user_id,
+        }
       }
 
       console.log("Using endpoint:", apiEndpoint)
@@ -412,9 +425,8 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const totalPages = Math.ceil(reportData.length / ITEMS_PER_PAGE)
   const currentReportData = reportData.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
   const handlePageChange = (page: number) => setCurrentPage(page)
-
-  if ((role as UserRole) !== "superadmin" && (role as UserRole) !== "promoter") {
-    return <div className="p-6 text-muted-foreground">Access Denied. Superadmin and Promoter only.</div>
+  if ((role as UserRole) !== "superadmin" && (role as UserRole) !== "organizer" && (role as UserRole) !== "promoter") {
+    return <div className="p-6 text-muted-foreground">Access Denied. Authorized roles only.</div>
   }
 
   return (

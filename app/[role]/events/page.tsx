@@ -33,6 +33,8 @@ import {
   RefreshCw,
   Star,
   Phone,
+  X,
+  ArrowLeft,
 } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import {
@@ -48,8 +50,17 @@ import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { mockEvents } from "@/lib/mock-data"
 import { getNumericAdminRole, getStringEventStatus } from "@/lib/api-constants"
+import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getValidToken } from "@/lib/token-utils"
+import CreateEvent from "@/components/create-event"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface EventsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -69,9 +80,9 @@ export default function EventsPage({ params }: EventsPageProps) {
     resolvedParams = params
   }
   const { role } = resolvedParams
-  
-  const { user } = useAuth()
+    const { user } = useAuth()
   const { toast } = useToast()
+  const router = useRouter()
   // State management
   const [loading, setLoading] = React.useState(true)
   const [searchLoading, setSearchLoading] = React.useState(false)
@@ -89,12 +100,16 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Filter state
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
   const [selectedCity, setSelectedCity] = React.useState("")
-  
-  // Date filter state
+    // Date filter state
   const [startDate, setStartDate] = React.useState<string | null>(null)
   const [endDate, setEndDate] = React.useState<string | null>(null)
   const [isManual, setIsManual] = React.useState(false)
   const [dateFilterOption, setDateFilterOption] = React.useState("")
+
+  // Create event modal state
+  const [showCreateEventModal, setShowCreateEventModal] = React.useState(false)
+  const [eventSelectionFlag, setEventSelectionFlag] = React.useState<number | null>(null)
+  const [showEventFormatModal, setShowEventFormatModal] = React.useState(false)
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -652,8 +667,29 @@ export default function EventsPage({ params }: EventsPageProps) {
     setActiveTab(tab)
     setCurrentPage(1)
   }
-
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
+
+  const handleCreateEvent = () => {
+    setShowEventFormatModal(true)
+  }
+
+  const handleEventFormatSelection = (format: number) => {
+    setEventSelectionFlag(format)
+    setShowEventFormatModal(false)
+    setShowCreateEventModal(true)
+  }
+  const handleBackFromCreate = () => {
+    setShowCreateEventModal(false)
+    setEventSelectionFlag(null)
+  }
+
+  // Refresh events when create modal closes after successful creation
+  React.useEffect(() => {
+    if (!showCreateEventModal && eventSelectionFlag === null) {
+      // Modal was closed, potentially after creating an event
+      getAllEventData()
+    }
+  }, [showCreateEventModal, eventSelectionFlag])
 
   const getStatusBadgeVariant = (status: string | number) => {
     const normalizedStatus = normalizeEventStatus(status)
@@ -725,9 +761,9 @@ export default function EventsPage({ params }: EventsPageProps) {
       description: "All filters have been cleared",
     })
   }
-
   const stripHtmlTags = (html: string) => {
-    return html.replace(/<[^>]*>/g, '').trim()  }
+    return html.replace(/<[^>]*>/g, '').trim()
+  }
 
   const handleCheckReport = (eventId: string) => {
     // Navigate to reports page to check bookings for this event
@@ -784,9 +820,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                 Table
               </Button>
             </div>
-          )}
-          {canAddEvent && (
-            <Button className="w-full sm:w-auto text-sm">
+          )}          {canAddEvent && (
+            <Button onClick={handleCreateEvent} className="w-full sm:w-auto text-sm">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Event
             </Button>
           )}
@@ -1420,9 +1455,67 @@ export default function EventsPage({ params }: EventsPageProps) {
                 )}
               </CardContent>
             </Card>
-          )}
-        </TabsContent>
+          )}        </TabsContent>
       </Tabs>
+
+      {/* Event Format Selection Modal */}
+      <Dialog open={showEventFormatModal} onOpenChange={setShowEventFormatModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Event Format</DialogTitle>
+            <DialogDescription>
+              Choose the format for your new event
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <Button
+              onClick={() => handleEventFormatSelection(1)}
+              className="justify-start text-left h-auto p-4"
+              variant="outline"
+            >
+              <div>
+                <div className="font-semibold">Single Event</div>
+                <div className="text-sm text-muted-foreground">
+                  Create a one-time event
+                </div>
+              </div>
+            </Button>
+            <Button
+              onClick={() => handleEventFormatSelection(2)}
+              className="justify-start text-left h-auto p-4"
+              variant="outline"
+            >
+              <div>
+                <div className="font-semibold">Multi-Day Event</div>
+                <div className="text-sm text-muted-foreground">
+                  Create an event spanning multiple days
+                </div>
+              </div>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Event Modal */}
+      <Dialog open={showCreateEventModal} onOpenChange={setShowCreateEventModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="px-6 py-4 border-b">
+            <DialogTitle>Create New Event</DialogTitle>
+            <DialogDescription>
+              Fill in the details to create a new event
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+            {eventSelectionFlag && (
+              <CreateEvent
+                eventSelectionFlag={eventSelectionFlag}
+                setEventCreationModal={setShowCreateEventModal}
+                role={role}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

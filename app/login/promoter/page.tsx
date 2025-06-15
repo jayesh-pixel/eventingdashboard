@@ -58,7 +58,7 @@ export default function PromoterLoginPage() {
       <Card className="w-full max-w-xs sm:max-w-md bg-white/80 dark:bg-card/80 shadow-2xl backdrop-blur-lg border-0 z-10 mx-auto">
         <CardHeader className="flex flex-col items-center gap-2">
           <Logo className="mb-2 w-32 sm:w-44" />
-          <CardTitle className="text-2xl sm:text-3xl font-bold text-secondary text-center">Promoter Login</CardTitle>
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-accent text-center">Promoter Login</CardTitle>
           <CardDescription className="text-center text-sm sm:text-base text-muted-foreground">Sign in to your promoter dashboard</CardDescription>
         </CardHeader>
         <form onSubmit={handleLogin}>
@@ -79,10 +79,10 @@ export default function PromoterLoginPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
-            <Button type="submit" className="w-full py-3 text-base sm:text-lg font-semibold bg-secondary text-primary hover:bg-secondary/90 transition" disabled={isLoading}>
+            <Button type="submit" className="w-full py-3 text-base sm:text-lg font-semibold bg-accent text-primary hover:bg-secondary/90 transition" disabled={isLoading}>
               {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</>) : (<><UserCheck className="mr-2 h-4 w-4" />Sign in as Promoter</>)}
             </Button>
-            <Link href="#" className="text-sm text-secondary hover:underline text-center">Forgot password?</Link>
+            {/* <Link href="#" className="text-sm text-secondary hover:underline text-center">Forgot password?</Link> */}
           </CardFooter>
         </form>
       </Card>

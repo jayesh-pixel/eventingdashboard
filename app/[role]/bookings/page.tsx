@@ -121,7 +121,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         phoneNumber: phoneNumber,
         promoterId: booking.promoterId || booking.promoter_id || booking.PromoterId || "",
         promoterName: promoterName,
-        bookingChannel: booking.bookingChannel || booking.booking_channel || booking.Channel || "Promoter",
+        bookingChannel: booking.BookingSource || booking.bookingChannel || booking.booking_channel || booking.Channel || "Promoter",
         bookingStatus: status,
         totalAmount: totalAmount,
         ticketPrice: ticketPrice,
@@ -182,35 +182,63 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      }      const data = await response.json()
 
       let bookingsArray = null
-      if (data && data.data && data.data.BookingData && Array.isArray(data.data.BookingData)) {
+      
+      // Log the response structure for debugging
+      console.log("🔍 API Response Structure:", JSON.stringify(data, null, 2))
+      
+      if (data && data.data && data.data.latestBookingData && Array.isArray(data.data.latestBookingData)) {
+        bookingsArray = data.data.latestBookingData
+        console.log("✅ Found latestBookingData array with", bookingsArray.length, "items")
+      } else if (data && data.data && data.data.BookingData && Array.isArray(data.data.BookingData)) {
         bookingsArray = data.data.BookingData
+        console.log("✅ Found BookingData array with", bookingsArray.length, "items")
       } else if (data && data.data && Array.isArray(data.data)) {
         bookingsArray = data.data
+        console.log("✅ Found data.data array with", bookingsArray.length, "items")
       } else if (data && data.BookingData && Array.isArray(data.BookingData)) {
         bookingsArray = data.BookingData
+        console.log("✅ Found BookingData array with", bookingsArray.length, "items")
+      } else if (data && data.latestBookingData && Array.isArray(data.latestBookingData)) {
+        bookingsArray = data.latestBookingData
+        console.log("✅ Found latestBookingData array with", bookingsArray.length, "items")
       } else if (data && Array.isArray(data)) {
         bookingsArray = data
+        console.log("✅ Found root data array with", bookingsArray.length, "items")
       } else if (data && typeof data === 'object') {
         const keys = Object.keys(data)
+        console.log("🔍 Available keys in response:", keys)
         for (const key of keys) {
           if (Array.isArray(data[key])) {
             bookingsArray = data[key]
+            console.log("✅ Found array in key:", key, "with", bookingsArray.length, "items")
             break
           }
         }
       }
-
-      if (bookingsArray && Array.isArray(bookingsArray)) {
+      
+      if (!bookingsArray) {
+        console.error("❌ Could not find bookings array in response structure")
+      }      if (bookingsArray && Array.isArray(bookingsArray)) {
+        console.log("🔄 Processing", bookingsArray.length, "raw bookings")
+        console.log("📝 Sample raw booking:", JSON.stringify(bookingsArray[0], null, 2))
+        
         const normalizedBookings = normalizeBookingData(bookingsArray)
+        console.log("✅ Normalized", normalizedBookings.length, "bookings")
+        console.log("📋 Sample normalized booking:", JSON.stringify(normalizedBookings[0], null, 2))
+        
         setBookingsData(normalizedBookings)
         setOriginalData(normalizedBookings)
         setUseMockData(false)
+        
+        toast({
+          title: "Success",
+          description: `Loaded ${normalizedBookings.length} bookings successfully`,
+        })
       } else {
+        console.error("❌ No valid bookings array found")
         throw new Error("No valid bookings array found in response")
       }
     } catch (error) {
@@ -278,31 +306,56 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   React.useEffect(() => {
     fetchBookingsData()
   }, [user])
-
   // Filter bookings based on tab and role
   const filteredBookings = React.useMemo(() => {
     let filtered = bookingsData
+    
+    console.log("🔍 Filtering bookings:", {
+      bookingsDataLength: bookingsData.length,
+      activeTab,
+      role,
+      searchTerm: debouncedSearchTerm,
+      statusFilter,
+      channelFilter
+    })
 
     if ((role as UserRole) === "promoter") {
+      console.log("👤 Promoter role - returning all bookings")
       return filtered
     }
 
     switch (activeTab) {
       case "all":
+        console.log("📊 All tab - returning", filtered.length, "bookings")
         return filtered
       case "promoter":
-        return filtered.filter((booking) => booking.bookingChannel === "Promoter")
+        const promoterBookings = filtered.filter((booking) => booking.bookingChannel === "Promoter")
+        console.log("🎤 Promoter tab - returning", promoterBookings.length, "bookings")
+        return promoterBookings
       case "online":
-        return filtered.filter((booking) => booking.bookingChannel === "Online")
+        const onlineBookings = filtered.filter((booking) => booking.bookingChannel === "Online")
+        console.log("💻 Online tab - returning", onlineBookings.length, "bookings")
+        return onlineBookings
       case "bulk":
-        return filtered.filter((booking) => booking.bookingChannel === "Bulk")
+        const bulkBookings = filtered.filter((booking) => booking.bookingChannel === "Bulk")
+        console.log("📦 Bulk tab - returning", bulkBookings.length, "bookings")
+        return bulkBookings
       default:
+        console.log("❓ Unknown tab - returning", filtered.length, "bookings")
         return filtered
     }
-  }, [bookingsData, activeTab, role])
+  }, [bookingsData, activeTab, role, debouncedSearchTerm, statusFilter, channelFilter])
 
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
   const currentBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  
+  console.log("📄 Pagination info:", {
+    filteredBookingsLength: filteredBookings.length,
+    totalPages,
+    currentPage,
+    currentBookingsLength: currentBookings.length,
+    itemsPerPage: ITEMS_PER_PAGE
+  })
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)

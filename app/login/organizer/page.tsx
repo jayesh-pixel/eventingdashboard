@@ -82,7 +82,7 @@ export default function OrganizerLoginPage() {
             <Button type="submit" className="w-full py-3 text-base sm:text-lg font-semibold bg-accent text-primary hover:bg-accent/90 transition" disabled={isLoading}>
               {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</>) : (<><UserCheck className="mr-2 h-4 w-4" />Sign in as Organizer</>)}
             </Button>
-            <Link href="#" className="text-sm text-accent hover:underline text-center">Forgot password?</Link>
+            {/* <Link href="#" className="text-sm text-accent hover:underline text-center">Forgot password?</Link> */}
           </CardFooter>
         </form>
       </Card>

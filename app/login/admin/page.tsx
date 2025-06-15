@@ -82,7 +82,7 @@ export default function AdminLoginPage() {
             <Button type="submit" className="w-full py-3 text-base sm:text-lg font-semibold bg-primary hover:bg-primary/90 transition" disabled={isLoading}>
               {isLoading ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Signing in...</>) : (<><UserCheck className="mr-2 h-4 w-4" />Sign in as Admin</>)}
             </Button>
-            <Link href="#" className="text-sm text-primary hover:underline text-center">Forgot password?</Link>
+            {/* <Link href="#" className="text-sm text-primary hover:underline text-center">Forgot password?</Link> */}
           </CardFooter>
         </form>
       </Card>
