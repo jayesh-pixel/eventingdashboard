@@ -924,8 +924,9 @@ export default function EventsPage({ params }: EventsPageProps) {
         <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
-              {currentEvents.length === 0 ? (                <div className="col-span-full text-center py-16">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
+              {currentEvents.length === 0 ? (                
+                <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
                     <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
                       <AlertCircle className="h-10 w-10 text-muted-foreground" />
@@ -944,7 +945,12 @@ export default function EventsPage({ params }: EventsPageProps) {
                 </div>
               ) : (
                 currentEvents.map((event) => (
-                  <Card key={event._id} className="group overflow-hidden hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer">                    {/* Enhanced Image Section with Overlay Effects */}
+                  <Card
+                    key={event._id}
+                    className="group overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
+                    style={{ maxWidth: 410, minWidth: 340, width: "100%" }} // Increased card width
+                  >
+                    {/* Enhanced Image Section with Overlay Effects */}
                     <div className="relative overflow-hidden">
                       <div className="aspect-[16/10] overflow-hidden">
                         <img
@@ -1005,7 +1011,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </div>
                       </div>
                     </div>                    {/* Enhanced Content Section */}
-                    <div className="p-5 space-y-4">
+                    <div className="p-5 space-y-4 overflow-visible">
                       {/* Header with improved typography */}
                       <div className="space-y-2">
                         <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
@@ -1086,7 +1092,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                       </div>
 
                       {/* Desktop Action Buttons with improved styling */}
-                      <div className="flex gap-3 pt-2">
+                      <div className="flex gap-3 pt-2 overflow-visible">
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -1102,6 +1108,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         <Button 
                           size="sm" 
                           className="flex-1 text-sm bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/85 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+                          style={{ minWidth: 0, whiteSpace: "nowrap" }}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleBookTicket(event._id, event.arrangedEventDateTime)
@@ -1218,7 +1225,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             ) : (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button aria-haspopup="true" size="sm" variant="ghost" className="ml-auto">
+                                  <Button aria-haspopup="true" size="icon" variant="ghost" className="ml-auto">
                                     <MoreHorizontal className="h-4 w-4" />
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
