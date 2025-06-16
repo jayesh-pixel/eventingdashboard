@@ -66,78 +66,6 @@ interface TransactionReportData {
   date: string
 }
 
-// Mock data for fallback
-const mockEventsListForReports: Event[] = [
-  { 
-    _id: "evt001", 
-    EventName: "Summer Music Festival",
-    eventName: "Summer Music Festival",
-    VenueName: "Central Park",
-    VenueCity: "New York",
-    arrangedEventDateTime: [],
-    PopUpOrganizerData: []
-  },
-  { 
-    _id: "evt002", 
-    EventName: "Tech Conference 2025",
-    eventName: "Tech Conference 2025",
-    VenueName: "Convention Center",
-    VenueCity: "San Francisco",
-    arrangedEventDateTime: [],
-    PopUpOrganizerData: []
-  },
-  { 
-    _id: "evt003", 
-    EventName: "Art Expo Downtown",
-    eventName: "Art Expo Downtown",
-    VenueName: "Gallery District",
-    VenueCity: "Los Angeles",
-    arrangedEventDateTime: [],
-    PopUpOrganizerData: []
-  },
-]
-
-const mockSummaryReportData: SummaryReportData[] = [
-  { ticketType: "General Admission", quantitySold: 3500, totalRevenue: 525000 },
-  { ticketType: "VIP Pass", quantitySold: 500, totalRevenue: 125000 },
-  { ticketType: "Early Bird", quantitySold: 1200, totalRevenue: 150000 },
-]
-
-const mockTransactionReportData: TransactionReportData[] = [
-  {
-    bookingId: "BKG001",
-    customerName: "Alice Smith",
-    ticketType: "VIP Pass",
-    quantity: 2,
-    amount: 500,
-    date: "2025-06-01",
-  },
-  {
-    bookingId: "BKG002",
-    customerName: "Bob Johnson",
-    ticketType: "General Admission",
-    quantity: 1,
-    amount: 150,
-    date: "2025-06-02",
-  },
-  {
-    bookingId: "BKG003",
-    customerName: "Carol Williams",
-    ticketType: "Early Bird",
-    quantity: 4,
-    amount: 500,
-    date: "2025-06-03",
-  },
-  {
-    bookingId: "BKG004",
-    customerName: "David Brown",
-    ticketType: "General Admission",
-    quantity: 2,
-    amount: 300,
-    date: "2025-06-04",
-  },
-]
-
 const ITEMS_PER_PAGE = 10
 
 export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
@@ -160,7 +88,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const [reportData, setReportData] = React.useState<any[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
-  const [useMockData, setUseMockData] = React.useState(false)
   
   // Error popup state
   const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
@@ -192,10 +119,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       const authToken = localStorage.getItem("authToken")
 
       if (!user || !authToken) {
-        console.warn("No user or auth token available, using mock data")
-        // Fall back to mock search
+        console.warn("No user or auth token available")
+        showErrorPopup("Please log in to search for events")
+        setLoading(false)
         return
-      }      console.log("Searching for events with:")
+      }console.log("Searching for events with:")
       console.log("- Event name:", eventNameInput)
       console.log("- Event date:", dateInput)
       console.log("- User role:", role)
@@ -301,25 +229,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
         console.log("📋 Normalized event:", normalizedEvent)
         setMatchedEvent(normalizedEvent)
-        setUseMockData(false)
         toast({ title: "Event Found", description: `Select a report type for ${normalizedEvent.EventName}.` })
       } else {
         console.log("❌ No events found")
         setMatchedEvent(null)
         toast({ title: "Not Found", description: "No event matched your criteria.", variant: "destructive" })
-      }    } catch (error) {
+      }
+    } catch (error) {
       console.error("Event search failed:", error)
       showErrorPopup("Could not search events from server")
-      // Fall back to mock search
-      
-      toast({
-        title: "API Error",
-        description: "Could not search events from server. Using sample data instead.",
-        variant: "destructive",
-      })
-    } finally {
+      setMatchedEvent(null)
       setReportType("")
       setReportData([])
+    } finally {
       setLoading(false)
     }
   }
@@ -340,19 +262,10 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     try {
       const authToken = localStorage.getItem("authToken")
 
-      if (!user || !authToken || useMockData) {
-        console.warn("Using mock data for report generation")
-        // Fall back to mock reports
-        setTimeout(() => {
-          if (reportType === "Summary") {
-            setReportData(mockSummaryReportData)
-          } else if (reportType === "Transaction") {
-            setReportData(mockTransactionReportData)
-          }
-          setCurrentPage(1)
-          setLoading(false)
-          toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready. (Using sample data)` })
-        }, 1500)
+      if (!user || !authToken) {
+        console.warn("No user or auth token available")
+        showErrorPopup("Please log in to generate reports")
+        setLoading(false)
         return
       }
 
@@ -513,27 +426,13 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         }))
         setReportData(transactionData)
         toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
-      }
-
-      setCurrentPage(1)
-      setUseMockData(false)    } catch (error) {
+      }      setCurrentPage(1)
+    } catch (error) {
       console.error("Report generation failed:", error)
       showErrorPopup("Could not generate report from server")
-      
-      // Fall back to mock data
-      if (reportType === "Summary") {
-        setReportData(mockSummaryReportData)
-      } else if (reportType === "Transaction") {
-        setReportData(mockTransactionReportData)
-      }
+        // Set empty data
+      setReportData([])
       setCurrentPage(1)
-      setUseMockData(true)
-      
-      toast({
-        title: "API Error",
-        description: "Could not generate report from server. Showing sample data instead.",
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
     }
@@ -560,20 +459,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         Generate summary or transaction reports for specific events.
         {(role as UserRole) === "promoter" && " View reports for events you're promoting."}
         {(role as UserRole) === "organizer" && " View reports for events you're organizing."}
-        {(role as UserRole) === "superadmin" && " View reports for all events in the system."}      </CardDescription>
-
-      {/* Mock Data Warning */}
-      {useMockData && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            <strong>Sample Data:</strong> Using sample data because the API is not available. This is for
-            demonstration purposes only.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Card>
+        {(role as UserRole) === "superadmin" && " View reports for all events in the system."}      </CardDescription>      <Card>
         <CardHeader>
           <CardTitle>Select Event</CardTitle>
         </CardHeader>
@@ -645,10 +531,8 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             <div>
               <CardTitle>
                 {reportType} Report: {matchedEvent.EventName}
-              </CardTitle>
-              <CardDescription>
+              </CardTitle>              <CardDescription>
                 {currentReportData.length} record(s) found
-                {useMockData && " (showing sample data)"}
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" disabled={loading}>
@@ -659,6 +543,12 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             {loading ? (
               <div className="flex items-center justify-center h-32">
                 <Loader2 className="mr-2 h-6 w-6 animate-spin" /> Loading report data...
+              </div>            ) : currentReportData.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-muted-foreground">
+                <div className="text-center">
+                  <p className="text-lg font-medium">No data available</p>
+                  <p className="text-sm">No report data found for the selected criteria</p>
+                </div>
               </div>
             ) : (
               <>

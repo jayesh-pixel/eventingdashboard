@@ -769,10 +769,9 @@ export default function EventsPage({ params }: EventsPageProps) {
     // Navigate to reports page to check bookings for this event
     window.open(`/${role}/events/${eventId}/report`, '_blank')
   }
-
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    window.open(`/${role}/events/${eventId}/booking-tickets`, '_blank')
+    window.location.href = `/${role}/events/${eventId}/booking-tickets`
   }
 
   if (loading) {
@@ -794,39 +793,19 @@ export default function EventsPage({ params }: EventsPageProps) {
     )
   }
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">
-      {/* Header */}
+    <div className="flex flex-col gap-4 sm:gap-6">      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold">
           {(role as UserRole) === "promoter" ? "" : "Events Management"}
         </h1>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-          {(role as UserRole) === "promoter" && (
-            <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg">
-              <Button
-                variant={viewMode === "cards" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("cards")}
-                className={`text-xs sm:text-sm ${viewMode === "cards" ? "shadow-sm" : ""}`}
-              >
-                Cards
-              </Button>
-              <Button
-                variant={viewMode === "table" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setViewMode("table")}
-                className={`text-xs sm:text-sm ${viewMode === "table" ? "shadow-sm" : ""}`}
-              >
-                Table
-              </Button>
-            </div>
-          )}          {canAddEvent && (
+          {canAddEvent && (
             <Button onClick={handleCreateEvent} className="w-full sm:w-auto text-sm">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Event
             </Button>
           )}
         </div>
-      </div>      {/* Enhanced Search Bar and Filters */}
+      </div>{/* Enhanced Search Bar and Filters */}
       <Card className="border-0 shadow-lg bg-gradient-to-r from-card/90 to-card/95 backdrop-blur-sm">
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col gap-4">
@@ -844,9 +823,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                 disabled={searchLoading}
               />
               <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
-            </div>
-
-            {/* Filters Row */}
+            </div>            {/* Filters Row */}
             {(role as UserRole) === "promoter" && (
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 {/* Date Filter Dropdown */}
@@ -865,39 +842,40 @@ export default function EventsPage({ params }: EventsPageProps) {
                   </select>
                 </div>
 
-                {/* Manual Date Selection */}
-                {isManual && (
-                  <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">Start Date</label>
-                      <Input
-                        type="date"
-                        value={startDate ? startDate.split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange(e.target.value, "start")}
-                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                      />
+                {/* View Toggle for Promoters - Beside Date Filter */}
+                <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg border border-border/30">
+                  <Button
+                    variant={viewMode === "cards" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("cards")}
+                    className={`text-xs sm:text-sm ${viewMode === "cards" ? "shadow-sm" : ""}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="grid grid-cols-2 gap-0.5 w-3 h-3">
+                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
+                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
+                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
+                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
+                      </div>
+                      Cards
                     </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">End Date</label>
-                      <Input
-                        type="date"
-                        value={endDate ? endDate.split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange(e.target.value, "end")}
-                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                      />
+                  </Button>
+                  <Button
+                    variant={viewMode === "table" ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => setViewMode("table")}
+                    className={`text-xs sm:text-sm ${viewMode === "table" ? "shadow-sm" : ""}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-0.5 w-3 h-3">
+                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
+                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
+                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
+                      </div>
+                      Table
                     </div>
-                    <div className="flex flex-col justify-end">
-                      <Button 
-                        onClick={handleManualSubmit} 
-                        size="sm" 
-                        className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
-                        disabled={!startDate || !endDate}
-                      >
-                        ✅ Apply Dates
-                      </Button>
-                    </div>
-                  </div>
-                )}
+                  </Button>
+                </div>
 
                 {/* Actions */}
                 <div className="flex gap-2 sm:ml-auto">
@@ -913,16 +891,6 @@ export default function EventsPage({ params }: EventsPageProps) {
                       Reset
                     </Button>
                   )}
-                            {(role as UserRole) !== "promoter" && (
-
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
-                  >
-                    <Download className="mr-2 h-4 w-4" /> Export
-                  </Button>
-                            )}
                 </div>
               </div>
             )}
@@ -938,10 +906,9 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
               </div>
-            )}
-          </div>
+            )}          </div>
         </CardContent>
-      </Card>      {/* Enhanced Tabs */}
+      </Card>{/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
                   {(role as UserRole) !== "promoter" && (

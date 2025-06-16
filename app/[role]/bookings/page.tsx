@@ -32,7 +32,6 @@ import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
-import { mockBookings } from "@/lib/mock-data"
 import { BookingsTable } from "@/components/bookings-table"
 import {
   Pagination,
@@ -61,14 +60,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
   const { user } = useAuth()
   const { toast } = useToast()
-
   // State management
   const [loading, setLoading] = React.useState(true)
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
   const [activeTab, setActiveTab] = React.useState(role === "promoter" ? "my-bookings" : "all")
-  const [useMockData, setUseMockData] = React.useState(false)
 
   // Error popup state
   const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
@@ -187,9 +184,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const authToken = localStorage.getItem("authToken")
 
       if (!user || !authToken) {
-        setBookingsData(mockBookings)
-        setOriginalData(mockBookings)
-        setUseMockData(true)
+        console.warn("No user or auth token available")
+        showErrorPopup("Please log in to view bookings")
+        setLoading(false)
         return
       }
 
@@ -268,10 +265,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         const normalizedBookings = normalizeBookingData(bookingsArray)
         console.log("✅ Normalized", normalizedBookings.length, "bookings")
         console.log("📋 Sample normalized booking:", JSON.stringify(normalizedBookings[0], null, 2))
-        
-        setBookingsData(normalizedBookings)
+          setBookingsData(normalizedBookings)
         setOriginalData(normalizedBookings)
-        setUseMockData(false)
         
         toast({
           title: "Success",
@@ -282,14 +277,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         throw new Error("No valid bookings array found in response")
       }    } catch (error) {
       showErrorPopup("Could not fetch bookings from server")
-      setBookingsData(mockBookings)
-      setOriginalData(mockBookings)
-      setUseMockData(true)
-      toast({
-        title: "API Error",
-        description: "Could not fetch bookings from server. Showing sample data instead.",
-        variant: "destructive",
-      })
+      setBookingsData([])
+      setOriginalData([])
     } finally {
       setLoading(false)
     }
@@ -606,17 +595,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         <div className="flex items-center justify-between px-4 sm:px-6">
           <h1 className="text-2xl font-semibold">
             {(role as UserRole) === "promoter" ? "My Bookings" : "Bookings Management"}
-          </h1>
-        </div>        {useMockData && (
-          <div className="px-4 sm:px-6">
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>Sample Data:</strong> Using sample data because the API is not available.
-              </AlertDescription>
-            </Alert>
-          </div>
-        )}
+          </h1>        </div>
 
         <div className="w-full max-w-full overflow-hidden">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -742,10 +721,13 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
+                                    {(role as UserRole) !== "promoter" && (
+
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger>
                       <SelectValue placeholder="Filter by Status" />
                     </SelectTrigger>
+                    
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
                       <SelectItem value="Confirmed">Confirmed</SelectItem>
@@ -754,6 +736,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       <SelectItem value="Cancelled">Cancelled</SelectItem>
                     </SelectContent>
                   </Select>
+                  )}
                   {(role as UserRole) !== "promoter" && (
                     <Select value={channelFilter} onValueChange={setChannelFilter}>
                       <SelectTrigger>
@@ -788,10 +771,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                           : activeTab === "online"
                             ? "Online Bookings"
                             : "Bulk Bookings"}
-                  </CardTitle>
-                  <CardDescription>
+                  </CardTitle>                  <CardDescription>
                     {filteredBookings.length} booking(s) found
-                    {useMockData && " (showing sample data)"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="p-0 overflow-x-hidden">
