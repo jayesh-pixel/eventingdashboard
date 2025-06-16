@@ -1,211 +1,335 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-
-import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect } from "react"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Mail, CalendarDays } from "lucide-react"
 import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-import type { UserRole } from "@/lib/navigation"
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Search, AlertCircle, Loader2, Mail, Phone, Building2 } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { leadsEndpoint } from "@/lib/api-endpoints"
+import { Lead, LeadsApiResponse, LeadStatus } from "@/lib/types"
+import { apiClient } from "@/lib/api-client"
 
-interface LeadsPageProps {
-  params: { role: UserRole }
-}
+const statusColors = {
+  0: "bg-gray-100 text-gray-800",    // Inactive
+  1: "bg-blue-100 text-blue-800",   // Active/New
+  2: "bg-green-100 text-green-800"  // Contacted
+} as const
 
-interface Lead {
-  _id: string
-  name: string
-  email: string
-  phone?: string
-  subject: string
-  message: string
-  receivedAt: string
-  status: "New" | "Contacted" | "Resolved"
-}
+const statusLabels = {
+  0: "Inactive",
+  1: "New", 
+  2: "Contacted"
+} as const
 
-const mockLeads: Lead[] = [
-  {
-    _id: "lead001",
-    name: "John Doe",
-    email: "john.doe@example.com",
-    phone: "+1-555-0400",
-    subject: "Inquiry about Summer Festival",
-    message: "I would like to know more about the VIP packages for the Summer Festival. Please provide details.",
-    receivedAt: "2025-07-01T10:30:00.000Z",
-    status: "New",
-  },
-  {
-    _id: "lead002",
-    name: "Jane Smith",
-    email: "jane.smith@example.com",
-    subject: "Sponsorship Opportunities",
-    message: "Our company is interested in sponsoring the Tech Conference. Who can I speak to about this?",
-    receivedAt: "2025-07-02T14:15:00.000Z",
-    status: "Contacted",
-  },
-  {
-    _id: "lead003",
-    name: "Robert Brown",
-    email: "robert.brown@example.com",
-    phone: "+1-555-0402",
-    subject: "Issue with Ticket Purchase",
-    message: "I tried to purchase a ticket for the Art Expo but encountered an error. Can you assist?",
-    receivedAt: "2025-07-03T09:00:00.000Z",
-    status: "Resolved",
-  },
-  {
-    _id: "lead004",
-    name: "Emily White",
-    email: "emily.white@example.com",
-    subject: "Feedback on Website",
-    message: "Just wanted to say your website is very user-friendly! Great job.",
-    receivedAt: "2025-07-03T11:45:00.000Z",
-    status: "New",
-  },
-]
+export default function LeadsPage() {
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalLeads, setTotalLeads] = useState(0)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  
+  const itemsPerPage = 10
+  const fetchLeads = async (page: number = 1, search: string = "", status: string = "all") => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      // Check if user is authenticated
+      const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null
+      if (!token) {
+        throw new Error("Authentication required. Please log in.")
+      }
+      
+      const requestBody: any = { 
+        page: page.toString(), 
+        limit: itemsPerPage.toString() 
+      }
+      
+      if (search.trim()) {
+        requestBody.search = search.trim()
+      }
+      
+      if (status !== "all") {
+        requestBody.status = status
+      }
 
-const ITEMS_PER_PAGE = 10
+      console.log('Making API request to:', leadsEndpoint.GET_ALL_PAGINATED)
+      console.log('Request body:', requestBody)
 
-export default function LeadsPage({ params }: LeadsPageProps) {
-  const { role } = params
+      const response = await apiClient.post<LeadsApiResponse>(
+        leadsEndpoint.GET_ALL_PAGINATED,
+        requestBody
+      )
 
-  const [leads, setLeads] = React.useState<Lead[]>(mockLeads)
-  const [loading, setLoading] = React.useState(false) // For future API calls
-  const [currentPage, setCurrentPage] = React.useState(1)
-  const [searchTerm, setSearchTerm] = React.useState("")
+      console.log('API Response (full):', response)
+      console.log('API Response success:', response.success)
+      console.log('API Response data:', response.data)
 
-  const filteredLeads = React.useMemo(() => {
-    if (!searchTerm) return leads
-    return leads.filter(
-      (lead) =>
-        lead.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        lead.subject.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
-  }, [leads, searchTerm])
+      if (response.success && response.data) {
+        // Type assertion to handle the API client's data extraction
+        const responseData = response.data as any
+        
+        // Check if the response has an error flag
+        if (responseData.error) {
+          throw new Error(responseData.message || 'Failed to fetch leads')
+        }
 
-  const totalPages = Math.ceil(filteredLeads.length / ITEMS_PER_PAGE)
-  const currentLeads = filteredLeads.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+        // Handle both possible structures
+        const leadsData = responseData.WebsideLeadsData || responseData.data?.WebsideLeadsData || []
+        const totalPages = responseData.totalPages || responseData.data?.totalPages || 1
+        const currentPage = responseData.currentPage || responseData.data?.currentPage || 1
+        const totalLeads = responseData.totalLeads || responseData.data?.totalLeads || leadsData.length
+        
+        console.log('Leads data:', leadsData)
+        console.log('Response data structure:', responseData)
+        console.log('Number of leads:', leadsData.length)
 
-  const handlePageChange = (page: number) => setCurrentPage(page)
+        setLeads(leadsData)
+        setTotalPages(totalPages)
+        setCurrentPage(currentPage)
+        setTotalLeads(totalLeads)
+      } else {
+        throw new Error(response.error || 'Failed to fetch leads')
+      }
+    } catch (err: any) {
+      console.error('Error fetching leads:', err)
+      setError(err.message || 'Failed to load leads')
+      setLeads([])
+      setTotalPages(1)
+      setTotalLeads(0)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  if (role !== "superadmin") {
-    return <div className="p-6 text-muted-foreground">Access Denied. Superadmin only.</div>
+  useEffect(() => {
+    fetchLeads(1, searchTerm, statusFilter)
+  }, [searchTerm, statusFilter])
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage)
+      fetchLeads(newPage, searchTerm, statusFilter)
+    }
+  }
+
+  const handleSearch = (value: string) => {
+    setSearchTerm(value)
+    setCurrentPage(1)
+  }
+
+  const handleStatusFilter = (value: string) => {
+    setStatusFilter(value)
+    setCurrentPage(1)
+  }
+
+  const formatDate = (dateString: string) => {
+    try {
+      // Handle both formats: "DD-MM-YYYY HH:mm:ss" and ISO format
+      let date: Date
+      
+      if (dateString.includes('-') && dateString.includes(' ')) {
+        // Handle "DD-MM-YYYY HH:mm:ss" format
+        const [datePart, timePart] = dateString.split(' ')
+        const [day, month, year] = datePart.split('-')
+        date = new Date(`${month}/${day}/${year} ${timePart}`)
+      } else {
+        // Handle ISO format
+        date = new Date(dateString)
+      }
+      
+      return date.toLocaleDateString('en-IN', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    } catch (error) {
+      console.error('Error formatting date:', error)
+      return dateString
+    }
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Leads Management</h1>
-      <CardDescription>View inquiries and messages received from the website Contact Us form.</CardDescription>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Leads</h1>
+          <p className="text-muted-foreground">Manage website inquiries and potential customers</p>
+        </div>
+      </div>
 
-      <Card>
-        <CardContent className="pt-6">
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Filter by Name, Email, or Subject..."
+            placeholder="Search leads..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-md"
+            onChange={(e) => handleSearch(e.target.value)}
+            className="pl-10"
           />
-        </CardContent>
-      </Card>
+        </div>
+        <Select value={statusFilter} onValueChange={handleStatusFilter}>
+          <SelectTrigger className="w-[150px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="1">New</SelectItem>
+            <SelectItem value="2">Contacted</SelectItem>
+            <SelectItem value="0">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>All Leads</CardTitle>
+          <CardTitle>
+            Leads 
+            {!loading && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({totalLeads} total)
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Overview of all website inquiries and leads
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Received At</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden md:table-cell">Email</TableHead>
-                <TableHead className="hidden lg:table-cell">Subject</TableHead>
-                <TableHead>Status</TableHead>
-                {/* No actions for read-only leads as per spec, but could add "Mark as Contacted/Resolved" */}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentLeads.map((lead) => (
-                <TableRow key={lead._id}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <CalendarDays className="h-4 w-4 text-muted-foreground" />
-                      {new Date(lead.receivedAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground ml-6">
-                      {new Date(lead.receivedAt).toLocaleTimeString()}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell className="hidden md:table-cell">
-                    <a href={`mailto:${lead.email}`} className="text-blue-600 hover:underline flex items-center gap-1">
-                      <Mail className="h-4 w-4" />
-                      {lead.email}
-                    </a>
-                  </TableCell>
-                  <TableCell className="hidden lg:table-cell truncate max-w-xs">{lead.subject}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        lead.status === "New" ? "default" : lead.status === "Contacted" ? "outline" : "secondary"
-                      }
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading leads...</span>
+            </div>
+          ) : leads.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">No leads found</p>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Contact</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Position</TableHead>
+                    <TableHead>City</TableHead>
+                    <TableHead>Received At</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {leads.map((lead) => (
+                    <TableRow key={lead._id}>
+                      <TableCell className="font-medium">{lead.FullName}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-4 w-4 text-gray-400" />
+                            <span className="text-sm">{lead.Email}</span>
+                          </div>
+                          {lead.PhoneNumber && (
+                            <div className="flex items-center gap-2">
+                              <Phone className="h-4 w-4 text-gray-400" />
+                              <span className="text-sm">{lead.PhoneNumber}</span>
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-gray-400" />
+                          <span>{lead.CompanyName}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{lead.Position}</TableCell>
+                      <TableCell>{lead.City}</TableCell>
+                      <TableCell>{formatDate(lead.createdAt)}</TableCell>
+                      <TableCell>
+                        <Badge className={statusColors[lead.status as keyof typeof statusColors]}>
+                          {statusLabels[lead.status as keyof typeof statusLabels] || 'Unknown'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => console.log('View lead:', lead._id)}
+                          >
+                            View
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => console.log('Contact lead:', lead._id)}
+                          >
+                            Contact
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between space-x-2 py-4">
+                  <div className="text-sm text-muted-foreground">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <div className="flex space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage <= 1}
                     >
-                      {lead.status}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {totalPages > 1 && (
-            <Pagination className="mt-6">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (currentPage > 1) handlePageChange(currentPage - 1)
-                    }}
-                    className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-                {[...Array(totalPages)].map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      href="#"
-                      isActive={currentPage === i + 1}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handlePageChange(i + 1)
-                      }}
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage >= totalPages}
                     >
-                      {i + 1}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (currentPage < totalPages) handlePageChange(currentPage + 1)
-                    }}
-                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

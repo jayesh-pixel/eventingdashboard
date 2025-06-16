@@ -3,417 +3,398 @@
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Edit, Trash2, Loader2 } from "lucide-react"
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationLink,
-  PaginationNext,
-  PaginationPrevious,
-} from "@/components/ui/pagination"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Switch } from "@/components/ui/switch"
+import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
+import { bannerEndpoint } from "@/lib/api-endpoints"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
+import type { Banner, BannersApiResponse } from "@/lib/types"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Alert,
+  AlertDescription,
+} from "@/components/ui/alert"
 import Image from "next/image"
 
 interface BannersPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
-interface Banner {
-  _id: string
-  title: string
-  imageUrl: string
-  linkUrl?: string
-  status: "Active" | "Inactive"
-  displayOrder: number
-  createdAt: string
+const statusColors = {
+  0: "bg-gray-100 text-gray-800",    // Inactive
+  1: "bg-green-100 text-green-800",  // Active
 }
 
-const mockBanners: Banner[] = [
-  {
-    _id: "bnr001",
-    title: "Summer Festival Early Bird",
-    imageUrl: "/placeholder.svg?height=100&width=300&text=Summer+Festival+Banner",
-    linkUrl: "/events/summer-festival",
-    status: "Active",
-    displayOrder: 1,
-    createdAt: "2025-04-01T00:00:00.000Z",
-  },
-  {
-    _id: "bnr002",
-    title: "Tech Conference Registration Open",
-    imageUrl: "/placeholder.svg?height=100&width=300&text=Tech+Conference+Banner",
-    linkUrl: "/events/tech-conference",
-    status: "Active",
-    displayOrder: 2,
-    createdAt: "2025-04-15T00:00:00.000Z",
-  },
-  {
-    _id: "bnr003",
-    title: "New Year Gala - Coming Soon",
-    imageUrl: "/placeholder.svg?height=100&width=300&text=New+Year+Gala",
-    status: "Inactive",
-    displayOrder: 3,
-    createdAt: "2025-05-01T00:00:00.000Z",
-  },
-]
-
-const ITEMS_PER_PAGE = 10
+const statusLabels = {
+  0: "Inactive",
+  1: "Active",
+}
 
 export default function BannersPage({ params }: BannersPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
+  
   const { toast } = useToast()
+  const { user } = useAuth()
 
-  const [banners, setBanners] = React.useState<Banner[]>(mockBanners)
-  const [loading, setLoading] = React.useState(false)
-  const [currentPage, setCurrentPage] = React.useState(1)
+  // State management
+  const [banners, setBanners] = React.useState<Banner[]>([])
+  const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [isFormOpen, setIsFormOpen] = React.useState(false)
-  const [editingBanner, setEditingBanner] = React.useState<Banner | null>(null)
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
+  const [apiError, setApiError] = React.useState<string | null>(null)
+  const [showErrorDialog, setShowErrorDialog] = React.useState(false)
+  const [selectedBanner, setSelectedBanner] = React.useState<Banner | null>(null)
+  const [showViewDialog, setShowViewDialog] = React.useState(false)
 
-  const [formData, setFormData] = React.useState({
-    title: "",
-    imageUrl: "", // This will be a string URL for mock, or File for real upload
-    linkUrl: "",
-    displayOrder: "",
-    status: true,
-    imageFile: null as File | null,
-  })
+  // Debounce search term
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
 
-  const filteredBanners = React.useMemo(() => {
-    if (!searchTerm) return banners
-    return banners.filter((b) => b.title.toLowerCase().includes(searchTerm.toLowerCase()))
-  }, [banners, searchTerm])
-
-  const totalPages = Math.ceil(filteredBanners.length / ITEMS_PER_PAGE)
-  const currentBanners = filteredBanners.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-
-  const handlePageChange = (page: number) => setCurrentPage(page)
-
-  const resetForm = () => {
-    setFormData({ title: "", imageUrl: "", linkUrl: "", displayOrder: "", status: true, imageFile: null })
-    setEditingBanner(null)
-  }
-
-  const handleFormSubmit = async () => {
-    if (!formData.title || (!formData.imageUrl && !formData.imageFile) || !formData.displayOrder) {
-      toast({ title: "Error", description: "Title, Image, and Display Order are required.", variant: "destructive" })
-      return
-    }
+  // Fetch banners data
+  const fetchBanners = React.useCallback(async () => {
+    if (!user) return
+    
     setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-
-    // Simulate image upload if a file is present
-    let finalImageUrl = formData.imageUrl
-    if (formData.imageFile) {
-      finalImageUrl = `/placeholder.svg?height=100&width=300&text=${encodeURIComponent(formData.title)}`
-      // In a real app: await uploadImage(formData.imageFile);
-    }
-
-    if (editingBanner) {
-      setBanners(
-        banners.map((b) =>
-          b._id === editingBanner._id
-            ? {
-                ...editingBanner,
-                title: formData.title,
-                imageUrl: finalImageUrl,
-                linkUrl: formData.linkUrl,
-                displayOrder: Number.parseInt(formData.displayOrder),
-                status: formData.status ? "Active" : "Inactive",
-              }
-            : b,
-        ),
-      )
-      toast({ title: "Success", description: "Banner updated." })
-    } else {
-      const newBanner: Banner = {
-        _id: `bnr${Date.now()}`,
-        title: formData.title,
-        imageUrl: finalImageUrl,
-        linkUrl: formData.linkUrl,
-        displayOrder: Number.parseInt(formData.displayOrder),
-        status: formData.status ? "Active" : "Inactive",
-        createdAt: new Date().toISOString(),
+    setApiError(null)
+    
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("No valid authentication token found")
       }
-      setBanners([newBanner, ...banners].sort((a, b) => a.displayOrder - b.displayOrder))
-      toast({ title: "Success", description: "Banner created." })
+
+      const response = await fetch(bannerEndpoint.GET_ALL_BANNERS, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result: BannersApiResponse = await response.json()
+      
+      if (result.error) {
+        throw new Error(result.message || "Failed to fetch banners")
+      }
+
+      setBanners(result.data)
+    } catch (error) {
+      console.error("Error fetching banners:", error)
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred"
+      setApiError(errorMessage)
+      setShowErrorDialog(true)
+      setBanners([])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-    setIsFormOpen(false)
-    resetForm()
-  }
+  }, [user])
 
-  const handleEdit = (banner: Banner) => {
-    setEditingBanner(banner)
-    setFormData({
-      title: banner.title,
-      imageUrl: banner.imageUrl, // Keep existing URL if not changed
-      linkUrl: banner.linkUrl || "",
-      displayOrder: banner.displayOrder.toString(),
-      status: banner.status === "Active",
-      imageFile: null,
-    })
-    setIsFormOpen(true)
-  }
+  // Initial load
+  React.useEffect(() => {
+    fetchBanners()
+  }, [fetchBanners])
 
-  const handleDelete = async (bannerId: string) => {
-    setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    setBanners(banners.filter((b) => b._id !== bannerId))
-    toast({ title: "Success", description: "Banner deleted." })
-    setLoading(false)
-  }
-
-  const handleToggleStatus = async (bannerId: string) => {
-    setLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 500))
-    setBanners(
-      banners.map((b) => (b._id === bannerId ? { ...b, status: b.status === "Active" ? "Inactive" : "Active" } : b)),
+  // Filter banners based on search
+  const filteredBanners = React.useMemo(() => {
+    if (!debouncedSearchTerm) return banners
+    return banners.filter((banner) => 
+      banner.Event_id.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      banner._id.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     )
-    toast({ title: "Success", description: "Banner status updated." })
-    setLoading(false)
+  }, [banners, debouncedSearchTerm])
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
-  if (role !== "superadmin") {
-    return <div className="p-6 text-muted-foreground">Access Denied. Superadmin only.</div>
+  const handleViewBanner = (banner: Banner) => {
+    setSelectedBanner(banner)
+    setShowViewDialog(true)
+  }
+
+  const getImageUrl = (imagePath: string) => {
+    // If the path already includes the base URL, return as is
+    if (imagePath.startsWith('http')) {
+      return imagePath
+    }
+    // Otherwise, prepend the base URL
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.eventingclub.in'
+    return `${baseUrl}/${imagePath}`
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Banners Management</h1>
-        <Button
-          onClick={() => {
-            resetForm()
-            setIsFormOpen(true)
-          }}
-        >
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Banner
-        </Button>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Banners</h1>
+          <p className="text-muted-foreground">Manage homepage banner slider images</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchBanners} disabled={loading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Banner
+          </Button>
+        </div>
       </div>
 
-      <Card>
-        <CardContent className="pt-6">
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Filter by Banner Title..."
+            placeholder="Search banners..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="max-w-sm"
+            className="pl-10"
           />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {apiError && (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{apiError}</AlertDescription>
+        </Alert>
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>All Banners</CardTitle>
-          <CardDescription>Manage website display banners.</CardDescription>
+          <CardTitle>
+            Banner Slider 
+            {!loading && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({filteredBanners.length} total)
+              </span>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Homepage banner slider management
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order</TableHead>
-                <TableHead>Image</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead className="hidden md:table-cell">Link URL</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentBanners.map((b) => (
-                <TableRow key={b._id}>
-                  <TableCell>{b.displayOrder}</TableCell>
-                  <TableCell>
-                    <Image
-                      src={b.imageUrl || "/placeholder.svg"}
-                      alt={b.title}
-                      width={150}
-                      height={50}
-                      className="rounded object-cover"
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">{b.title}</TableCell>
-                  <TableCell className="hidden md:table-cell truncate max-w-xs">
-                    {b.linkUrl ? (
-                      <a
-                        href={b.linkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        {b.linkUrl}
-                      </a>
-                    ) : (
-                      "N/A"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={b.status === "Active" ? "default" : "secondary"}>{b.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost" disabled={loading}>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onClick={() => handleEdit(b)}>
-                          <Edit className="mr-2 h-4 w-4" /> Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleToggleStatus(b._id)}>
-                          {b.status === "Active" ? "Deactivate" : "Activate"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDelete(b._id)} className="text-red-600">
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="ml-2">Loading banners...</span>
+            </div>
+          ) : filteredBanners.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-muted-foreground">
+                {searchTerm ? 'No banners found matching your search' : 'No banners found'}
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Desktop Image</TableHead>
+                  <TableHead>Mobile Image</TableHead>
+                  <TableHead>Event ID</TableHead>
+                  <TableHead>Created Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {totalPages > 1 && (
-            <Pagination className="mt-6">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (currentPage > 1) handlePageChange(currentPage - 1)
-                    }}
-                    className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-                {[...Array(totalPages)].map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      href="#"
-                      isActive={currentPage === i + 1}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handlePageChange(i + 1)
-                      }}
-                    >
-                      {i + 1}
-                    </PaginationLink>
-                  </PaginationItem>
+              </TableHeader>
+              <TableBody>
+                {filteredBanners.map((banner) => (
+                  <TableRow key={banner._id}>
+                    <TableCell>
+                      <div className="relative w-20 h-12 rounded overflow-hidden">
+                        <Image
+                          src={getImageUrl(banner.DesktopbannerImage)}
+                          alt="Desktop banner"
+                          fill
+                          className="object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.src = "/placeholder.svg"
+                          }}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="relative w-20 h-12 rounded overflow-hidden">
+                        <Image
+                          src={getImageUrl(banner.MobilebannerImage)}
+                          alt="Mobile banner"
+                          fill
+                          className="object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement
+                            target.src = "/placeholder.svg"
+                          }}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {banner.Event_id}
+                    </TableCell>
+                    <TableCell>{formatDate(banner.createdAt)}</TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[banner.status as keyof typeof statusColors]}>
+                        {statusLabels[banner.status as keyof typeof statusLabels] || 'Unknown'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewBanner(banner)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => console.log('Edit banner:', banner._id)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => console.log('Delete banner:', banner._id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(e) => {
-                      e.preventDefault()
-                      if (currentPage < totalPages) handlePageChange(currentPage + 1)
-                    }}
-                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
 
-      {/* Add/Edit Banner Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+      {/* Error Dialog */}
+      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingBanner ? "Edit Banner" : "Add New Banner"}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Error Loading Banners
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {apiError}
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title *</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="imageFile">Image File *</Label>
-              <Input
-                id="imageFile"
-                type="file"
-                accept="image/*"
-                onChange={(e) => setFormData({ ...formData, imageFile: e.target.files?.[0] || null })}
-              />
-              {editingBanner && formData.imageUrl && !formData.imageFile && (
-                <div className="mt-2">
-                  <p className="text-sm text-muted-foreground">Current image:</p>
-                  <Image
-                    src={formData.imageUrl || "/placeholder.svg"}
-                    alt="Current Banner"
-                    width={300}
-                    height={100}
-                    className="rounded border"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="linkUrl">Link URL (Optional)</Label>
-              <Input
-                id="linkUrl"
-                value={formData.linkUrl}
-                onChange={(e) => setFormData({ ...formData, linkUrl: e.target.value })}
-                placeholder="e.g., /events/your-event-slug"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="displayOrder">Display Order *</Label>
-              <Input
-                id="displayOrder"
-                type="number"
-                value={formData.displayOrder}
-                onChange={(e) => setFormData({ ...formData, displayOrder: e.target.value })}
-              />
-            </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="status"
-                checked={formData.status}
-                onCheckedChange={(checked) => setFormData({ ...formData, status: checked })}
-              />
-              <Label htmlFor="status">Active</Label>
-            </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowErrorDialog(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setShowErrorDialog(false)
+              fetchBanners()
+            }}>
+              Retry
+            </Button>
           </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setIsFormOpen(false)
-                resetForm()
-              }}
-            >
-              Cancel
+        </DialogContent>
+      </Dialog>
+
+      {/* View Banner Dialog */}
+      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Banner Details</DialogTitle>
+            <DialogDescription>
+              View banner images and details
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBanner && (
+            <div className="grid gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium mb-2">Desktop Banner</h4>
+                  <div className="relative w-full h-48 rounded border overflow-hidden">
+                    <Image
+                      src={getImageUrl(selectedBanner.DesktopbannerImage)}
+                      alt="Desktop banner"
+                      fill
+                      className="object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = "/placeholder.svg"
+                      }}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Mobile Banner</h4>
+                  <div className="relative w-full h-48 rounded border overflow-hidden">
+                    <Image
+                      src={getImageUrl(selectedBanner.MobilebannerImage)}
+                      alt="Mobile banner"
+                      fill
+                      className="object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        target.src = "/placeholder.svg"
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <strong>Event ID:</strong> {selectedBanner.Event_id}
+                </div>
+                <div>
+                  <strong>Status:</strong>{" "}
+                  <Badge className={statusColors[selectedBanner.status as keyof typeof statusColors]}>
+                    {statusLabels[selectedBanner.status as keyof typeof statusLabels]}
+                  </Badge>
+                </div>
+                <div>
+                  <strong>Created:</strong> {formatDate(selectedBanner.createdAt)}
+                </div>
+                <div>
+                  <strong>Last Updated:</strong> {formatDate(selectedBanner.FilterationDateTime)}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowViewDialog(false)}>
+              Close
             </Button>
-            <Button onClick={handleFormSubmit} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {editingBanner ? "Save Changes" : "Create Banner"}
-            </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

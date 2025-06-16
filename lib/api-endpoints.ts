@@ -175,11 +175,40 @@ export const promoterEndPointPannel = {
 export const websiteCustomer = {
   CREATE_CUSTOMER_WEBSITE: BASE_URL + "/websitecustomers/customerRegistrationBySuperAdmin",
   GET_ALL_CUSTOMER_DATA: BASE_URL + "/websitecustomers/getall",
+  GET_ALL_PAGINATED_CUSTOMERS_DATA: BASE_URL + "/websitecustomers/getAllPaginatedCustomersData",
+}
+
+// Promocode API
+export const promocodeEndPoint = {
+  GET_ALL_PAGINATED_PROMOCODES_DATA: BASE_URL + "/promocode/getallpaginatedData",
+}
+
+// Banner API
+export const bannerEndpoint = {
+  GET_ALL_BANNERS: BASE_URL + "/homepagebannerslider/getAll",
 }
 
 // City Data
 export const getallcityDataEndPoint = {
   GET_ALL_EVENT_CITY_DATA: BASE_URL + "/events/getAllEventCities",
+}
+
+// Scanner Users Endpoints
+export const scannerUserEndpoint = {
+  GET_ALL: BASE_URL + "/scanneruser/getAll",
+  CREATE: BASE_URL + "/scanneruser/create",
+  UPDATE: BASE_URL + "/scanneruser/update",
+  DELETE: BASE_URL + "/scanneruser/delete",
+  GET_BY_ID: BASE_URL + "/scanneruser/getById",
+}
+
+// Leads Endpoints
+export const leadsEndpoint = {
+  GET_ALL_PAGINATED: BASE_URL + "/webiste/leads/getAllPaginated",
+  CREATE: BASE_URL + "/webiste/leads/create",
+  UPDATE: BASE_URL + "/webiste/leads/update",
+  DELETE: BASE_URL + "/webiste/leads/delete",
+  GET_BY_ID: BASE_URL + "/webiste/leads/getById",
 }
 
 // Debug function to log all endpoints
@@ -196,6 +225,10 @@ export const debugEndpoints = () => {  console.log("All API Endpoints:", {
     eventEndPoint,
     promoterEndPointPannel,
     websiteCustomer,
+    promocodeEndPoint,
+    bannerEndpoint,
     getallcityDataEndPoint,
+    scannerUserEndpoint,
+    leadsEndpoint,
   })
 }
