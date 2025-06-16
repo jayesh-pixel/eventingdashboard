@@ -525,107 +525,108 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Date filter functionality
   const handleDateSelection = (option: string) => {
     setDateFilterOption(option)
-    setIsManual(option === "Manual")
+    const today = new Date()
+    let startDate = null
+    let endDate = null
 
-    if (option !== "Manual") {
-      const currentDate = new Date()
-      let start: Date | null = null
-      let end: Date | null = null
+    switch (option) {
+      case "Today":
+        startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
+        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
+        setIsManual(false)
+        break
+      case "Yesterday":
+        const yesterday = new Date(today)
+        yesterday.setDate(today.getDate() - 1)
+        startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()).toISOString()
+        endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59).toISOString()
+        setIsManual(false)
+        break
+      case "Last 7 Days":
+        const sevenDaysAgo = new Date(today)
+        sevenDaysAgo.setDate(today.getDate() - 7)
+        startDate = new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()).toISOString()
+        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
+        setIsManual(false)
+        break
+      case "Last 1 Month":
+        const oneMonthAgo = new Date(today)
+        oneMonthAgo.setMonth(today.getMonth() - 1)
+        startDate = new Date(oneMonthAgo.getFullYear(), oneMonthAgo.getMonth(), oneMonthAgo.getDate()).toISOString()
+        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
+        setIsManual(false)
+        break
+      case "Manual":
+        setIsManual(true)
+        // Don't set dates automatically for manual selection
+        break
+      default:
+        setIsManual(false)
+        break
+    }
 
-      switch (option) {
-        case "Today":
-          start = new Date(currentDate.setHours(0, 1, 1, 0))
-          end = new Date(currentDate.setHours(23, 59, 59, 999))
-          break
-        case "Yesterday":
-          start = new Date(currentDate.setDate(currentDate.getDate() - 1))
-          start.setHours(0, 1, 1, 0)
-          end = new Date(start)
-          end.setHours(23, 59, 59, 999)
-          break
-        case "Last 7 Days":
-          start = new Date(currentDate.setDate(currentDate.getDate() - 7))
-          start.setHours(0, 1, 1, 0)
-          end = new Date()
-          end.setHours(23, 59, 59, 999)
-          break
-        case "Last 1 Month":
-          start = new Date(currentDate.setMonth(currentDate.getMonth() - 1))
-          start.setHours(0, 1, 1, 0)
-          end = new Date()
-          end.setHours(23, 59, 59, 999)
-          break
-        default:
-          start = null
-          end = null
-      }
-
-      if (start && end) {
-        setStartDate(start.toISOString())
-        setEndDate(end.toISOString())
-        dateFilterApiCall(start.toISOString(), end.toISOString())
-      }
+    if (option !== "Manual" && option !== "") {
+      setStartDate(startDate)
+      setEndDate(endDate)
+      // Apply filters immediately for preset options
+      applyFilters(originalData, debouncedSearchTerm, startDate, endDate)
+    } else if (option === "") {
+      // Clear date filters
+      setStartDate(null)
+      setEndDate(null)
+      setIsManual(false)
+      applyFilters(originalData, debouncedSearchTerm, null, null)
     }
   }
 
-  const handleManualDateChange = (value: string, type: "start" | "end") => {
-    if (type === "start") {
-      setStartDate(value)
+  // Handle manual date selection
+  const handleManualDateChange = (type: 'start' | 'end', value: string) => {
+    if (type === 'start') {
+      const newStartDate = value ? new Date(value).toISOString() : null
+      setStartDate(newStartDate)
+      applyFilters(originalData, debouncedSearchTerm, newStartDate, endDate)
     } else {
-      setEndDate(value)
+      const newEndDate = value ? new Date(value + 'T23:59:59').toISOString() : null
+      setEndDate(newEndDate)
+      applyFilters(originalData, debouncedSearchTerm, startDate, newEndDate)
     }
   }
 
-  const handleManualSubmit = () => {
-    if (startDate && endDate) {
-      dateFilterApiCall(startDate, endDate)
+  // Apply all filters to the events data
+  const applyFilters = (data: any[], searchTerm: string, filterStartDate: string | null, filterEndDate: string | null) => {
+    let filteredData = [...data]
+
+    // Apply search filter
+    if (searchTerm && searchTerm.trim() !== "") {
+      filteredData = filteredData.filter((event) =>
+        event.eventName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.organizerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.venueName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        event.city?.toLowerCase().includes(searchTerm.toLowerCase())
+      )
     }
-  }
 
-  const dateFilterApiCall = async (startDateApiCall: string, endDateApiCall: string) => {
-    try {
-      const authToken = getValidToken()
-      if (!user || !authToken) return
-
-      const payload = {
-        AdminRole: 4, // Promoter role ID
-        user_id: user.user_id,
-        startDate: startDateApiCall,
-        endDate: endDateApiCall,
-      }
-
-      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
+    // Apply date filter
+    if (filterStartDate && filterEndDate) {
+      filteredData = filteredData.filter((event) => {
+        if (!event.eventStartDate) return false
+        
+        const eventDate = new Date(event.eventStartDate)
+        const startFilter = new Date(filterStartDate)
+        const endFilter = new Date(filterEndDate)
+        
+        return eventDate >= startFilter && eventDate <= endFilter
       })
+    }
 
-      if (response.ok) {
-        const data = await response.json()
-        const eventsArray = data.data || []
-        const normalizedEvents = normalizeEventsData(eventsArray)
-        setAllEventsData(normalizedEvents)
-        toast({
-          title: "Success",
-          description: data.message || "Events filtered successfully",
-        })
-      } else {
-        setAllEventsData([])
-        toast({
-          title: "No Data",
-          description: "No events found for the selected date range",
-        })
-      }
-    } catch (error) {
-      console.error("Date filter error:", error)
-      setAllEventsData([])
+    setAllEventsData(filteredData)
+    setCurrentPage(1) // Reset to first page when filters change
+    
+    // Show toast notification for filter results
+    if (searchTerm || filterStartDate) {
       toast({
-        title: "Error",
-        description: "Failed to filter events by date",
-        variant: "destructive",
+        title: "Filters Applied",
+        description: `Found ${filteredData.length} event(s) matching your criteria`,
       })
     }
   }
@@ -825,8 +826,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
             </div>            {/* Filters Row */}
             {(role as UserRole) === "promoter" && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                {/* Date Filter Dropdown */}
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">                {/* Date Filter Dropdown */}
                 <div className="flex-1 sm:flex-none">
                   <select
                     className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
@@ -841,6 +841,34 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <option value="Manual">🔧 Manual Selection</option>
                   </select>
                 </div>
+
+                {/* Manual Date Selection - Show when "Manual" is selected */}
+                {isManual && (
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        Start Date
+                      </label>
+                      <Input
+                        type="date"
+                        value={startDate ? new Date(startDate).toISOString().split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange('start', e.target.value)}
+                        className="w-full border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-muted-foreground mb-2">
+                        End Date
+                      </label>
+                      <Input
+                        type="date"
+                        value={endDate ? new Date(endDate).toISOString().split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange('end', e.target.value)}
+                        className="w-full border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                      />
+                    </div>
+                  </div>
+                )}
 
                 {/* View Toggle for Promoters - Beside Date Filter */}
                 <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg border border-border/30">
@@ -1298,8 +1326,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </PaginationItem>
                         {[...Array(Math.min(totalPages, 5))].map((_, i) => {
                           const pageNum = i + 1
-                          return (
-                            <PaginationItem key={pageNum}>
+                          return (                            <PaginationItem key={pageNum}>
                               <PaginationLink
                                 href="#"
                                 isActive={currentPage === pageNum}

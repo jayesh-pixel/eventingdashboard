@@ -96,34 +96,139 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   // Transaction details modal state
   const [selectedTransaction, setSelectedTransaction] = React.useState<any>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false)
+  // Check authentication status on component mount
+  React.useEffect(() => {
+    if (!checkAuthentication()) {
+      // Authentication check will show error popup if needed
+      return
+    }
+    
+    // Show helpful initial message
+    if (!eventNameInput && !dateInput) {
+      showSuccessToast(
+        "Reports Ready", 
+        "Enter an event name and date to search for events and generate reports."
+      )
+    }
+  }, []) // Run only on mount
 
-  // Helper function to show error popup
-  const showErrorPopup = (message: string) => {
-    setErrorMessage(message)
+  // Helper function to show error popup with enhanced error categorization
+  const showErrorPopup = (message: string, details?: string) => {
+    setErrorMessage(details ? `${message}\n\nDetails: ${details}` : message)
     setIsErrorDialogOpen(true)
+    
+    // Also show toast for immediate feedback
+    toast({
+      title: "Error",
+      description: message,
+      variant: "destructive"
+    })
   }
 
+  // Helper function for success messages
+  const showSuccessToast = (title: string, description: string) => {
+    toast({
+      title,
+      description,
+      variant: "default"
+    })
+  }
+
+  // Helper function for warning messages
+  const showWarningToast = (title: string, description: string) => {
+    toast({
+      title,
+      description,
+      variant: "destructive"
+    })
+  }
+
+  // Check authentication status
+  const checkAuthentication = (): boolean => {
+    const authToken = localStorage.getItem("authToken")
+    if (!user || !authToken) {
+      showErrorPopup(
+        "Authentication Required", 
+        "Please log in to access reports. Your session may have expired."
+      )
+      return false
+    }
+    return true
+  }
+
+  // Enhanced error handling for network requests
+  const handleNetworkError = async (response: Response, operation: string) => {
+    let errorDetails = ""
+    try {
+      const errorText = await response.text()
+      errorDetails = errorText || `HTTP ${response.status}`
+    } catch (e) {
+      errorDetails = `HTTP ${response.status} - Unable to read error details`
+    }
+
+    const errorMessage = `${operation} failed`
+    
+    // Specific error handling based on status codes
+    switch (response.status) {
+      case 401:
+        showErrorPopup(
+          "Authentication Failed", 
+          "Your session has expired. Please log in again."
+        )
+        break
+      case 403:
+        showErrorPopup(
+          "Access Denied", 
+          "You don't have permission to access this resource."
+        )
+        break
+      case 404:
+        showErrorPopup(
+          "Resource Not Found", 
+          "The requested resource could not be found on the server."
+        )
+        break
+      case 429:
+        showErrorPopup(
+          "Too Many Requests", 
+          "Please wait a moment before trying again."
+        )
+        break
+      case 500:
+        showErrorPopup(
+          "Server Error", 
+          "Internal server error. Please try again later or contact support."
+        )
+        break
+      default:
+        showErrorPopup(errorMessage, errorDetails)
+    }
+  }
   // Search for events by name and date using API
   const handleSearchEvent = async () => {
-    if (!eventNameInput.trim() || !dateInput.trim()) {
-      toast({ title: "Error", description: "Please enter Event Name and Date.", variant: "destructive" })
-      setMatchedEvent(null)
-      setReportType("")
-      setReportData([])
+    // Input validation
+    if (!eventNameInput.trim()) {
+      showWarningToast("Missing Event Name", "Please enter an event name to search.")
+      return
+    }
+    
+    if (!dateInput.trim()) {
+      showWarningToast("Missing Event Date", "Please select an event date to search.")
+      return
+    }
+
+    // Authentication check
+    if (!checkAuthentication()) {
       return
     }
 
     setLoading(true)
+    setMatchedEvent(null)
+    setReportType("")
+    setReportData([])
 
     try {
-      const authToken = localStorage.getItem("authToken")
-
-      if (!user || !authToken) {
-        console.warn("No user or auth token available")
-        showErrorPopup("Please log in to search for events")
-        setLoading(false)
-        return
-      }console.log("Searching for events with:")
+      console.log("Searching for events with:")
       console.log("- Event name:", eventNameInput)
       console.log("- Event date:", dateInput)
       console.log("- User role:", role)
@@ -134,7 +239,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         apiEndpoint = promoterEndPointPannel.GET_EVENTS_BY_NAME_AND_DATETIME
         requestPayload = {
           AdminRole: 4, // Promoter role ID
-          user_id: user.user_id,
+          user_id: user!.user_id,
           EventName: eventNameInput.trim(),
           DateTime: dateInput ? new Date(dateInput).toISOString() : new Date().toISOString(),
         }
@@ -142,8 +247,8 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         // For superadmin/organizer - use the paginated events endpoint
         apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
         requestPayload = {
-          AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
-          user_id: user.user_id,
+          AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
+          user_id: user!.user_id,
           page: "1",
           limit: "50",
         }
@@ -152,6 +257,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("Using endpoint:", apiEndpoint)
       console.log("Request payload:", requestPayload)
 
+      const authToken = localStorage.getItem("authToken")
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -164,22 +270,50 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("Response status:", response.status)
 
       if (!response.ok) {
-        let errorText = ""
-        try {
-          errorText = await response.text()
-          console.log("Error response body:", errorText)
-        } catch (e) {
-          console.log("Could not read error response body")
+        await handleNetworkError(response, "Event search")
+        return
+      }
+
+      const data = await response.json()
+      console.log("Search response data:", data)      // Check for API-level errors - but distinguish between real errors and "no data" responses
+      if (data.error === true) {
+        // Check if this is a "no data found" scenario rather than an actual error
+        const isNoDataScenario = data.message && (
+          data.message.toLowerCase().includes('no events found') ||
+          data.message.toLowerCase().includes('no event found') ||
+          data.message.toLowerCase().includes('no data found') ||
+          data.message.toLowerCase().includes('no records found') ||
+          data.message.toLowerCase().includes('not found')
+        )
+        
+        if (isNoDataScenario) {
+          // This is not an error, just no events found
+          console.log("No events found matching the criteria")
+          setMatchedEvent(null)
+          
+          showWarningToast(
+            "No Events Found", 
+            `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`
+          )
+          return
+        } else {
+          // This is an actual error
+          showErrorPopup(
+            "Search Failed", 
+            data.message || "The server returned an error while searching for events."
+          )
+          return
         }
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
-      }      const data = await response.json()
-      console.log("Search response data:", data)
+      }
+
       console.log("Response structure analysis:")
       console.log("- data exists:", !!data)
       console.log("- data.data exists:", !!(data && data.data))
       console.log("- data.data type:", data && data.data ? typeof data.data : "undefined")
       console.log("- data.data is array:", !!(data && data.data && Array.isArray(data.data)))
-      console.log("- data.data has _id:", !!(data && data.data && data.data._id))// Handle API response structure
+      console.log("- data.data has _id:", !!(data && data.data && data.data._id))
+
+      // Handle API response structure
       let eventsArray = []
       
       if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
@@ -196,12 +330,10 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         eventsArray = data
       } else {
         console.warn("Unexpected response format:", data)
-        console.warn("Expected an array or single event object, got:", typeof data.data)
-        toast({
-          title: "Error",
-          description: "Unexpected response format from server",
-          variant: "destructive"
-        })
+        showErrorPopup(
+          "Invalid Response Format", 
+          "The server returned an unexpected response format. Please try again or contact support."
+        )
         return
       }
 
@@ -211,7 +343,9 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           const eventName = event.EventName || event.eventName || event.Name || event.name || ""
           return eventName.toLowerCase().includes(eventNameInput.toLowerCase().trim())
         })
-      }      if (eventsArray.length > 0) {
+      }
+
+      if (eventsArray.length > 0) {
         console.log("✅ Events found:", eventsArray.length)
         // Take the first matching event
         const foundEvent = eventsArray[0]
@@ -229,15 +363,41 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
         console.log("📋 Normalized event:", normalizedEvent)
         setMatchedEvent(normalizedEvent)
-        toast({ title: "Event Found", description: `Select a report type for ${normalizedEvent.EventName}.` })
+        
+        showSuccessToast(
+          "Event Found", 
+          `Found event "${normalizedEvent.EventName}". Please select a report type to continue.`
+        )
+        
+        if (eventsArray.length > 1) {
+          showWarningToast(
+            "Multiple Events Found", 
+            `Found ${eventsArray.length} matching events. Using the first one: "${normalizedEvent.EventName}".`
+          )
+        }
       } else {
         console.log("❌ No events found")
         setMatchedEvent(null)
-        toast({ title: "Not Found", description: "No event matched your criteria.", variant: "destructive" })
+        showWarningToast(
+          "No Events Found", 
+          `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`
+        )
       }
     } catch (error) {
       console.error("Event search failed:", error)
-      showErrorPopup("Could not search events from server")
+      
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        showErrorPopup(
+          "Network Error", 
+          "Unable to connect to the server. Please check your internet connection and try again."
+        )
+      } else {
+        showErrorPopup(
+          "Search Failed", 
+          error instanceof Error ? error.message : "An unexpected error occurred while searching for events."
+        )
+      }
+      
       setMatchedEvent(null)
       setReportType("")
       setReportData([])
@@ -245,11 +405,21 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       setLoading(false)
     }
   }
- 
-  // Generate reports using API
+   // Generate reports using API
   const handleGenerateReport = async () => {
-    if (!matchedEvent || !reportType) {
-      toast({ title: "Error", description: "Please select an event and report type.", variant: "destructive" })
+    // Input validation
+    if (!matchedEvent) {
+      showWarningToast("No Event Selected", "Please search for and select an event first.")
+      return
+    }
+    
+    if (!reportType) {
+      showWarningToast("No Report Type", "Please select a report type (Summary or Transaction).")
+      return
+    }
+
+    // Authentication check
+    if (!checkAuthentication()) {
       return
     }
 
@@ -260,15 +430,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     setLoading(true)
 
     try {
-      const authToken = localStorage.getItem("authToken")
-
-      if (!user || !authToken) {
-        console.warn("No user or auth token available")
-        showErrorPopup("Please log in to generate reports")
-        setLoading(false)
-        return
-      }
-
       console.log("Generating report for:")
       console.log("- Event:", matchedEvent)
       console.log("- Report type:", reportType)
@@ -280,13 +441,13 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         if (reportType === "Summary") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
           requestPayload = {
-            promoter_id: user.user_id,
+            promoter_id: user!.user_id,
             event_id: matchedEvent._id,
           }
         } else if (reportType === "Transaction") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
           requestPayload = {
-            promoter_id: user.user_id,
+            promoter_id: user!.user_id,
             event_id: matchedEvent._id,
           }
         }
@@ -295,23 +456,32 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         if (reportType === "Summary") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
           requestPayload = {
-            AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
-            user_id: user.user_id,
+            AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
+            user_id: user!.user_id,
             event_id: matchedEvent._id,
           }
         } else if (reportType === "Transaction") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
           requestPayload = {
-            AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
-            user_id: user.user_id,
+            AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
+            user_id: user!.user_id,
             event_id: matchedEvent._id,
           }
         }
       }
 
+      if (!apiEndpoint) {
+        showErrorPopup(
+          "Invalid Configuration", 
+          "Unable to determine the correct API endpoint for your role and report type."
+        )
+        return
+      }
+
       console.log("Using endpoint:", apiEndpoint)
       console.log("Request payload:", requestPayload)
 
+      const authToken = localStorage.getItem("authToken")
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -324,18 +494,42 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("Response status:", response.status)
 
       if (!response.ok) {
-        let errorText = ""
-        try {
-          errorText = await response.text()
-          console.log("Error response body:", errorText)
-        } catch (e) {
-          console.log("Could not read error response body")
-        }
-        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`)
+        await handleNetworkError(response, "Report generation")
+        return
       }
 
       const data = await response.json()
-      console.log("Report response data:", data)      // Handle API response structure based on report type
+      console.log("Report response data:", data)      // Check for API-level errors - but distinguish between real errors and "no data" responses
+      if (data.error === true) {
+        // Check if this is a "no data found" scenario rather than an actual error
+        const isNoDataScenario = data.message && (
+          data.message.toLowerCase().includes('no event bookings found') ||
+          data.message.toLowerCase().includes('no bookings found') ||
+          data.message.toLowerCase().includes('no data found') ||
+          data.message.toLowerCase().includes('no records found') ||
+          data.message.toLowerCase().includes('not found')
+        )
+        
+        if (isNoDataScenario) {
+          // This is not an error, just no data available
+          console.log("No bookings found for this event")
+          setReportData([])
+          setCurrentPage(1)
+          
+          showWarningToast(
+            "No Bookings Found", 
+            `No booking data available for ${matchedEvent.EventName}. This event may not have any bookings yet.`
+          )
+          return
+        } else {
+          // This is an actual error
+          showErrorPopup(
+            "Report Generation Failed", 
+            data.message || "The server returned an error while generating the report."
+          )
+          return
+        }
+      }      // Handle API response structure based on report type
       let reportArray = []
       
       if (reportType === "Summary") {
@@ -358,9 +552,9 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           }))
           console.log("📊 Created placeholder summary data:", reportArray)
         } else {
-          console.warn("Unexpected summary response format:", data)
-          console.warn("Available data keys:", data && data.data ? Object.keys(data.data) : "no data.data")
-          throw new Error("Unexpected response format from server for summary report")
+          // No data found - this is normal, not an error
+          console.log("📊 No ticket data found - this may be normal for events without bookings")
+          reportArray = []
         }
       } else {
         // For transaction reports, use the standard structure
@@ -369,10 +563,13 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         } else if (data && Array.isArray(data)) {
           reportArray = data
         } else {
-          console.warn("Unexpected transaction response format:", data)
-          throw new Error("Unexpected response format from server for transaction report")
+          // No transaction data found - this is normal, not an error
+          console.log("📊 No transaction data found - this may be normal for events without bookings")
+          reportArray = []
         }
-      }      // Normalize the data based on report type
+      }
+
+      // Normalize the data based on report type
       if (reportType === "Summary") {
         // Transform API data to summary format using the TicketsData structure
         const summaryData = reportArray.map((item: any) => {
@@ -393,19 +590,23 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         console.log("📈 Processed summary data:", summaryData)
         setReportData(summaryData)
           // Show appropriate message based on data availability
-        if (summaryData.length > 0 && summaryData.some((item: any) => item.quantitySold > 0)) {
-          toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
-        } else if (summaryData.length > 0) {
-          toast({ 
-            title: "Report Generated", 
-            description: `${reportType} report shows available ticket types for ${matchedEvent.EventName}. No bookings found yet.`,
-          })
+        if (summaryData.length === 0) {
+          showSuccessToast(
+            "Report Generated", 
+            `No booking data found for ${matchedEvent.EventName}. This event may not have any bookings yet.`
+          )
+        } else if (summaryData.some((item: any) => item.quantitySold > 0)) {
+          const totalSold = summaryData.reduce((sum: number, item: any) => sum + item.quantitySold, 0)
+          const totalRevenue = summaryData.reduce((sum: number, item: any) => sum + item.totalRevenue, 0)
+          showSuccessToast(
+            "Summary Report Generated", 
+            `Report ready: ${totalSold} tickets sold, ₹${totalRevenue.toLocaleString()} revenue for ${matchedEvent.EventName}.`
+          )
         } else {
-          toast({ 
-            title: "Report Generated", 
-            description: `No ticket data available for ${matchedEvent.EventName}.`,
-            variant: "destructive"
-          })
+          showSuccessToast(
+            "Summary Report Generated", 
+            `Summary report shows available ticket types for ${matchedEvent.EventName}, but no bookings found yet.`
+          )
         }
       } else if (reportType === "Transaction") {
         // Transform API data to transaction format
@@ -420,17 +621,45 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           ticketName: item.ticketName || item.ticket_name || item.TicketName || "N/A",
           ticketType: item.ticketType || item.ticket_type || item.TicketType || "Standard",
           ticketPrice: Number(item.ticketPrice || item.ticket_price || item.TicketPrice || 0),
-          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),          remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
+          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),
+          remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
           status: item.status || item.Status || item.booking_status || item.bookingStatus || "N/A",
           customerName: item.customerName || item.customer_name || item.CustomerName || "N/A", // Keep for backward compatibility
         }))
-        setReportData(transactionData)
-        toast({ title: "Report Generated", description: `${reportType} report for ${matchedEvent.EventName} is ready.` })
-      }      setCurrentPage(1)
+          setReportData(transactionData)
+        
+        if (transactionData.length === 0) {
+          showSuccessToast(
+            "Report Generated", 
+            `No booking transactions found for ${matchedEvent.EventName}. This event may not have any bookings yet.`
+          )
+        } else {
+          const totalTransactions = transactionData.length
+          const totalAmount = transactionData.reduce((sum: number, item: any) => sum + item.amount, 0)
+          showSuccessToast(
+            "Transaction Report Generated", 
+            `Report ready: ${totalTransactions} transactions, ₹${totalAmount.toLocaleString()} total value for ${matchedEvent.EventName}.`
+          )
+        }
+      }
+
+      setCurrentPage(1)
     } catch (error) {
       console.error("Report generation failed:", error)
-      showErrorPopup("Could not generate report from server")
-        // Set empty data
+      
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        showErrorPopup(
+          "Network Error", 
+          "Unable to connect to the server. Please check your internet connection and try again."
+        )
+      } else {
+        showErrorPopup(
+          "Report Generation Failed", 
+          error instanceof Error ? error.message : "An unexpected error occurred while generating the report."
+        )
+      }
+      
+      // Set empty data
       setReportData([])
       setCurrentPage(1)
     } finally {
@@ -758,28 +987,45 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             </Button>
           </div>
         </DialogContent>
-      </Dialog>
-
-      {/* Error Dialog */}
+      </Dialog>      {/* Enhanced Error Dialog */}
       <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <AlertCircle className="h-5 w-5 text-destructive" />
-              API Error
+              Error
             </DialogTitle>
             <DialogDescription>
-              An error occurred while communicating with the server.
+              An error occurred while processing your request.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-              <p className="text-sm text-destructive font-medium">{errorMessage}</p>
+              <p className="text-sm text-destructive font-medium whitespace-pre-line">{errorMessage}</p>
+            </div>
+            <div className="mt-4 text-xs text-muted-foreground">
+              <p>If this error persists, please:</p>
+              <ul className="list-disc list-inside mt-1 space-y-1">
+                <li>Check your internet connection</li>
+                <li>Refresh the page and try again</li>
+                <li>Contact support if the issue continues</li>
+              </ul>
             </div>
           </div>
-          <div className="flex justify-end">
-            <Button onClick={() => setIsErrorDialogOpen(false)}>
-              OK
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsErrorDialogOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              setIsErrorDialogOpen(false)
+              // Optional: Add retry functionality
+              if (matchedEvent && reportType) {
+                handleGenerateReport()
+              } else {
+                handleSearchEvent()
+              }
+            }}>
+              Retry
             </Button>
           </div>
         </DialogContent>
