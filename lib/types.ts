@@ -86,16 +86,22 @@ export interface Organizer {
 
 export interface Promoter {
   _id: string
-  promoterName: string
-  promoterEmail: string
-  promoterPhone: string
-  promoterAddress: string
-  city: string
-  state: string
-  country: string
-  promoterStatus: "Active" | "Inactive"
+  FullName: string
+  Username: string
+  Email: string
+  Phone1: string
+  Country?: string
+  State?: string
+  City?: string
+  ProfileImage?: string
+  Status: "Active" | "Inactive" | "Disabled"
   createdAt: string
-  updatedAt: string
+  updatedAt?: string
+  // Legacy field mappings for backward compatibility
+  promoterName?: string
+  promoterEmail?: string
+  promoterPhone?: string
+  promoterStatus?: "Active" | "Inactive"
 }
 
 export interface Customer {
