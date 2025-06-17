@@ -18,6 +18,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import {
@@ -31,9 +32,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Plus, Search, AlertCircle, Loader2, UserCheck, UserX } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { scannerUserEndpoint, eventEndPoint, organizerEndpoint } from "@/lib/api-endpoints"
-import { ScannerUser, ScannerUsersApiResponse, ScannerUserType, ScannerUserStatus, Event, Organizer } from "@/lib/types"
+import { scannerUserEndpoint } from "@/lib/api-endpoints"
+import { eventEndPoint } from "@/lib/api-endpoints"
+import { ScannerUser, ScannerUsersApiResponse, ScannerUserType, ScannerUserStatus } from "@/lib/types"
 import { apiClient } from "@/lib/api-client"
+import { useAuth } from "@/lib/auth-context"
+import { getValidToken } from "@/lib/token-utils"
+import { useToast } from "@/hooks/use-toast"
 
 const statusColors = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -52,13 +57,10 @@ const userTypeLabels = {
   2: "Organizer Scanner"
 } as const
 
-interface AssignmentInfo {
-  type: string;
-  count: number;
-  display: string;
-}
-
 export default function ScannerUsersPage() {
+  const { toast } = useToast()
+  const { user } = useAuth()
+  
   const [scannerUsers, setScannerUsers] = useState<ScannerUser[]>([])
   const [filteredUsers, setFilteredUsers] = useState<ScannerUser[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -66,54 +68,82 @@ export default function ScannerUsersPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<ScannerUser | null>(null)
-  const [createLoading, setCreateLoading] = useState(false)
-  const [updateLoading, setUpdateLoading] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
   
-  // Events and Organizers for assignment
-  const [availableEvents, setAvailableEvents] = useState<Event[]>([])
-  const [availableOrganizers, setAvailableOrganizers] = useState<Organizer[]>([])
-  const [eventsLoading, setEventsLoading] = useState(false)
-  const [organizersLoading, setOrganizersLoading] = useState(false)
+  // Events for dropdown
+  const [events, setEvents] = useState<any[]>([])
+  const [loadingEvents, setLoadingEvents] = useState(false)
   
-  // Form state for create/edit
+  // Form state
   const [formData, setFormData] = useState({
-    Username: "",
-    Password: "",
-    UserType: ScannerUserType.Event as number,
-    Events: [] as Array<{ event_id: string; _id: string }>,
-    Organizers: [] as Array<{ organizer_id: string; _id: string }>
+    username: "",
+    password: "",
+    userType: "1", // Default to Event Scanner
+    selectedEvents: [] as string[],
+    selectedOrganizers: [] as string[],
   })
 
-  const fetchScannerUsers = async () => {
+  const fetchEvents = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoadingEvents(true)
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        console.warn("No auth token available")
+        return
+      }
 
+      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (!data.error && data.data) {
+          setEvents(data.data)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching events:", error)
+    } finally {
+      setLoadingEvents(false)
+    }
+  }
+
+  const fetchScannerUsers = async () => {
+    try {      setLoading(true)
+      setError(null)
+      
       const response = await apiClient.get<ScannerUsersApiResponse>(scannerUserEndpoint.GET_ALL)
       
+      console.log('Scanner Users API Response:', response)
+
       if (response.success && response.data) {
         if (response.data.error) {
           throw new Error(response.data.message || 'Failed to fetch scanner users')
         }
-        
-        let scannerUsersArray = response.data.data
-        
-        if (!scannerUsersArray && Array.isArray(response.data)) {
-          scannerUsersArray = response.data
-        }
-        
-        if (Array.isArray(scannerUsersArray)) {
-          setScannerUsers(scannerUsersArray)
-          setFilteredUsers(scannerUsersArray)
+        // Handle both possible response structures
+        let users: ScannerUser[]
+        if (Array.isArray(response.data)) {
+          // Direct array format
+          users = response.data
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Nested format
+          users = response.data.data
         } else {
-          throw new Error('Invalid data format: Expected array of scanner users')
+          throw new Error('Invalid response format')
         }
+        
+        console.log('Parsed users:', users)
+        setScannerUsers(users)
+        setFilteredUsers(users)
       } else {
         throw new Error(response.error || 'Failed to fetch scanner users')
       }
@@ -126,100 +156,61 @@ export default function ScannerUsersPage() {
       setLoading(false)
     }
   }
-
-  const fetchEvents = async () => {
-    try {
-      setEventsLoading(true)
-      const response = await apiClient.post(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN)
-      
-      if (response.success && response.data) {
-        const data = response.data as any
-        setAvailableEvents(Array.isArray(data) ? data : data.data || [])
-      }
-    } catch (err: any) {
-      console.error('Error fetching events:', err)
-      setAvailableEvents([])
-    } finally {
-      setEventsLoading(false)
-    }
-  }
-
-  const fetchOrganizers = async () => {
-    try {
-      setOrganizersLoading(true)
-      const response = await apiClient.get(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL)
-      
-      if (response.success && response.data) {
-        const data = response.data as any
-        setAvailableOrganizers(Array.isArray(data) ? data : data.data || [])
-      }
-    } catch (err: any) {
-      console.error('Error fetching organizers:', err)
-      setAvailableOrganizers([])
-    } finally {
-      setOrganizersLoading(false)
-    }
-  }
-
   useEffect(() => {
     fetchScannerUsers()
     fetchEvents()
-    fetchOrganizers()
   }, [])
-
   useEffect(() => {
-    let filtered = [...(scannerUsers || [])]
-
-    if (searchTerm) {
-      filtered = filtered.filter(user => 
-        user.Username?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+    if (!scannerUsers || !Array.isArray(scannerUsers)) {
+      setFilteredUsers([])
+      return
     }
 
+    let filtered = scannerUsers.filter(user => 
+      user.Username.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+
     if (statusFilter !== "all") {
-      filtered = filtered.filter(user => user.status?.toString() === statusFilter)
+      filtered = filtered.filter(user => user.status.toString() === statusFilter)
     }
 
     if (typeFilter !== "all") {
-      filtered = filtered.filter(user => user.UserType?.toString() === typeFilter)
+      filtered = filtered.filter(user => user.UserType.toString() === typeFilter)
     }
 
     setFilteredUsers(filtered)
   }, [scannerUsers, searchTerm, statusFilter, typeFilter])
 
-  const formatDate = (dateString: string) => {
-    try {
-      let date: Date
-      
-      if (dateString.includes('-') && dateString.includes(' ')) {
-        const [datePart, timePart] = dateString.split(' ')
-        const [day, month, year] = datePart.split('-')
-        date = new Date(`${month}/${day}/${year} ${timePart}`)
-      } else {
-        date = new Date(dateString)
-      }
-      
-      return date.toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    } catch (error) {
-      console.error('Error formatting date:', error)
-      return dateString
-    }
+  const handleSearch = (value: string) => {
+    setSearchTerm(value)
   }
 
-  const getAssignmentInfo = (user: ScannerUser): AssignmentInfo => {
-    if (user.UserType === ScannerUserType.Event && user.Events?.length > 0) {
+  const handleStatusFilter = (value: string) => {
+    setStatusFilter(value)
+  }
+
+  const handleTypeFilter = (value: string) => {
+    setTypeFilter(value)
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  const getAssignmentInfo = (user: ScannerUser) => {
+    if (user.UserType === ScannerUserType.Event && user.Events.length > 0) {
       return {
         type: "Event",
         count: user.Events.length,
         display: `${user.Events.length} Event${user.Events.length > 1 ? 's' : ''}`
       }
-    } else if (user.UserType === ScannerUserType.Organizer && user.Organizers?.length > 0) {
+    } else if (user.UserType === ScannerUserType.Organizer && user.Organizers.length > 0) {
       return {
         type: "Organizer", 
         count: user.Organizers.length,
@@ -230,168 +221,194 @@ export default function ScannerUsersPage() {
       type: "None",
       count: 0,
       display: "Not Assigned"
+    }  }
+
+  // CRUD Functions
+  const handleCreateUser = async () => {
+    if (!formData.username.trim() || !formData.password.trim()) {
+      toast({
+        title: "Error",
+        description: "Username and Password are required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.userType === "1" && formData.selectedEvents.length === 0) {
+      toast({
+        title: "Error", 
+        description: "Event Scanner must have at least one event assigned",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const authToken = getValidToken()
+      if (!authToken || !user) {
+        throw new Error("Authentication required")
+      }
+
+      const payload = {
+        Username: formData.username,
+        Password: formData.password,
+        UserType: formData.userType,
+        Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
+        Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
+        CreatedBy: "1",
+        createduser_id: user.user_id,
+      }
+
+      const response = await fetch(scannerUserEndpoint.REGISTER, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && !data.error) {
+        toast({
+          title: "Success",
+          description: "Scanner user created successfully",
+        })
+        setIsCreateDialogOpen(false)
+        resetForm()
+        await fetchScannerUsers()
+      } else {
+        throw new Error(data.message || "Failed to create scanner user")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create scanner user",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  const handleCreateScannerUser = async () => {
-    if (!formData.Username.trim() || !formData.Password.trim()) {
-      setError("Username and password are required")
-      return
-    }
+  const handleEditUser = async () => {
+    if (!selectedUser) return
 
-    // Validate assignments based on user type
-    if (formData.UserType === ScannerUserType.Event && formData.Events.length === 0) {
-      setError("Event scanner must be assigned to at least one event")
-      return
-    }
-
-    if (formData.UserType === ScannerUserType.Organizer && formData.Organizers.length === 0) {
-      setError("Organizer scanner must be assigned to at least one organizer")
-      return
-    }
-
+    setSubmitting(true)
     try {
-      setCreateLoading(true)
-      setError(null)
+      const authToken = getValidToken()
+      if (!authToken) {
+        throw new Error("Authentication required")
+      }
 
-      const response = await apiClient.post(scannerUserEndpoint.REGISTER, {
-        Username: formData.Username.trim(),
-        Password: formData.Password.trim(),
-        UserType: formData.UserType.toString(),
-        Events: formData.Events,
-        Organizers: formData.Organizers,
-        CreatedBy: "admin",
-        createduser_id: "admin-id"
+      const payload = {
+        scanneruser_id: selectedUser._id,
+        UserType: formData.userType,
+        Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
+        Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
+      }
+
+      const response = await fetch(scannerUserEndpoint.UPDATE_DETAILS, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
       })
 
-      if (response.success) {
-        setIsCreateDialogOpen(false)
-        setFormData({
-          Username: "",
-          Password: "",
-          UserType: ScannerUserType.Event as number,
-          Events: [],
-          Organizers: []
+      const data = await response.json()
+
+      if (response.ok && !data.error) {
+        toast({
+          title: "Success",
+          description: "Scanner user updated successfully",
+        })
+        setIsEditDialogOpen(false)
+        resetForm()
+        await fetchScannerUsers()
+      } else {
+        throw new Error(data.message || "Failed to update scanner user")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update scanner user",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleToggleUserStatus = async (userId: string, currentStatus: number) => {
+    setSubmitting(true)
+    try {
+      const authToken = getValidToken()
+      if (!authToken) {
+        throw new Error("Authentication required")
+      }
+
+      const endpoint = currentStatus === 1 ? scannerUserEndpoint.DISABLE : scannerUserEndpoint.ENABLE
+      
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ scanneruser_id: userId }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && !data.error) {
+        toast({
+          title: "Success",
+          description: `Scanner user ${currentStatus === 1 ? 'disabled' : 'enabled'} successfully`,
         })
         await fetchScannerUsers()
       } else {
-        throw new Error(response.error || 'Failed to create scanner user')
+        throw new Error(data.message || "Failed to update user status")
       }
-    } catch (err: any) {
-      console.error('Error creating scanner user:', err)
-      setError(err.message || 'Failed to create scanner user')
-    } finally {
-      setCreateLoading(false)
-    }
-  }
-
-  const handleEditScannerUser = async () => {
-    if (!selectedUser) {
-      setError("No user selected")
-      return
-    }
-
-    // Validate assignments based on user type
-    if (formData.UserType === ScannerUserType.Event && formData.Events.length === 0) {
-      setError("Event scanner must be assigned to at least one event")
-      return
-    }
-
-    if (formData.UserType === ScannerUserType.Organizer && formData.Organizers.length === 0) {
-      setError("Organizer scanner must be assigned to at least one organizer")
-      return
-    }
-
-    try {
-      setUpdateLoading(true)
-      setError(null)
-
-      const response = await apiClient.post(scannerUserEndpoint.UPDATE_DETAILS, {
-        scanneruser_id: selectedUser._id,
-        UserType: formData.UserType.toString(),
-        Events: formData.Events,
-        Organizers: formData.Organizers
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update user status",
+        variant: "destructive",
       })
-
-      if (response.success) {
-        setIsEditDialogOpen(false)
-        setSelectedUser(null)
-        await fetchScannerUsers()
-      } else {
-        throw new Error(response.error || 'Failed to update scanner user')
-      }
-    } catch (err: any) {
-      console.error('Error updating scanner user:', err)
-      setError(err.message || 'Failed to update scanner user')
     } finally {
-      setUpdateLoading(false)
-    }
-  }
-
-  const handleDeleteScannerUser = async () => {
-    if (!selectedUser) return
-
-    try {
-      setDeleteLoading(true)
-      setError(null)
-
-      const response = await apiClient.post(scannerUserEndpoint.DISABLE, {
-        scanneruser_id: selectedUser._id
-      })
-
-      if (response.success) {
-        setIsDeleteDialogOpen(false)
-        setSelectedUser(null)
-        await fetchScannerUsers()
-      } else {
-        throw new Error(response.error || 'Failed to disable scanner user')
-      }
-    } catch (err: any) {
-      console.error('Error disabling scanner user:', err)
-      setError(err.message || 'Failed to disable scanner user')
-    } finally {
-      setDeleteLoading(false)
-    }
-  }
-
-  const handleToggleStatus = async (user: ScannerUser) => {
-    try {
-      setError(null)
-      
-      const endpoint = user.status === ScannerUserStatus.Active 
-        ? scannerUserEndpoint.DISABLE 
-        : scannerUserEndpoint.ENABLE
-
-      const response = await apiClient.post(endpoint, {
-        scanneruser_id: user._id
-      })
-
-      if (response.success) {
-        await fetchScannerUsers()
-      } else {
-        throw new Error(response.error || 'Failed to update user status')
-      }
-    } catch (err: any) {
-      console.error('Error toggling user status:', err)
-      setError(err.message || 'Failed to update user status')
+      setSubmitting(false)
     }
   }
 
   const openEditDialog = (user: ScannerUser) => {
     setSelectedUser(user)
     setFormData({
-      Username: user.Username,
-      Password: "",
-      UserType: user.UserType,
-      Events: user.Events || [],
-      Organizers: user.Organizers || []
+      username: user.Username,
+      password: "", // Don't show existing password
+      userType: user.UserType.toString(),
+      selectedEvents: user.Events.map(e => e.event_id),
+      selectedOrganizers: user.Organizers.map(o => o.organizer_id),
     })
     setIsEditDialogOpen(true)
   }
 
-  const openDeleteDialog = (user: ScannerUser) => {
-    setSelectedUser(user)
-    setIsDeleteDialogOpen(true)
+  const resetForm = () => {
+    setFormData({
+      username: "",
+      password: "",
+      userType: "1",
+      selectedEvents: [],
+      selectedOrganizers: [],
+    })
+    setSelectedUser(null)
+  }
+  const handleCreateScannerUser = () => {
+    resetForm()
+    setIsCreateDialogOpen(true)
   }
 
   return (
@@ -401,11 +418,286 @@ export default function ScannerUsersPage() {
           <h1 className="text-3xl font-bold">Scanner Users</h1>
           <p className="text-muted-foreground">Manage ticket scanning users and their assignments</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Scanner User
-        </Button>
+        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+          setIsCreateDialogOpen(open)
+          if (!open) resetForm()
+        }}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Scanner User
+            </Button>
+          </DialogTrigger>          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Create New Scanner User</DialogTitle>
+              <DialogDescription>
+                Create a new scanner user and assign them to events or organizers.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">User Name *</Label>
+                  <Input
+                    id="username"
+                    value={formData.username}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    placeholder="Enter username"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password *</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Enter password"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="userType">User Type *</Label>
+                <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select user type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Event Scanner</SelectItem>
+                    <SelectItem value="2">Organizer Scanner</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {formData.userType === "1" && (
+                <div className="space-y-2">
+                  <Label>Event Names *</Label>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                    {loadingEvents ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading events...
+                      </div>
+                    ) : events.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">No events available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {events.map((event) => (
+                          <div key={event._id} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`event-${event._id}`}
+                              checked={formData.selectedEvents.includes(event._id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({
+                                    ...formData,
+                                    selectedEvents: [...formData.selectedEvents, event._id]
+                                  })
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
+                                  })
+                                }
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <Label htmlFor={`event-${event._id}`} className="text-sm font-normal">
+                              {event.eventName || event.name || 'Unnamed Event'}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formData.selectedEvents.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {formData.selectedEvents.length} event(s) selected
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {formData.userType === "2" && (
+                <div className="space-y-2">
+                  <Label>Organizer Assignment</Label>
+                  <div className="border rounded-md p-3">
+                    <p className="text-sm text-muted-foreground">
+                      Organizer assignment will be configured based on organizer selection.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <DialogFooter>              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsCreateDialogOpen(false)
+                  resetForm()
+                }}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleCreateUser} 
+                disabled={submitting || !formData.username.trim() || !formData.password.trim()}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  'Create Scanner User'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>        </Dialog>
       </div>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+        setIsEditDialogOpen(open)
+        if (!open) resetForm()
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Scanner User</DialogTitle>
+            <DialogDescription>
+              Update scanner user assignments and details.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editUsername">User Name</Label>
+                <Input
+                  id="editUsername"
+                  value={formData.username}
+                  disabled
+                  className="bg-muted"
+                />
+                <p className="text-xs text-muted-foreground">Username cannot be changed</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editPassword">New Password</Label>
+                <Input
+                  id="editPassword"
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  placeholder="Leave blank to keep current password"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="editUserType">User Type *</Label>
+              <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select user type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Event Scanner</SelectItem>
+                  <SelectItem value="2">Organizer Scanner</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.userType === "1" && (
+              <div className="space-y-2">
+                <Label>Event Names *</Label>
+                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                  {loadingEvents ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Loading events...
+                    </div>
+                  ) : events.length === 0 ? (
+                    <p className="text-muted-foreground text-sm">No events available</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {events.map((event) => (
+                        <div key={event._id} className="flex items-center space-x-2">
+                          <input
+                            type="checkbox"
+                            id={`edit-event-${event._id}`}
+                            checked={formData.selectedEvents.includes(event._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  selectedEvents: [...formData.selectedEvents, event._id]
+                                })
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
+                                })
+                              }
+                            }}
+                            className="rounded border-gray-300"
+                          />
+                          <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-normal">
+                            {event.eventName || event.name || 'Unnamed Event'}
+                          </Label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {formData.selectedEvents.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {formData.selectedEvents.length} event(s) selected
+                  </p>
+                )}
+              </div>
+            )}
+
+            {formData.userType === "2" && (
+              <div className="space-y-2">
+                <Label>Organizer Assignment</Label>
+                <div className="border rounded-md p-3">
+                  <p className="text-sm text-muted-foreground">
+                    Organizer assignment will be configured based on organizer selection.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsEditDialogOpen(false)
+                resetForm()
+              }}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleEditUser} 
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update Scanner User'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="flex gap-4 items-center">
         <div className="relative flex-1 max-w-sm">
@@ -413,11 +705,11 @@ export default function ScannerUsersPage() {
           <Input
             placeholder="Search scanner users..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={handleStatusFilter}>
           <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -428,7 +720,7 @@ export default function ScannerUsersPage() {
             <SelectItem value="2">Disabled</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <Select value={typeFilter} onValueChange={handleTypeFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="User Type" />
           </SelectTrigger>
@@ -448,12 +740,11 @@ export default function ScannerUsersPage() {
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>
+        <CardHeader>          <CardTitle>
             Scanner Users 
             {!loading && (
               <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({(filteredUsers || []).length} total)
+                ({filteredUsers?.length || 0} total)
               </span>
             )}
           </CardTitle>
@@ -467,7 +758,7 @@ export default function ScannerUsersPage() {
               <Loader2 className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading scanner users...</span>
             </div>
-          ) : (filteredUsers || []).length === 0 ? (
+          ) : (filteredUsers?.length || 0) === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">No scanner users found</p>
             </div>
@@ -482,8 +773,7 @@ export default function ScannerUsersPage() {
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
+              </TableHeader>              <TableBody>
                 {(filteredUsers || []).map((user) => {
                   const assignmentInfo = getAssignmentInfo(user)
                   return (
@@ -511,29 +801,23 @@ export default function ScannerUsersPage() {
                         <Badge className={statusColors[user.status as keyof typeof statusColors]}>
                           {statusLabels[user.status as keyof typeof statusLabels] || 'Unknown'}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
+                      </TableCell>                      <TableCell>
                         <div className="flex gap-2">
                           <Button 
                             variant="outline" 
                             size="sm"
                             onClick={() => openEditDialog(user)}
+                            disabled={submitting}
                           >
                             Edit
                           </Button>
                           <Button 
-                            variant={user.status === ScannerUserStatus.Active ? "destructive" : "default"}
-                            size="sm"
-                            onClick={() => handleToggleStatus(user)}
-                          >
-                            {user.status === ScannerUserStatus.Active ? "Disable" : "Enable"}
-                          </Button>
-                          <Button 
-                            variant="outline" 
+                            variant={user.status === 1 ? "destructive" : "default"}
                             size="sm" 
-                            onClick={() => openDeleteDialog(user)}
+                            onClick={() => handleToggleUserStatus(user._id, user.status)}
+                            disabled={submitting}
                           >
-                            Delete
+                            {user.status === 1 ? 'Disable' : 'Enable'}
                           </Button>
                         </div>
                       </TableCell>
@@ -545,380 +829,6 @@ export default function ScannerUsersPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Create Dialog */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create New Scanner User</DialogTitle>
-            <DialogDescription>
-              Create a new user with access to scan tickets at events.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="username" className="text-right">
-                Username
-              </Label>
-              <Input
-                id="username"
-                value={formData.Username}
-                onChange={(e) => setFormData(prev => ({ ...prev, Username: e.target.value }))}
-                className="col-span-3"
-                placeholder="Enter username"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="password" className="text-right">
-                Password
-              </Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.Password}
-                onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
-                className="col-span-3"
-                placeholder="Enter password"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="userType" className="text-right">
-                User Type
-              </Label>
-              <Select 
-                value={formData.UserType.toString()} 
-                onValueChange={(value) => {
-                  const newType = parseInt(value)
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    UserType: newType,
-                    Events: newType === ScannerUserType.Event ? prev.Events : [],
-                    Organizers: newType === ScannerUserType.Organizer ? prev.Organizers : []
-                  }))
-                }}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select user type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ScannerUserType.Event.toString()}>Event Scanner</SelectItem>
-                  <SelectItem value={ScannerUserType.Organizer.toString()}>Organizer Scanner</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Event Selection for Event Scanners */}
-            {formData.UserType === ScannerUserType.Event && (
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right pt-2">
-                  Events *
-                </Label>
-                <div className="col-span-3 space-y-2">
-                  {eventsLoading ? (
-                    <div className="flex items-center">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading events...
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-sm text-muted-foreground">
-                        Select events this user can scan tickets for:
-                      </div>
-                      <div className="max-h-32 overflow-y-auto border rounded p-2 space-y-1">
-                        {availableEvents.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">No events available</div>
-                        ) : (
-                          availableEvents.map((event) => (
-                            <label key={event._id} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.Events.some(e => e.event_id === event._id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      Events: [...prev.Events, { event_id: event._id, _id: event._id }]
-                                    }))
-                                  } else {
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      Events: prev.Events.filter(ev => ev.event_id !== event._id)
-                                    }))
-                                  }
-                                }}
-                              />
-                              <span className="text-sm">{event.eventName || 'Unnamed Event'}</span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Selected: {formData.Events.length} event(s)
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Organizer Selection for Organizer Scanners */}
-            {formData.UserType === ScannerUserType.Organizer && (
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right pt-2">
-                  Organizers *
-                </Label>
-                <div className="col-span-3 space-y-2">
-                  {organizersLoading ? (
-                    <div className="flex items-center">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading organizers...
-                    </div>
-                  ) : (
-                    <>
-                      <div className="text-sm text-muted-foreground">
-                        Select organizers this user can scan tickets for:
-                      </div>
-                      <div className="max-h-32 overflow-y-auto border rounded p-2 space-y-1">
-                        {availableOrganizers.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">No organizers available</div>
-                        ) : (
-                          availableOrganizers.map((organizer) => (
-                            <label key={organizer._id} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                checked={formData.Organizers.some(o => o.organizer_id === organizer._id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      Organizers: [...prev.Organizers, { organizer_id: organizer._id, _id: organizer._id }]
-                                    }))
-                                  } else {
-                                    setFormData(prev => ({
-                                      ...prev,
-                                      Organizers: prev.Organizers.filter(org => org.organizer_id !== organizer._id)
-                                    }))
-                                  }
-                                }}
-                              />
-                              <span className="text-sm">{organizer.organizerName || 'Unnamed Organizer'}</span>
-                            </label>
-                          ))
-                        )}
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Selected: {formData.Organizers.length} organizer(s)
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateScannerUser} disabled={createLoading}>
-              {createLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
-                </>
-              ) : (
-                "Create Scanner User"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Scanner User</DialogTitle>
-            <DialogDescription>
-              Update scanner user details and assignments.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-username" className="text-right">
-                Username
-              </Label>
-              <Input
-                id="edit-username"
-                value={formData.Username}
-                disabled
-                className="col-span-3 bg-gray-50"
-                placeholder="Username cannot be changed"
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="edit-userType" className="text-right">
-                User Type
-              </Label>
-              <Select 
-                value={formData.UserType.toString()} 
-                onValueChange={(value) => {
-                  const newType = parseInt(value)
-                  setFormData(prev => ({ 
-                    ...prev, 
-                    UserType: newType,
-                    Events: newType === ScannerUserType.Event ? prev.Events : [],
-                    Organizers: newType === ScannerUserType.Organizer ? prev.Organizers : []
-                  }))
-                }}
-              >
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select user type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={ScannerUserType.Event.toString()}>Event Scanner</SelectItem>
-                  <SelectItem value={ScannerUserType.Organizer.toString()}>Organizer Scanner</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Event Selection for Event Scanners */}
-            {formData.UserType === ScannerUserType.Event && (
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right pt-2">
-                  Events *
-                </Label>
-                <div className="col-span-3 space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    Select events this user can scan tickets for:
-                  </div>
-                  <div className="max-h-32 overflow-y-auto border rounded p-2 space-y-1">
-                    {availableEvents.map((event) => (
-                      <label key={event._id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.Events.some(e => e.event_id === event._id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData(prev => ({
-                                ...prev,
-                                Events: [...prev.Events, { event_id: event._id, _id: event._id }]
-                              }))
-                            } else {
-                              setFormData(prev => ({
-                                ...prev,
-                                Events: prev.Events.filter(ev => ev.event_id !== event._id)
-                              }))
-                            }
-                          }}
-                        />
-                        <span className="text-sm">{event.eventName || 'Unnamed Event'}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Selected: {formData.Events.length} event(s)
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Organizer Selection for Organizer Scanners */}
-            {formData.UserType === ScannerUserType.Organizer && (
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right pt-2">
-                  Organizers *
-                </Label>
-                <div className="col-span-3 space-y-2">
-                  <div className="text-sm text-muted-foreground">
-                    Select organizers this user can scan tickets for:
-                  </div>
-                  <div className="max-h-32 overflow-y-auto border rounded p-2 space-y-1">
-                    {availableOrganizers.map((organizer) => (
-                      <label key={organizer._id} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={formData.Organizers.some(o => o.organizer_id === organizer._id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData(prev => ({
-                                ...prev,
-                                Organizers: [...prev.Organizers, { organizer_id: organizer._id, _id: organizer._id }]
-                              }))
-                            } else {
-                              setFormData(prev => ({
-                                ...prev,
-                                Organizers: prev.Organizers.filter(org => org.organizer_id !== organizer._id)
-                              }))
-                            }
-                          }}
-                        />
-                        <span className="text-sm">{organizer.organizerName || 'Unnamed Organizer'}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Selected: {formData.Organizers.length} organizer(s)
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleEditScannerUser} disabled={updateLoading}>
-              {updateLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Update Scanner User"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Disable Scanner User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to disable this scanner user? This action will prevent them from scanning tickets.
-            </DialogDescription>
-          </DialogHeader>
-          {selectedUser && (
-            <div className="py-4">
-              <p className="text-sm text-muted-foreground">
-                Username: <span className="font-medium">{selectedUser.Username}</span>
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Type: <span className="font-medium">
-                  {userTypeLabels[selectedUser.UserType as keyof typeof userTypeLabels]}
-                </span>
-              </p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDeleteScannerUser} disabled={deleteLoading}>
-              {deleteLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Disabling...
-                </>
-              ) : (
-                "Disable User"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

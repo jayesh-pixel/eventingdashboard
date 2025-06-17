@@ -281,7 +281,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           AdminRole: numericRole,
           user_id: user.user_id,
           page: "1",
-          limit: "100", // Get more events for better UX
+          limit: "10", // Get more events for better UX
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
         console.log("Admin paginated payload JSON:", JSON.stringify(requestPayload))

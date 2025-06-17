@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, MapPin, Users, Upload, Loader2 } from "lucide-react"
@@ -46,24 +47,24 @@ interface VenuesPageProps {
 
 interface Venue {
   _id: string
-  VenueName: string
-  VenueDescription?: string | null
-  VenueAddress: string
-  VenueCity: string
-  VenueState: string
-  VenueCountry: string
-  VenueCapacity?: number
-  Images?: Array<{
+  Name: string
+  Description: string | null
+  Address: string
+  City: string
+  State: string
+  Country: string
+  CountryIsoCode: string
+  StateIsoCode: string
+  CityIsoCode: string
+  Map_Location: string
+  Images: Array<{
     image_path: string
     _id: string
   }>
   status: number
-  ContactEmail?: string
-  ContactPhone?: string
-  Amenities?: string[]
   createdAt: string
   FilterationDateTime: string
-  Priority?: number
+  Priority: number
   __v?: number
 }
 
@@ -73,7 +74,7 @@ interface ApiResponse {
   data: {
     totalPages: number
     currentPage: number
-    totalVenues: number
+    totalVenue: number
     VenueData: Venue[]
   }
 }
@@ -81,37 +82,36 @@ interface ApiResponse {
 const mockVenues: Venue[] = [
   {
     _id: "ven001",
-    VenueName: "Central Park",
-    VenueDescription: "Large outdoor venue in the heart of the city",
-    VenueAddress: "Central Park West",
-    VenueCity: "New York",
-    VenueState: "NY",
-    VenueCountry: "USA",
-    VenueCapacity: 10000,
+    Name: "Central Park",
+    Description: "Large outdoor venue in the heart of the city",
+    Address: "Central Park West",
+    City: "New York",
+    State: "NY",
+    Country: "USA",
+    CountryIsoCode: "US",
+    StateIsoCode: "NY",
+    CityIsoCode: "NYC",
+    Map_Location: "<iframe src='https://maps.google.com'></iframe>",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Central+Park", _id: "img001" }],
     status: 1,
-    Amenities: ["Parking", "Food Court", "Restrooms", "Security"],
-    ContactEmail: "info@centralpark.com",
-    ContactPhone: "+1-555-0101",
     FilterationDateTime: "2025-01-02T08:30:00.000Z",
     createdAt: "02-01-2025 08:30:00",
     Priority: 1,
     __v: 0,
-  },
-  {
+  },  {
     _id: "ven002",
-    VenueName: "Convention Center",
-    VenueDescription: "Modern convention center with multiple halls",
-    VenueAddress: "123 Market Street",
-    VenueCity: "San Francisco",
-    VenueState: "CA",
-    VenueCountry: "USA",
-    VenueCapacity: 5000,
+    Name: "Convention Center",
+    Description: "Modern convention center with multiple halls",
+    Address: "123 Market Street",
+    City: "San Francisco",
+    State: "CA",
+    Country: "USA",
+    CountryIsoCode: "US",
+    StateIsoCode: "CA",
+    CityIsoCode: "SF",
+    Map_Location: "<iframe src='https://maps.google.com'></iframe>",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Convention+Center", _id: "img002" }],
     status: 1,
-    Amenities: ["WiFi", "A/V Equipment", "Catering", "Parking", "Accessibility"],
-    ContactEmail: "events@conventioncenter.com",
-    ContactPhone: "+1-555-0102",
     FilterationDateTime: "2025-01-20T10:15:00.000Z",
     createdAt: "20-01-2025 10:15:00",
     Priority: 2,
@@ -119,18 +119,18 @@ const mockVenues: Venue[] = [
   },
   {
     _id: "ven003",
-    VenueName: "City Gallery",
-    VenueDescription: "Contemporary art gallery in downtown",
-    VenueAddress: "456 Arts Avenue",
-    VenueCity: "Los Angeles",
-    VenueState: "CA",
-    VenueCountry: "USA",
-    VenueCapacity: 1000,
+    Name: "City Gallery",
+    Description: "Contemporary art gallery in downtown",
+    Address: "456 Arts Avenue",
+    City: "Los Angeles",
+    State: "CA",
+    Country: "USA",
+    CountryIsoCode: "US",
+    StateIsoCode: "CA", 
+    CityIsoCode: "LA",
+    Map_Location: "<iframe src='https://maps.google.com'></iframe>",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=City+Gallery", _id: "img003" }],
     status: 1,
-    Amenities: ["Climate Control", "Security", "Lighting", "Sound System"],
-    ContactEmail: "bookings@citygallery.com",
-    ContactPhone: "+1-555-0103",
     FilterationDateTime: "2025-02-10T09:45:00.000Z",
     createdAt: "10-02-2025 09:45:00",
     Priority: 3,
@@ -138,18 +138,18 @@ const mockVenues: Venue[] = [
   },
   {
     _id: "ven004",
-    VenueName: "Grand Ballroom",
-    VenueDescription: "Elegant ballroom for formal events",
-    VenueAddress: "789 Luxury Lane",
-    VenueCity: "Chicago",
-    VenueState: "IL",
-    VenueCountry: "USA",
-    VenueCapacity: 800,
+    Name: "Grand Ballroom",
+    Description: "Elegant ballroom for formal events",
+    Address: "789 Luxury Lane",
+    City: "Chicago",
+    State: "IL",
+    Country: "USA",
+    CountryIsoCode: "US",
+    StateIsoCode: "IL",
+    CityIsoCode: "CHI",
+    Map_Location: "<iframe src='https://maps.google.com'></iframe>",
     Images: [],
     status: 0,
-    Amenities: ["Valet Parking", "Full Bar", "Dance Floor", "Stage"],
-    ContactEmail: "events@grandballroom.com",
-    ContactPhone: "+1-555-0104",
     FilterationDateTime: "2025-03-01T12:00:00.000Z",
     createdAt: "01-03-2025 12:00:00",
     Priority: 4,
@@ -183,21 +183,16 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedVenue, setSelectedVenue] = React.useState<Venue | null>(null)
   const [useMockData, setUseMockData] = React.useState(false)
-  const [apiError, setApiError] = React.useState<string | null>(null)
-  // Form state
+  const [apiError, setApiError] = React.useState<string | null>(null)  // Form state
   const [formData, setFormData] = React.useState({
     venueName: "",
+    priority: 0,
     venueDescription: "",
-    venueAddress: "",
-    mapLocation: "",
+    fullAddress: "",
+    state: "Meghalaya",
     city: "",
-    state: "",
-    country: "",
-    venueCapacity: "",
-    contactEmail: "",
-    contactPhone: "",
-    amenities: "",
-    venueImages: [] as File[],
+    mapLocation: "",
+    carouselImages: [] as File[],
   })
   // API function to fetch venues
   const fetchVenues = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
@@ -246,12 +241,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       if (data.error) {
         throw new Error(data.message || "Failed to fetch venues")
-      }
-
-      // Set the data from API
+      }      // Set the data from API
       setVenues(data.data.VenueData || [])
       setTotalPages(data.data.totalPages || 1)
-      setTotalVenues(data.data.totalVenues || 0)
+      setTotalVenues(data.data.totalVenue || 0)
       setCurrentPage(data.data.currentPage || 1)
       setUseMockData(false)
 
@@ -281,65 +274,27 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   // Initial data fetch
   React.useEffect(() => {
     fetchVenues(currentPage)
-  }, [currentPage, fetchVenues])
-  // Filter venues based on search (now works on current page data)
+  }, [currentPage, fetchVenues])  // Filter venues based on search (now works on current page data)
   const filteredVenues = React.useMemo(() => {
     if (!searchTerm) return venues
     return venues.filter(
       (venue) =>
-        venue.VenueName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        venue.VenueCity.toLowerCase().includes(searchTerm.toLowerCase()),
+        venue.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        venue.City.toLowerCase().includes(searchTerm.toLowerCase()),
     )
   }, [venues, searchTerm])
 
   // For paginated API, we don't slice here since API handles pagination
   const currentVenues = filteredVenues
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
-
   const handleCreateVenue = async () => {
-    // Validate required fields
-    if (!formData.venueName.trim()) {
+    if (!formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.mapLocation.trim() || formData.carouselImages.length === 0) {
       toast({
         title: "Error",
-        description: "Venue name is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.venueDescription.trim()) {
-      toast({
-        title: "Error",
-        description: "Venue description is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.venueAddress.trim()) {
-      toast({
-        title: "Error",
-        description: "Full address is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.city.trim()) {
-      toast({
-        title: "Error",
-        description: "City is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.mapLocation.trim()) {
-      toast({
-        title: "Error",
-        description: "Map location is required",
+        description: "Please fill in all required fields",
         variant: "destructive",
       })
       return
@@ -347,128 +302,71 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
     setLoading(true)
     try {
-      const authToken = getValidToken()
-      if (!user || !authToken) {
-        throw new Error("Authentication required")
-      }      // Create FormData for multipart/form-data request as per swagger
-      const formDataPayload = new FormData();
-      formDataPayload.append('Name', formData.venueName);
-      formDataPayload.append('Country', formData.country);
-      formDataPayload.append('State', formData.state);
-      formDataPayload.append('City', formData.city);
-      formDataPayload.append('Address', formData.venueAddress);
-      formDataPayload.append('Map_Location', formData.mapLocation);
-      formDataPayload.append('Priority', '0'); // Default priority
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Add images if selected (multiple images support)
-      if (formData.venueImages && formData.venueImages.length > 0) {
-        formData.venueImages.forEach((image) => {
-          formDataPayload.append('Images', image);
-        });
-      }
-
-      console.log('Creating venue with data:', {
+      const newVenue: Venue = {
+        _id: `ven${Date.now()}`,
         Name: formData.venueName,
-        Country: formData.country,
-        State: formData.state,
+        Description: formData.venueDescription,
+        Address: formData.fullAddress,
         City: formData.city,
-        Address: formData.venueAddress,
-      });
-
-      const response = await fetch(venueEndPoint.VENUE_CREATION_URL, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-          // Don't set Content-Type for FormData, let browser set it
-        },
-        body: formDataPayload,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        State: formData.state,
+        Country: "India", // Default to India
+        CountryIsoCode: "IN",
+        StateIsoCode: "",
+        CityIsoCode: "",
+        Map_Location: formData.mapLocation,
+        Images: formData.carouselImages.map((file, index) => ({
+          image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.venueName)}-${index}`,
+          _id: `img${Date.now()}-${index}`
+        })),
+        FilterationDateTime: new Date().toISOString(),
+        createdAt: new Date().toLocaleString('en-GB', { 
+          day: '2-digit', 
+          month: '2-digit', 
+          year: 'numeric', 
+          hour: '2-digit', 
+          minute: '2-digit', 
+          second: '2-digit' 
+        }).replace(/\//g, '-'),
+        status: 1,
+        Priority: formData.priority,
+        __v: 0,
       }
 
-      const data = await response.json();
-      console.log('Create venue response:', data);
-
-      if (data.error) {
-        throw new Error(data.message || 'Failed to create venue');
-      }      // Refresh the venues list
-      await fetchVenues(currentPage);
-      
+      setVenues([newVenue, ...venues])
       setIsCreateDialogOpen(false)
       setFormData({
         venueName: "",
+        priority: 0,
         venueDescription: "",
-        venueAddress: "",
-        mapLocation: "",
+        fullAddress: "",
+        state: "Meghalaya",
         city: "",
-        state: "",
-        country: "",
-        venueCapacity: "",
-        contactEmail: "",
-        contactPhone: "",
-        amenities: "",
-        venueImages: [],
+        mapLocation: "",
+        carouselImages: [],
       })
 
       toast({
         title: "Success",
-        description: data.message || "Venue created successfully",
+        description: "Venue created successfully",
       })
     } catch (error) {
-      console.error('Create venue error:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create venue",
+        description: "Failed to create venue",
         variant: "destructive",
-      })    } finally {
+      })
+    } finally {
       setLoading(false)
     }
   }
-
   const handleEditVenue = async () => {
-    // Validate required fields
-    if (!selectedVenue) {
+    if (!selectedVenue || !formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim()) {
       toast({
         title: "Error",
-        description: "No venue selected for editing",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.venueName.trim()) {
-      toast({
-        title: "Error",
-        description: "Venue name is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.venueDescription.trim()) {
-      toast({
-        title: "Error",
-        description: "Venue description is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.venueAddress.trim()) {
-      toast({
-        title: "Error",
-        description: "Full address is required",
-        variant: "destructive",
-      })
-      return
-    }
-    
-    if (!formData.city.trim()) {
-      toast({
-        title: "Error",
-        description: "City is required",
+        description: "Please fill in all required fields",
         variant: "destructive",
       })
       return
@@ -476,72 +374,49 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
     setLoading(true)
     try {
-      const authToken = getValidToken()
-      if (!user || !authToken) {
-        throw new Error("Authentication required")
-      }      // Prepare update data as per swagger
-      const updateData = {
-        venue_id: selectedVenue._id,
-        Name: formData.venueName,
-        Country: formData.country,
-        State: formData.state,
-        City: formData.city,
-        Address: formData.venueAddress,
-        Map_Location: formData.mapLocation,
-        Priority: selectedVenue.Priority || 0,
-      };
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      console.log('Updating venue with data:', updateData);
+      const updatedVenues = venues.map((venue) =>
+        venue._id === selectedVenue._id
+          ? {
+              ...venue,
+              Name: formData.venueName,
+              Description: formData.venueDescription,
+              Address: formData.fullAddress,
+              City: formData.city,
+              State: formData.state,
+              Map_Location: formData.mapLocation,
+              Priority: formData.priority,
+              FilterationDateTime: new Date().toISOString(),
+            }          : venue,
+      )
 
-      const response = await fetch(venueEndPoint.VENUE_DATA_UPDATED, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(updateData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Update venue response:', data);
-
-      if (data.error) {
-        throw new Error(data.message || 'Failed to update venue');
-      }
-
-      // Refresh the venues list
-      await fetchVenues(currentPage);      setIsEditDialogOpen(false)
+      setVenues(updatedVenues)
+      setIsEditDialogOpen(false)
       setSelectedVenue(null)
       setFormData({
         venueName: "",
+        priority: 0,
         venueDescription: "",
-        venueAddress: "",
-        mapLocation: "",
+        fullAddress: "",
+        state: "Meghalaya",
         city: "",
-        state: "",
-        country: "",
-        venueCapacity: "",
-        contactEmail: "",
-        contactPhone: "",
-        amenities: "",
-        venueImages: [],
+        mapLocation: "",
+        carouselImages: [],
       })
 
       toast({
         title: "Success",
-        description: data.message || "Venue updated successfully",
+        description: "Venue updated successfully",
       })
     } catch (error) {
-      console.error('Update venue error:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update venue",
+        description: "Failed to update venue",
         variant: "destructive",
-      })    } finally {
+      })
+    } finally {
       setLoading(false)
     }
   }
@@ -549,50 +424,19 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const handleDeleteVenue = async (venueId: string) => {
     setLoading(true)
     try {
-      const authToken = getValidToken()
-      if (!user || !authToken) {
-        throw new Error("Authentication required")
-      }
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 1000))
 
-      // Delete venue as per swagger
-      const deleteData = {
-        venue_id: venueId,
-      };
-
-      console.log('Deleting venue with ID:', venueId);
-
-      const response = await fetch(venueEndPoint.VENUE_DELETE_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(deleteData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('Delete venue response:', data);
-
-      if (data.error) {
-        throw new Error(data.message || 'Failed to delete venue');
-      }
-
-      // Refresh the venues list
-      await fetchVenues(currentPage);
+      setVenues(venues.filter((venue) => venue._id !== venueId))
 
       toast({
         title: "Success",
-        description: data.message || "Venue deleted successfully",
+        description: "Venue deleted successfully",
       })
     } catch (error) {
-      console.error('Delete venue error:', error);
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete venue",
+        description: "Failed to delete venue",
         variant: "destructive",
       })
     } finally {
@@ -627,42 +471,34 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         title: "Error",
         description: "Failed to update venue status",
         variant: "destructive",
-      })    } finally {
-      setLoading(false)
+      })
+    } finally {      setLoading(false)
     }
   }
   const openEditDialog = (venue: Venue) => {
     setSelectedVenue(venue)
     setFormData({
-      venueName: venue.VenueName || "",
-      venueDescription: venue.VenueDescription || "",
-      venueAddress: venue.VenueAddress || "",
-      mapLocation: "", // Map location not in current venue interface
-      city: venue.VenueCity || "",
-      state: venue.VenueState || "",
-      country: venue.VenueCountry || "",
-      venueCapacity: venue.VenueCapacity ? venue.VenueCapacity.toString() : "",
-      contactEmail: venue.ContactEmail || "",
-      contactPhone: venue.ContactPhone || "",
-      amenities: venue.Amenities && Array.isArray(venue.Amenities) ? venue.Amenities.join(", ") : "",
-      venueImages: [],
+      venueName: venue.Name,
+      priority: venue.Priority,
+      venueDescription: venue.Description || "",
+      fullAddress: venue.Address,
+      city: venue.City,
+      state: venue.State,
+      mapLocation: venue.Map_Location,
+      carouselImages: [],
     })
     setIsEditDialogOpen(true)
   }
   const resetForm = () => {
     setFormData({
       venueName: "",
+      priority: 0,
       venueDescription: "",
-      venueAddress: "",
-      mapLocation: "",
+      fullAddress: "",
+      state: "Meghalaya",
       city: "",
-      state: "",
-      country: "",
-      venueCapacity: "",
-      contactEmail: "",
-      contactPhone: "",
-      amenities: "",
-      venueImages: [],
+      mapLocation: "",
+      carouselImages: [],
     })
     setSelectedVenue(null)
   }
@@ -706,8 +542,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             <DialogHeader>
               <DialogTitle>Create New Venue</DialogTitle>
               <DialogDescription>Add a new venue to the system.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
+            </DialogHeader>            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="venueName">Venue Name *</Label>
@@ -719,37 +554,77 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="venueCapacity">Capacity *</Label>
+                  <Label htmlFor="priority">Priority</Label>
                   <Input
-                    id="venueCapacity"
+                    id="priority"
                     type="number"
-                    value={formData.venueCapacity}
-                    onChange={(e) => setFormData({ ...formData, venueCapacity: e.target.value })}
-                    placeholder="Enter capacity"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                    placeholder="0"
                   />
                 </div>
-              </div>                <div className="space-y-2">
-                  <Label htmlFor="venueDescription">Description *</Label>
-                  <Textarea
-                    id="venueDescription"
-                    value={formData.venueDescription}
-                    onChange={(e) => setFormData({ ...formData, venueDescription: e.target.value })}
-                    placeholder="Enter venue description"
-                    rows={3}
-                  />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="venueDescription">Venue Description *</Label>
+                <Textarea
+                  id="venueDescription"
+                  value={formData.venueDescription}
+                  onChange={(e) => setFormData({ ...formData, venueDescription: e.target.value })}
+                  placeholder="Enter venue description"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="fullAddress">Full Address *</Label>
+                <Textarea
+                  id="fullAddress"
+                  value={formData.fullAddress}
+                  onChange={(e) => setFormData({ ...formData, fullAddress: e.target.value })}
+                  placeholder="Enter full address"
+                  rows={2}
+                />
+              </div>              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="state">State</Label>
+                  <Select value={formData.state} onValueChange={(value) => setFormData({ ...formData, state: value })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                  <SelectContent>
+  <SelectItem value="Andhra Pradesh">Andhra Pradesh</SelectItem>
+  <SelectItem value="Arunachal Pradesh">Arunachal Pradesh</SelectItem>
+  <SelectItem value="Assam">Assam</SelectItem>
+  <SelectItem value="Bihar">Bihar</SelectItem>
+  <SelectItem value="Chhattisgarh">Chhattisgarh</SelectItem>
+  <SelectItem value="Goa">Goa</SelectItem>
+  <SelectItem value="Gujarat">Gujarat</SelectItem>
+  <SelectItem value="Haryana">Haryana</SelectItem>
+  <SelectItem value="Himachal Pradesh">Himachal Pradesh</SelectItem>
+  <SelectItem value="Jharkhand">Jharkhand</SelectItem>
+  <SelectItem value="Karnataka">Karnataka</SelectItem>
+  <SelectItem value="Kerala">Kerala</SelectItem>
+  <SelectItem value="Madhya Pradesh">Madhya Pradesh</SelectItem>
+  <SelectItem value="Maharashtra">Maharashtra</SelectItem>
+  <SelectItem value="Manipur">Manipur</SelectItem>
+  <SelectItem value="Meghalaya">Meghalaya</SelectItem>
+  <SelectItem value="Mizoram">Mizoram</SelectItem>
+  <SelectItem value="Nagaland">Nagaland</SelectItem>
+  <SelectItem value="Odisha">Odisha</SelectItem>
+  <SelectItem value="Punjab">Punjab</SelectItem>
+  <SelectItem value="Rajasthan">Rajasthan</SelectItem>
+  <SelectItem value="Sikkim">Sikkim</SelectItem>
+  <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
+  <SelectItem value="Telangana">Telangana</SelectItem>
+  <SelectItem value="Tripura">Tripura</SelectItem>
+  <SelectItem value="Uttar Pradesh">Uttar Pradesh</SelectItem>
+  <SelectItem value="Uttarakhand">Uttarakhand</SelectItem>
+  <SelectItem value="West Bengal">West Bengal</SelectItem>
+</SelectContent>
+
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="venueAddress">Address *</Label>
-                  <Input
-                    id="venueAddress"
-                    value={formData.venueAddress}
-                    onChange={(e) => setFormData({ ...formData, venueAddress: e.target.value })}
-                    placeholder="Enter venue address"
-                  />
-                </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="city">City *</Label>
+                  <Label htmlFor="city">City</Label>
                   <Input
                     id="city"
                     value={formData.city}
@@ -757,79 +632,27 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                     placeholder="Enter city"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
-                  <Input
-                    id="state"
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    placeholder="Enter state"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country">Country</Label>
-                  <Input
-                    id="country"
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    placeholder="Enter country"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="contactEmail">Contact Email</Label>
-                  <Input
-                    id="contactEmail"
-                    type="email"
-                    value={formData.contactEmail}
-                    onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                    placeholder="Enter contact email"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contactPhone">Contact Phone</Label>
-                  <Input
-                    id="contactPhone"
-                    value={formData.contactPhone}
-                    onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                    placeholder="Enter contact phone"
-                  />
-                </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="amenities">Amenities (comma-separated)</Label>
-                <Input
-                  id="amenities"
-                  value={formData.amenities}
-                  onChange={(e) => setFormData({ ...formData, amenities: e.target.value })}
-                  placeholder="Parking, WiFi, A/V Equipment, Catering"
-                />
-              </div>              <div className="space-y-2">
                 <Label htmlFor="mapLocation">Map Location *</Label>
                 <Textarea
                   id="mapLocation"
                   value={formData.mapLocation}
                   onChange={(e) => setFormData({ ...formData, mapLocation: e.target.value })}
-                  placeholder="Enter Google Maps URL or coordinates"
-                  rows={2}
+                  placeholder="Enter map iframe embed code"
+                  rows={3}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="venueImages">Venue Images (Multiple)</Label>
+                <Label htmlFor="carouselImages">Upload Carousel Images *</Label>
                 <Input
-                  id="venueImages"
+                  id="carouselImages"
                   type="file"
                   accept="image/*"
                   multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    setFormData({ ...formData, venueImages: files });
-                  }}
+                  onChange={(e) => setFormData({ ...formData, carouselImages: Array.from(e.target.files || []) })}
                 />
-                <p className="text-sm text-muted-foreground">
-                  Select multiple images. First image will be used as thumbnail.
-                </p>
+                <p className="text-sm text-muted-foreground">You can select multiple images</p>
               </div>
             </div>
             <DialogFooter>
@@ -867,63 +690,48 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           <CardDescription>Manage event venues in the system.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
+          <Table>            <TableHeader>
               <TableRow>
-                <TableHead>Image</TableHead>
                 <TableHead>Venue Name</TableHead>
-                <TableHead className="hidden md:table-cell">Location</TableHead>
-                <TableHead className="hidden md:table-cell">Capacity</TableHead>
-                <TableHead className="hidden lg:table-cell">Contact</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
+                <TableHead>Venue State</TableHead>
+                <TableHead>Venue City</TableHead>
+                <TableHead>Created At</TableHead>
+                <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {currentVenues.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={5} className="text-center py-8">
                     No venues found
                   </TableCell>
                 </TableRow>
               ) : (
                 currentVenues.map((venue) => (
-                  <TableRow key={venue._id}>                    <TableCell>
-                      {getVenueImage(venue) !== "/placeholder.svg" ? (
-                        <img
-                          src={getVenueImage(venue)}
-                          alt={venue.VenueName}
-                          className="w-12 h-12 rounded-lg object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                          <Upload className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                      )}
-                    </TableCell>                    <TableCell className="font-medium">{venue.VenueName}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {venue.VenueCity}, {venue.VenueState}
-                      </div>
-                    </TableCell>                    <TableCell className="hidden md:table-cell">
-                      <div className="flex items-center gap-1">
-                        <Users className="h-4 w-4" />
-                        {venue.VenueCapacity ? venue.VenueCapacity.toLocaleString() : 'N/A'}
-                      </div>
-                    </TableCell>                    <TableCell className="hidden lg:table-cell">
-                      <div className="text-sm">
-                        <div>{venue.ContactEmail || 'N/A'}</div>
-                        <div className="text-muted-foreground">{venue.ContactPhone || 'N/A'}</div>
-                      </div>
-                    </TableCell>
+                  <TableRow key={venue._id}>
                     <TableCell>
-                      <Badge variant={getStatusDisplay(venue.status).variant}>
-                        {getStatusDisplay(venue.status).text}
-                      </Badge>
+                      <div className="flex items-center gap-3">
+                        {venue.Images && venue.Images.length > 0 ? (
+                          <img
+                            src={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000'}/${venue.Images[0].image_path}`}
+                            alt={venue.Name}
+                            className="w-12 h-12 rounded-lg object-cover"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = "/placeholder.svg";
+                            }}
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
+                            <Upload className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        <span className="font-medium">{venue.Name}</span>
+                      </div>
                     </TableCell>
+                    <TableCell>{venue.State}</TableCell>
+                    <TableCell>{venue.City}</TableCell>
+                    <TableCell>{venue.createdAt}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -937,7 +745,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                           <DropdownMenuItem onClick={() => openEditDialog(venue)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
-                          </DropdownMenuItem>                          <DropdownMenuItem onClick={() => handleToggleStatus(venue._id)}>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleToggleStatus(venue._id)}>
                             {venue.status === 1 ? "Deactivate" : "Activate"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteVenue(venue._id)} className="text-red-600">
@@ -997,9 +806,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             </Pagination>
           )}
         </CardContent>
-      </Card>
-
-      {/* Edit Dialog */}
+      </Card>      {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -1018,17 +825,18 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editVenueCapacity">Capacity *</Label>
+                <Label htmlFor="editPriority">Priority</Label>
                 <Input
-                  id="editVenueCapacity"
+                  id="editPriority"
                   type="number"
-                  value={formData.venueCapacity}
-                  onChange={(e) => setFormData({ ...formData, venueCapacity: e.target.value })}
-                  placeholder="Enter capacity"
+                  value={formData.priority}
+                  onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                  placeholder="0"
                 />
               </div>
-            </div>            <div className="space-y-2">
-              <Label htmlFor="editVenueDescription">Description *</Label>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editVenueDescription">Venue Description *</Label>
               <Textarea
                 id="editVenueDescription"
                 value={formData.venueDescription}
@@ -1038,17 +846,36 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="editVenueAddress">Address *</Label>
-              <Input
-                id="editVenueAddress"
-                value={formData.venueAddress}
-                onChange={(e) => setFormData({ ...formData, venueAddress: e.target.value })}
-                placeholder="Enter venue address"
+              <Label htmlFor="editFullAddress">Full Address *</Label>
+              <Textarea
+                id="editFullAddress"
+                value={formData.fullAddress}
+                onChange={(e) => setFormData({ ...formData, fullAddress: e.target.value })}
+                placeholder="Enter full address"
+                rows={2}
               />
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editCity">City *</Label>
+                <Label htmlFor="editState">State</Label>
+                <Select value={formData.state} onValueChange={(value) => setFormData({ ...formData, state: value })}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select state" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Meghalaya">Meghalaya</SelectItem>
+                    <SelectItem value="Assam">Assam</SelectItem>
+                    <SelectItem value="West Bengal">West Bengal</SelectItem>
+                    <SelectItem value="Tripura">Tripura</SelectItem>
+                    <SelectItem value="Manipur">Manipur</SelectItem>
+                    <SelectItem value="Mizoram">Mizoram</SelectItem>
+                    <SelectItem value="Nagaland">Nagaland</SelectItem>
+                    <SelectItem value="Arunachal Pradesh">Arunachal Pradesh</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editCity">City</Label>
                 <Input
                   id="editCity"
                   value={formData.city}
@@ -1056,79 +883,27 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   placeholder="Enter city"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="editState">State</Label>
-                <Input
-                  id="editState"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  placeholder="Enter state"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editCountry">Country</Label>
-                <Input
-                  id="editCountry"
-                  value={formData.country}
-                  onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                  placeholder="Enter country"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editContactEmail">Contact Email</Label>
-                <Input
-                  id="editContactEmail"
-                  type="email"
-                  value={formData.contactEmail}
-                  onChange={(e) => setFormData({ ...formData, contactEmail: e.target.value })}
-                  placeholder="Enter contact email"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editContactPhone">Contact Phone</Label>
-                <Input
-                  id="editContactPhone"
-                  value={formData.contactPhone}
-                  onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                  placeholder="Enter contact phone"
-                />
-              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="editAmenities">Amenities (comma-separated)</Label>
-              <Input
-                id="editAmenities"
-                value={formData.amenities}
-                onChange={(e) => setFormData({ ...formData, amenities: e.target.value })}
-                placeholder="Parking, WiFi, A/V Equipment, Catering"
-              />
-            </div>            <div className="space-y-2">
               <Label htmlFor="editMapLocation">Map Location *</Label>
               <Textarea
                 id="editMapLocation"
                 value={formData.mapLocation}
                 onChange={(e) => setFormData({ ...formData, mapLocation: e.target.value })}
-                placeholder="Enter Google Maps URL or coordinates"
-                rows={2}
+                placeholder="Enter map iframe embed code"
+                rows={3}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="editVenueImages">Venue Images (Multiple)</Label>
+              <Label htmlFor="editCarouselImages">Upload Carousel Images *</Label>
               <Input
-                id="editVenueImages"
+                id="editCarouselImages"
                 type="file"
                 accept="image/*"
                 multiple
-                onChange={(e) => {
-                  const files = Array.from(e.target.files || []);
-                  setFormData({ ...formData, venueImages: files });
-                }}
+                onChange={(e) => setFormData({ ...formData, carouselImages: Array.from(e.target.files || []) })}
               />
-              <p className="text-sm text-muted-foreground">
-                Select multiple images to replace existing ones. First image will be used as thumbnail.
-              </p>
+              <p className="text-sm text-muted-foreground">You can select multiple images</p>
             </div>
           </div>
           <DialogFooter>
