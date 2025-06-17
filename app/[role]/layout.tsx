@@ -14,6 +14,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { getNavItemsForRole, type UserRole, type NavItem as NavItemType } from "@/lib/navigation"
@@ -43,10 +51,25 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
   // Normalize role for navigation
   const normalizedRole = role.toLowerCase() as UserRole
   const navigationItems = React.useMemo(() => getNavItemsForRole(normalizedRole), [normalizedRole])
-
   // Sidebar state management
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(true)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false)
+    // Logout confirmation dialog state
+  const [showLogoutConfirmation, setShowLogoutConfirmation] = React.useState(false)
+
+  // Handle logout confirmation
+  const handleLogoutClick = () => {
+    setShowLogoutConfirmation(true)
+  }
+
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirmation(false)
+    logout()
+  }
+
+  const handleLogoutCancel = () => {
+    setShowLogoutConfirmation(false)
+  }
 
   // Toggle functions
   const toggleSidebar = React.useCallback(() => {
@@ -98,10 +121,9 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
   })
 
   NavItem.displayName = "NavItem"
-
   const LogoutButton = React.memo<{ isCollapsed: boolean }>(({ isCollapsed }) => (
     <button
-      onClick={logout}
+      onClick={handleLogoutClick}
       className={cn(
         "group flex items-center gap-3 rounded-lg px-4 py-3 mx-2 transition-all hover:bg-white/10 text-white/90 hover:text-white w-full",
         isCollapsed ? "justify-center px-2" : "",
@@ -208,8 +230,7 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={logout}>
+                  </DropdownMenuItem>                  <DropdownMenuItem onClick={handleLogoutClick}>
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Logout</span>
                   </DropdownMenuItem>
@@ -218,10 +239,29 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
             </div>
           </header>          <main className="flex flex-1 flex-col gap-4 p-4 md:gap-8 md:p-6 bg-muted/40">
             <TokenExpirationWarning />
-            {children}
-          </main>
+            {children}          </main>
         </div>
       </div>
+
+      {/* Logout Confirmation Dialog */}
+      <Dialog open={showLogoutConfirmation} onOpenChange={setShowLogoutConfirmation}>
+        <DialogContent className="sm:max-w-md">          <DialogHeader>
+            <DialogTitle>Confirm Logout</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to log out?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={handleLogoutCancel}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleLogoutConfirm}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AuthGuard>
   )
 }

@@ -10,6 +10,7 @@ import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye } from
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
 import { bannerEndpoint } from "@/lib/api-endpoints"
+import { eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { Banner, BannersApiResponse } from "@/lib/types"
@@ -19,7 +20,10 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Alert,
   AlertDescription,
@@ -52,7 +56,6 @@ export default function BannersPage({ params }: BannersPageProps) {
   
   const { toast } = useToast()
   const { user } = useAuth()
-
   // State management
   const [banners, setBanners] = React.useState<Banner[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -62,7 +65,23 @@ export default function BannersPage({ params }: BannersPageProps) {
   const [showErrorDialog, setShowErrorDialog] = React.useState(false)
   const [selectedBanner, setSelectedBanner] = React.useState<Banner | null>(null)
   const [showViewDialog, setShowViewDialog] = React.useState(false)
-
+  
+  // CRUD dialogs
+  const [showCreateDialog, setShowCreateDialog] = React.useState(false)
+  const [showEditDialog, setShowEditDialog] = React.useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = React.useState(false)
+  const [submitting, setSubmitting] = React.useState(false)
+  
+  // Events for dropdown
+  const [events, setEvents] = React.useState<any[]>([])
+  const [loadingEvents, setLoadingEvents] = React.useState(false)
+  
+  // Form data
+  const [formData, setFormData] = React.useState({
+    eventId: "",
+    desktopImage: null as File | null,
+    mobileImage: null as File | null,
+  })
   // Debounce search term
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -70,6 +89,34 @@ export default function BannersPage({ params }: BannersPageProps) {
     }, 300)
     return () => clearTimeout(timer)
   }, [searchTerm])
+
+  // Fetch events for dropdown
+  const fetchEvents = React.useCallback(async () => {
+    setLoadingEvents(true)
+    try {
+      const token = getValidToken()
+      if (!token) return
+
+      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        if (!result.error && result.data) {
+          setEvents(result.data)
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching events:", error)
+    } finally {
+      setLoadingEvents(false)
+    }
+  }, [])
 
   // Fetch banners data
   const fetchBanners = React.useCallback(async () => {
@@ -113,11 +160,11 @@ export default function BannersPage({ params }: BannersPageProps) {
       setLoading(false)
     }
   }, [user])
-
   // Initial load
   React.useEffect(() => {
     fetchBanners()
-  }, [fetchBanners])
+    fetchEvents()
+  }, [fetchBanners, fetchEvents])
 
   // Filter banners based on search
   const filteredBanners = React.useMemo(() => {
@@ -142,7 +189,6 @@ export default function BannersPage({ params }: BannersPageProps) {
     setSelectedBanner(banner)
     setShowViewDialog(true)
   }
-
   const getImageUrl = (imagePath: string) => {
     // If the path already includes the base URL, return as is
     if (imagePath.startsWith('http')) {
@@ -150,7 +196,194 @@ export default function BannersPage({ params }: BannersPageProps) {
     }
     // Otherwise, prepend the base URL
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.eventingclub.in'
-    return `${baseUrl}/${imagePath}`
+    return `${baseUrl}/${imagePath}`  }
+
+  // CRUD Functions
+  const handleCreateBanner = async () => {
+    if (!formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events" || !formData.desktopImage || !formData.mobileImage) {
+      toast({
+        title: "Error",
+        description: "Please fill all required fields and upload both images",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const formDataToSend = new FormData()
+      formDataToSend.append("Event_id", formData.eventId)
+      formDataToSend.append("DesktopbannerImage", formData.desktopImage)
+      formDataToSend.append("MobilebannerImage", formData.mobileImage)
+
+      const response = await fetch(bannerEndpoint.CREATE_BANNER, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formDataToSend,
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Banner created successfully",
+        })
+        setShowCreateDialog(false)
+        resetForm()
+        await fetchBanners()
+      } else {
+        throw new Error(result.message || "Failed to create banner")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create banner",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+  const handleEditBanner = async () => {
+    if (!selectedBanner || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events") {
+      toast({
+        title: "Error",
+        description: "Please select an event",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const formDataToSend = new FormData()
+      formDataToSend.append("BannerSlider_id", selectedBanner._id)
+      formDataToSend.append("Event_id", formData.eventId)
+      
+      if (formData.desktopImage) {
+        formDataToSend.append("DesktopbannerImage", formData.desktopImage)
+      }
+      if (formData.mobileImage) {
+        formDataToSend.append("MobilebannerImage", formData.mobileImage)
+      }
+
+      const response = await fetch(bannerEndpoint.UPDATE_BANNER, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formDataToSend,
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Banner updated successfully",
+        })
+        setShowEditDialog(false)
+        resetForm()
+        await fetchBanners()
+      } else {
+        throw new Error(result.message || "Failed to update banner")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update banner",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteBanner = async () => {
+    if (!selectedBanner) return
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const response = await fetch(bannerEndpoint.DELETE_BANNER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          BannerSlider_id: selectedBanner._id,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Banner deleted successfully",
+        })
+        setShowDeleteDialog(false)
+        resetForm()
+        await fetchBanners()
+      } else {
+        throw new Error(result.message || "Failed to delete banner")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete banner",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const openCreateDialog = () => {
+    resetForm()
+    setShowCreateDialog(true)
+  }
+
+  const openEditDialog = (banner: Banner) => {
+    setSelectedBanner(banner)
+    setFormData({
+      eventId: banner.Event_id,
+      desktopImage: null,
+      mobileImage: null,
+    })
+    setShowEditDialog(true)
+  }
+
+  const openDeleteDialog = (banner: Banner) => {
+    setSelectedBanner(banner)
+    setShowDeleteDialog(true)
+  }
+
+  const resetForm = () => {
+    setFormData({
+      eventId: "",
+      desktopImage: null,
+      mobileImage: null,
+    })
+    setSelectedBanner(null)
   }
 
   return (
@@ -164,8 +397,7 @@ export default function BannersPage({ params }: BannersPageProps) {
           <Button variant="outline" onClick={fetchBanners} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
-          </Button>
-          <Button>
+          </Button>          <Button onClick={openCreateDialog}>
             <Plus className="mr-2 h-4 w-4" />
             Add Banner
           </Button>
@@ -277,18 +509,17 @@ export default function BannersPage({ params }: BannersPageProps) {
                           onClick={() => handleViewBanner(banner)}
                         >
                           <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
+                        </Button>                        <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => console.log('Edit banner:', banner._id)}
+                          onClick={() => openEditDialog(banner)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          onClick={() => console.log('Delete banner:', banner._id)}
+                          onClick={() => openDeleteDialog(banner)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -389,12 +620,279 @@ export default function BannersPage({ params }: BannersPageProps) {
                 </div>
               </div>
             </div>
-          )}
-          <div className="flex justify-end pt-4">
+          )}          <div className="flex justify-end pt-4">
             <Button onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>      {/* Create Banner Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={(open) => {
+        setShowCreateDialog(open)
+        if (!open) resetForm()
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create New Banner</DialogTitle>
+            <DialogDescription>
+              Add a new banner to the homepage slider
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="eventId">Event *</Label>
+              <Select 
+                value={formData.eventId} 
+                onValueChange={(value) => {
+                  // Don't allow selection of dummy disabled values
+                  if (value !== "loading" && value !== "no-events") {
+                    setFormData(prev => ({ ...prev, eventId: value }))
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an event" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingEvents ? (
+                    <SelectItem value="loading" disabled>Loading events...</SelectItem>
+                  ) : events.length === 0 ? (
+                    <SelectItem value="no-events" disabled>No events available</SelectItem>
+                  ) : (
+                    events.map((event) => (
+                      <SelectItem key={event._id} value={event._id}>
+                        {event.Event_Name || event.Event_Title || `Event ${event._id}`}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="desktopImage">Desktop Banner Image *</Label>
+              <Input
+                id="desktopImage"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setFormData(prev => ({ ...prev, desktopImage: file }))
+                }}
+              />
+              {formData.desktopImage && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {formData.desktopImage.name}
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="mobileImage">Mobile Banner Image *</Label>
+              <Input
+                id="mobileImage"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setFormData(prev => ({ ...prev, mobileImage: file }))
+                }}
+              />
+              {formData.mobileImage && (
+                <p className="text-sm text-muted-foreground">
+                  Selected: {formData.mobileImage.name}
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowCreateDialog(false)
+                resetForm()
+              }}
+            >
+              Cancel
+            </Button>            <Button 
+              onClick={handleCreateBanner}
+              disabled={submitting || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events" || !formData.desktopImage || !formData.mobileImage}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Banner"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>      {/* Edit Banner Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={(open) => {
+        setShowEditDialog(open)
+        if (!open) resetForm()
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Banner</DialogTitle>
+            <DialogDescription>
+              Update banner details and images
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="editEventId">Event *</Label>
+              <Select 
+                value={formData.eventId} 
+                onValueChange={(value) => {
+                  // Don't allow selection of dummy disabled values
+                  if (value !== "loading" && value !== "no-events") {
+                    setFormData(prev => ({ ...prev, eventId: value }))
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an event" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loadingEvents ? (
+                    <SelectItem value="loading" disabled>Loading events...</SelectItem>
+                  ) : events.length === 0 ? (
+                    <SelectItem value="no-events" disabled>No events available</SelectItem>
+                  ) : (
+                    events.map((event) => (
+                      <SelectItem key={event._id} value={event._id}>
+                        {event.Event_Name || event.Event_Title || `Event ${event._id}`}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editDesktopImage">Desktop Banner Image</Label>
+              <Input
+                id="editDesktopImage"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setFormData(prev => ({ ...prev, desktopImage: file }))
+                }}
+              />
+              {formData.desktopImage ? (
+                <p className="text-sm text-muted-foreground">
+                  New file: {formData.desktopImage.name}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Leave empty to keep current image
+                </p>
+              )}
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="editMobileImage">Mobile Banner Image</Label>
+              <Input
+                id="editMobileImage"
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  setFormData(prev => ({ ...prev, mobileImage: file }))
+                }}
+              />
+              {formData.mobileImage ? (
+                <p className="text-sm text-muted-foreground">
+                  New file: {formData.mobileImage.name}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Leave empty to keep current image
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowEditDialog(false)
+                resetForm()
+              }}
+            >
+              Cancel
+            </Button>            <Button 
+              onClick={handleEditBanner}
+              disabled={submitting || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events"}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                "Update Banner"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>      {/* Delete Banner Dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={(open) => {
+        setShowDeleteDialog(open)
+        if (!open) resetForm()
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Banner</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this banner? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedBanner && (
+            <div className="py-4">
+              <div className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="relative w-16 h-10 rounded overflow-hidden">
+                  <Image
+                    src={getImageUrl(selectedBanner.DesktopbannerImage)}
+                    alt="Banner preview"
+                    fill
+                    className="object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.src = "/placeholder.svg"
+                    }}
+                  />
+                </div>
+                <div>
+                  <p className="font-medium">Event ID: {selectedBanner.Event_id}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Created: {formatDate(selectedBanner.createdAt)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowDeleteDialog(false)
+                resetForm()
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={handleDeleteBanner}
+              disabled={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                "Delete Banner"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
