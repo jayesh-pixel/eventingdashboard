@@ -13,8 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, MapPin, Calendar, Loader2 } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, Image as ImageIcon, Calendar, Loader2, Upload, X } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -33,33 +32,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
 import { eventTourEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
+import type { EventTour } from "@/lib/types"
+import Image from "next/image"
 
 interface EventToursPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
-}
-
-interface EventTour {
-  _id: string
-  Name?: string
-  tourName?: string  // For backward compatibility
-  Description?: string | null
-  tourDescription?: string  // For backward compatibility
-  artistId?: string
-  artistName?: string
-  totalEvents?: number
-  startDate?: string
-  endDate?: string
-  FilterationDateTime?: string
-  createdAt: string
-  status: number
-  cities?: string[]
-  __v?: number
 }
 
 interface ApiResponse {
@@ -69,80 +51,9 @@ interface ApiResponse {
     totalPages: number
     currentPage: number
     totalEventTours: number
-    EventTourData?: EventTour[]
+    EventToursData?: EventTour[]
   }
 }
-
-const mockEventTours: EventTour[] = [
-  {
-    _id: "tour001",
-    Name: "Summer Rock Festival Tour 2025",
-    Description: "Multi-city rock festival tour featuring top rock bands",
-    artistId: "art001",
-    artistName: "The Rockers",
-    totalEvents: 8,
-    startDate: "2025-06-01T00:00:00.000Z",
-    endDate: "2025-08-31T00:00:00.000Z",
-    FilterationDateTime: "2025-01-15T08:30:00.000Z",
-    createdAt: "15-01-2025 08:30:00",
-    status: 1,
-    cities: ["New York", "Los Angeles", "Chicago", "Miami", "Seattle", "Denver", "Austin", "Boston"],
-    __v: 0,
-  },
-  {
-    _id: "tour002",
-    Name: "Electronic Music World Tour",
-    Description: "Global electronic music tour across major cities",
-    artistId: "art002",
-    artistName: "DJ Sparkle",
-    totalEvents: 12,
-    startDate: "2025-09-01T00:00:00.000Z",
-    endDate: "2025-12-31T00:00:00.000Z",
-    FilterationDateTime: "2025-02-10T10:15:00.000Z",
-    createdAt: "10-02-2025 10:15:00",
-    status: 1,
-    cities: ["Las Vegas", "Miami", "New York", "Los Angeles", "San Francisco", "Atlanta"],
-    __v: 0,
-  },
-  {
-    _id: "tour003",
-    Name: "Jazz Heritage Tour",
-    Description: "Classic jazz performances in historic venues",
-    artistId: "art003",
-    artistName: "Smooth Jazz Trio",
-    totalEvents: 6,
-    startDate: "2025-03-01T00:00:00.000Z",
-    endDate: "2025-05-31T00:00:00.000Z",
-    FilterationDateTime: "2024-12-01T09:45:00.000Z",
-    createdAt: "01-12-2024 09:45:00",
-    status: 0,
-    cities: ["New Orleans", "Chicago", "New York", "San Francisco", "Detroit", "Memphis"],
-    __v: 0,
-  },
-  {
-    _id: "tour004",
-    Name: "Indie Rock Circuit",
-    Description: "Independent rock music tour supporting emerging artists",
-    artistId: "art004",
-    artistName: "Indie Collective",
-    totalEvents: 10,
-    startDate: "2025-07-01T00:00:00.000Z",
-    endDate: "2025-09-30T00:00:00.000Z",
-    FilterationDateTime: "2025-03-20T12:00:00.000Z",
-    createdAt: "20-03-2025 12:00:00",
-    status: 2,
-    cities: ["Portland", "Seattle", "San Francisco", "Los Angeles", "Phoenix", "Denver"],
-    __v: 0,
-  },
-]
-
-const mockArtists = [
-  { _id: "art001", artistName: "The Rockers" },
-  { _id: "art002", artistName: "DJ Sparkle" },
-  { _id: "art003", artistName: "Smooth Jazz Trio" },
-  { _id: "art004", artistName: "Indie Collective" },
-  { _id: "art005", artistName: "Classical Orchestra" },
-]
 
 const ITEMS_PER_PAGE = 10
 
@@ -169,33 +80,22 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedTour, setSelectedTour] = React.useState<EventTour | null>(null)
-  const [useMockData, setUseMockData] = React.useState(false)
-  const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Form state
   const [formData, setFormData] = React.useState({
     tourName: "",
     tourDescription: "",
-    artistId: "",
-    startDate: "",
-    endDate: "",
-    cities: "",
+    imageFiles: [] as File[],
   })
 
   // API function to fetch event tours
   const fetchEventTours = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
       setLoading(true)
-      setApiError(null)
 
       const authToken = getValidToken()
       if (!user || !authToken) {
-        console.warn("No user or auth token available, using mock data")
-        setEventTours(mockEventTours)
-        setUseMockData(true)
-        setTotalPages(1)
-        setTotalEventTours(mockEventTours.length)
-        return
+        throw new Error("Authentication required")
       }
 
       console.log("Fetching event tours with pagination:")
@@ -228,31 +128,31 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       }
 
       // Set the data from API
-      setEventTours(data.data.EventTourData || [])
+      setEventTours(data.data.EventToursData || [])
       setTotalPages(data.data.totalPages || 1)
       setTotalEventTours(data.data.totalEventTours || 0)
       setCurrentPage(data.data.currentPage || 1)
-      setUseMockData(false)
 
-      toast({
-        title: "Success",
-        description: data.message || "Event tours fetched successfully",
+      console.log("State updated with:", {
+        eventTours: data.data.EventToursData?.length || 0,
+        totalPages: data.data.totalPages,
+        totalEventTours: data.data.totalEventTours
       })
+
     } catch (error) {
       console.error("Event tours fetch failed:", error)
-      setApiError("Could not fetch event tours from server")
-      
-      // Fall back to mock data
-      setEventTours(mockEventTours)
-      setUseMockData(true)
-      setTotalPages(1)
-      setTotalEventTours(mockEventTours.length)
       
       toast({
-        title: "API Error",
-        description: "Could not fetch event tours from server. Using sample data instead.",
+        title: "Error",
+        description: "Failed to fetch event tours. Please try again.",
         variant: "destructive",
       })
+
+      // Reset state on error
+      setEventTours([])
+      setTotalPages(1)
+      setTotalEventTours(0)
+      setCurrentPage(1)
     } finally {
       setLoading(false)
     }
@@ -268,12 +168,11 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     if (!searchTerm) return eventTours
     return eventTours.filter(
       (tour) =>
-        getEventTourName(tour).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (tour.artistName && tour.artistName.toLowerCase().includes(searchTerm.toLowerCase())),
+        (tour.Name && tour.Name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (tour.Description && tour.Description.toLowerCase().includes(searchTerm.toLowerCase())),
     )
   }, [eventTours, searchTerm])
 
-  // For paginated API, we don't slice here since API handles pagination
   const currentTours = filteredTours
 
   const handlePageChange = (page: number) => {
@@ -281,10 +180,10 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   }
 
   const handleCreateTour = async () => {
-    if (!formData.tourName.trim() || !formData.artistId || !formData.startDate || !formData.endDate) {
+    if (!formData.tourName.trim()) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Tour name is required",
         variant: "destructive",
       })
       return
@@ -292,43 +191,60 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const selectedArtist = mockArtists.find((artist) => artist._id === formData.artistId)
-      const citiesArray = formData.cities
-        .split(",")
-        .map((city) => city.trim())
-        .filter(Boolean)
-
-      const newTour: EventTour = {
-        _id: `tour${Date.now()}`,
-        Name: formData.tourName,
-        Description: formData.tourDescription,
-        artistId: formData.artistId,
-        artistName: selectedArtist?.artistName || "Unknown Artist",
-        totalEvents: citiesArray.length,
-        startDate: new Date(formData.startDate).toISOString(),
-        endDate: new Date(formData.endDate).toISOString(),
-        FilterationDateTime: new Date().toISOString(),
-        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
-        status: 1,
-        cities: citiesArray,
-        __v: 0,
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to create event tours.",
+          variant: "destructive",
+        })
+        return
       }
 
-      setEventTours([newTour, ...eventTours])
-      setIsCreateDialogOpen(false)
-      setFormData({ tourName: "", tourDescription: "", artistId: "", startDate: "", endDate: "", cities: "" })
+      // Create FormData for multipart/form-data request
+      const formDataToSend = new FormData()
+      formDataToSend.append("Name", formData.tourName)
+      if (formData.tourDescription) {
+        formDataToSend.append("Description", formData.tourDescription)
+      }
+      
+      // Add images if selected
+      formData.imageFiles.forEach((file) => {
+        formDataToSend.append("EventTourImages", file)
+      })
+
+      const response = await fetch(eventTourEndPoint.EVENT_TOUR_CREATION_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type, let browser set it for FormData
+        },
+        body: formDataToSend,
+      })
+
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || "Failed to create event tour")
+      }
 
       toast({
         title: "Success",
-        description: "Event tour created successfully",
+        description: "Event tour created successfully!",
       })
-    } catch (error) {
+
+      setIsCreateDialogOpen(false)
+      resetForm()
+      
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error("Event tour creation failed:", error)
       toast({
         title: "Error",
-        description: "Failed to create event tour",
+        description: error.message || "Failed to create event tour. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -337,7 +253,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   }
 
   const handleEditTour = async () => {
-    if (!selectedTour || !formData.tourName.trim() || !formData.artistId) {
+    if (!selectedTour || !formData.tourName.trim()) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
@@ -348,52 +264,53 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to update event tours.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const selectedArtist = mockArtists.find((artist) => artist._id === formData.artistId)
-      const citiesArray = formData.cities
-        .split(",")
-        .map((city) => city.trim())
-        .filter(Boolean)
-
-      const updatedTours = eventTours.map((tour) =>
-        tour._id === selectedTour._id
-          ? {
-              ...tour,
-              Name: formData.tourName,
-              Description: formData.tourDescription,
-              artistId: formData.artistId,
-              artistName: selectedArtist?.artistName || "Unknown Artist",
-              startDate: new Date(formData.startDate).toISOString(),
-              endDate: new Date(formData.endDate).toISOString(),
-              cities: citiesArray,
-              totalEvents: citiesArray.length,
-              updatedAt: new Date().toISOString(),
-            }
-          : tour,
-      )
-
-      setEventTours(updatedTours)
-      setIsEditDialogOpen(false)
-      setSelectedTour(null)
-      setFormData({
-        tourName: "",
-        tourDescription: "",
-        artistId: "",
-        startDate: "",
-        endDate: "",
-        cities: "",
+      const response = await fetch(eventTourEndPoint.EVENT_TOUR_DATA_UPDATED, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          eventTour_id: selectedTour._id,
+          Name: formData.tourName,
+          Description: formData.tourDescription,
+        }),
       })
+
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || "Failed to update event tour")
+      }
 
       toast({
         title: "Success",
         description: "Event tour updated successfully",
       })
-    } catch (error) {
+
+      setIsEditDialogOpen(false)
+      setSelectedTour(null)
+      resetForm()
+      
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error("Event tour update failed:", error)
       toast({
         title: "Error",
-        description: "Failed to update event tour",
+        description: error.message || "Failed to update event tour. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -404,19 +321,47 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   const handleDeleteTour = async (tourId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to delete event tours.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      setEventTours(eventTours.filter((tour) => tour._id !== tourId))
+      const response = await fetch(eventTourEndPoint.EVENT_TOUR_DELETE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          eventTour_id: tourId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || "Failed to delete event tour")
+      }
 
       toast({
         title: "Success",
         description: "Event tour deleted successfully",
       })
-    } catch (error) {
+
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error("Event tour deletion failed:", error)
       toast({
         title: "Error",
-        description: "Failed to delete event tour",
+        description: error.message || "Failed to delete event tour. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -424,32 +369,104 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     }
   }
 
-  const handleToggleStatus = async (tourId: string, newStatus: number) => {
+  const handleDeleteTourImage = async (tourId: string, imageId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to delete images.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const updatedTours = eventTours.map((tour) =>
-        tour._id === tourId
-          ? {
-              ...tour,
-              status: newStatus,
-              updatedAt: new Date().toISOString(),
-            }
-          : tour,
-      )
+      const response = await fetch(eventTourEndPoint.EVENT_TOUR_IMAGE_REMOVE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          eventTour_id: tourId,
+          image_id: imageId,
+        }),
+      })
 
-      setEventTours(updatedTours)
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || "Failed to delete image")
+      }
 
       toast({
         title: "Success",
-        description: "Tour status updated successfully",
+        description: "Image deleted successfully",
       })
-    } catch (error) {
+
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error("Image deletion failed:", error)
       toast({
         title: "Error",
-        description: "Failed to update tour status",
+        description: error.message || "Failed to delete image. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleUploadTourImage = async (tourId: string, imageFile: File) => {
+    setLoading(true)
+    try {
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to upload images.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const formDataToSend = new FormData()
+      formDataToSend.append("eventTour_id", tourId)
+      formDataToSend.append("EventTourImage", imageFile)
+
+      const response = await fetch(eventTourEndPoint.EVENT_TOUR_UPLOAD_IMAGE, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type, let browser set it for FormData
+        },
+        body: formDataToSend,
+      })
+
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || "Failed to upload image")
+      }
+
+      toast({
+        title: "Success",
+        description: "Image uploaded successfully",
+      })
+
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error("Image upload failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload image. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -460,12 +477,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   const openEditDialog = (tour: EventTour) => {
     setSelectedTour(tour)
     setFormData({
-      tourName: getEventTourName(tour),
-      tourDescription: getEventTourDescription(tour),
-      artistId: tour.artistId || "",
-      startDate: tour.startDate ? tour.startDate.split("T")[0] : "",
-      endDate: tour.endDate ? tour.endDate.split("T")[0] : "",
-      cities: tour.cities ? tour.cities.join(", ") : "",
+      tourName: tour.Name || "",
+      tourDescription: tour.Description || "",
+      imageFiles: [],
     })
     setIsEditDialogOpen(true)
   }
@@ -474,33 +488,20 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     setFormData({
       tourName: "",
       tourDescription: "",
-      artistId: "",
-      startDate: "",
-      endDate: "",
-      cities: "",
+      imageFiles: [],
     })
     setSelectedTour(null)
   }
 
-  const getEventTourName = (tour: EventTour): string => {
-    return tour.Name || tour.tourName || "Untitled Tour"
-  }
-
-  const getEventTourDescription = (tour: EventTour): string => {
-    return tour.Description || tour.tourDescription || "No description available"
-  }
-
-  const getStatusDisplay = (status: number): { text: string; variant: "default" | "secondary" | "destructive" } => {
-    switch (status) {
-      case 1:
-        return { text: "Active", variant: "default" }
-      case 0:
-        return { text: "Completed", variant: "secondary" }
-      case 2:
-        return { text: "Cancelled", variant: "destructive" }
-      default:
-        return { text: "Unknown", variant: "secondary" }
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFormData({ ...formData, imageFiles: Array.from(e.target.files) })
     }
+  }
+
+  const removeImageFile = (index: number) => {
+    const newFiles = formData.imageFiles.filter((_, i) => i !== index)
+    setFormData({ ...formData, imageFiles: newFiles })
   }
 
   if (role !== "superadmin") {
@@ -527,34 +528,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
               <DialogDescription>Add a new event tour to the system.</DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tourName">Tour Name *</Label>
-                  <Input
-                    id="tourName"
-                    value={formData.tourName}
-                    onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
-                    placeholder="Enter tour name"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="artistId">Artist *</Label>
-                  <Select
-                    value={formData.artistId}
-                    onValueChange={(value) => setFormData({ ...formData, artistId: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select artist" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {mockArtists.map((artist) => (
-                        <SelectItem key={artist._id} value={artist._id}>
-                          {artist.artistName}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="tourName">Tour Name *</Label>
+                <Input
+                  id="tourName"
+                  value={formData.tourName}
+                  onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
+                  placeholder="Enter tour name"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tourDescription">Description</Label>
@@ -566,34 +547,35 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   rows={3}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date *</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date *</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={formData.endDate}
-                    onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
-                <Label htmlFor="cities">Cities (comma-separated)</Label>
+                <Label htmlFor="imageFiles">Images</Label>
                 <Input
-                  id="cities"
-                  value={formData.cities}
-                  onChange={(e) => setFormData({ ...formData, cities: e.target.value })}
-                  placeholder="New York, Los Angeles, Chicago"
+                  id="imageFiles"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageFileChange}
                 />
+                {formData.imageFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Selected files:</p>
+                    <div className="space-y-1">
+                      {formData.imageFiles.map((file, index) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <span className="text-sm truncate">{file.name}</span>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeImageFile(index)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -615,7 +597,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
           <div className="relative max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
             <Input
-              placeholder="Search tours or artists..."
+              placeholder="Search tours..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -628,60 +610,64 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       <Card>
         <CardHeader>
           <CardTitle>All Event Tours</CardTitle>
-          <CardDescription>Manage event tours and multi-city performances.</CardDescription>
+          <CardDescription>Manage event tours and their details.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Tour Name</TableHead>
-                <TableHead>Artist</TableHead>
-                <TableHead className="hidden md:table-cell">Events</TableHead>
-                <TableHead className="hidden md:table-cell">Duration</TableHead>
-                <TableHead className="hidden lg:table-cell">Cities</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>
-                  <span className="sr-only">Actions</span>
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {currentTours.length === 0 ? (
+          {loading && currentTours.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading event tours...
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
-                    No event tours found
-                  </TableCell>
+                  <TableHead>Image</TableHead>
+                  <TableHead>Tour Name</TableHead>
+                  <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead className="hidden md:table-cell">Created</TableHead>
+                  <TableHead>
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
                 </TableRow>
-              ) : (
-                currentTours.map((tour) => {
-                  const statusDisplay = getStatusDisplay(tour.status)
-                  return (
+              </TableHeader>
+              <TableBody>
+                {currentTours.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      No event tours found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  currentTours.map((tour) => (
                     <TableRow key={tour._id}>
-                      <TableCell className="font-medium">{getEventTourName(tour)}</TableCell>
-                      <TableCell>{tour.artistName}</TableCell>
+                      <TableCell>
+                        {tour.Images && tour.Images.length > 0 ? (
+                          <div className="relative w-12 h-12">
+                            <Image
+                              src={tour.Images[0].image_path}
+                              alt={tour.Name || "Tour image"}
+                              fill
+                              className="object-cover rounded"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                            <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="font-medium">{tour.Name || "Untitled Tour"}</TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="max-w-xs truncate">
+                          {tour.Description || "No description"}
+                        </div>
+                      </TableCell>
                       <TableCell className="hidden md:table-cell">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {tour.totalEvents}
+                          {new Date(tour.createdAt).toLocaleDateString()}
                         </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {tour.startDate ? new Date(tour.startDate).toLocaleDateString() : "N/A"} -{" "}
-                        {tour.endDate ? new Date(tour.endDate).toLocaleDateString() : "N/A"}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-4 w-4" />
-                          <span className="truncate max-w-xs">
-                            {tour.cities ? tour.cities.slice(0, 3).join(", ") : "No cities"}
-                          </span>
-                          {tour.cities && tour.cities.length > 3 && (
-                            <span>+{tour.cities.length - 3} more</span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={statusDisplay.variant}>{statusDisplay.text}</Badge>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -697,21 +683,6 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
-                            {tour.status === 1 && (
-                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 0)}>
-                                Mark as Completed
-                              </DropdownMenuItem>
-                            )}
-                            {tour.status === 1 && (
-                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 2)}>
-                                Cancel Tour
-                              </DropdownMenuItem>
-                            )}
-                            {tour.status !== 1 && (
-                              <DropdownMenuItem onClick={() => handleToggleStatus(tour._id, 1)}>
-                                Reactivate Tour
-                              </DropdownMenuItem>
-                            )}
                             <DropdownMenuItem
                               onClick={() => handleDeleteTour(tour._id)}
                               className="text-red-600"
@@ -723,11 +694,11 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
 
           {totalPages > 1 && (
             <Pagination className="mt-6">
@@ -777,40 +748,20 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Event Tour</DialogTitle>
-            <DialogDescription>Update the event tour information.</DialogDescription>
+            <DialogDescription>Update the event tour information and manage images.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editTourName">Tour Name *</Label>
-                <Input
-                  id="editTourName"
-                  value={formData.tourName}
-                  onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
-                  placeholder="Enter tour name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editArtistId">Artist *</Label>
-                <Select
-                  value={formData.artistId}
-                  onValueChange={(value) => setFormData({ ...formData, artistId: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select artist" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {mockArtists.map((artist) => (
-                      <SelectItem key={artist._id} value={artist._id}>
-                        {artist.artistName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="editTourName">Tour Name *</Label>
+              <Input
+                id="editTourName"
+                value={formData.tourName}
+                onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
+                placeholder="Enter tour name"
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="editTourDescription">Description</Label>
@@ -822,34 +773,84 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 rows={3}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            
+            {/* Current Images */}
+            {selectedTour && selectedTour.Images && selectedTour.Images.length > 0 && (
               <div className="space-y-2">
-                <Label htmlFor="editStartDate">Start Date *</Label>
-                <Input
-                  id="editStartDate"
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                />
+                <Label>Current Images</Label>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {selectedTour.Images.map((image) => (
+                    <div key={image._id} className="relative group">
+                      <div className="relative w-full h-24">
+                        <Image
+                          src={image.image_path}
+                          alt="Tour image"
+                          fill
+                          className="object-cover rounded border"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDeleteTourImage(selectedTour._id, image._id)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="editEndDate">End Date *</Label>
-                <Input
-                  id="editEndDate"
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                />
-              </div>
-            </div>
+            )}
+
+            {/* Add New Images */}
             <div className="space-y-2">
-              <Label htmlFor="editCities">Cities (comma-separated)</Label>
+              <Label htmlFor="editImageFiles">Add New Images</Label>
               <Input
-                id="editCities"
-                value={formData.cities}
-                onChange={(e) => setFormData({ ...formData, cities: e.target.value })}
-                placeholder="New York, Los Angeles, Chicago"
+                id="editImageFiles"
+                type="file"
+                multiple
+                accept="image/*"
+                onChange={handleImageFileChange}
               />
+              {formData.imageFiles.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">New files to upload:</p>
+                  <div className="space-y-1">
+                    {formData.imageFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-muted rounded">
+                        <span className="text-sm truncate">{file.name}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeImageFile(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      if (selectedTour && formData.imageFiles.length > 0) {
+                        formData.imageFiles.forEach(file => {
+                          handleUploadTourImage(selectedTour._id, file)
+                        })
+                        setFormData({ ...formData, imageFiles: [] })
+                      }
+                    }}
+                    disabled={loading}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    Upload Selected Images
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

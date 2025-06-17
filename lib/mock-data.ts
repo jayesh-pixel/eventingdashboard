@@ -88,33 +88,23 @@ export const mockEvents: Event[] = [
 export const mockArtists: Artist[] = [
   {
     _id: "art001",
-    artistName: "DJ Sparkle",
-    artistDescription: "Electronic music producer and DJ",
-    genre: "EDM",
-    country: "USA",
-    artistImage: "/placeholder.svg?height=200&width=200",
+    Name: "DJ Sparkle",
+    Description: "Electronic music producer and DJ",
     createdAt: "2025-01-10T08:30:00.000Z",
-    updatedAt: "2025-01-15T14:45:00.000Z",
+    status: 1,
   },
   {
     _id: "art002",
-    artistName: "The Rockers",
-    artistDescription: "Classic rock band with over 20 years of experience",
-    genre: "Rock",
-    country: "UK",
-    artistImage: "/placeholder.svg?height=200&width=200",
+    Name: "The Rockers",
+    Description: "Classic rock band with over 20 years of experience",
     createdAt: "2025-02-05T10:15:00.000Z",
-    updatedAt: "2025-02-10T16:30:00.000Z",
-  },
-  {
+    status: 1,
+  },  {
     _id: "art003",
-    artistName: "Smooth Jazz Trio",
-    artistDescription: "Award-winning jazz ensemble",
-    genre: "Jazz",
-    country: "Canada",
-    artistImage: "/placeholder.svg?height=200&width=200",
+    Name: "Smooth Jazz Trio",
+    Description: "Award-winning jazz ensemble",
     createdAt: "2025-03-12T09:45:00.000Z",
-    updatedAt: "2025-03-15T11:20:00.000Z",
+    status: 1,
   },
 ]
 

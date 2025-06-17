@@ -21,6 +21,8 @@ export const artistEndpoints = {
   ARTIST_IMAGE_REMOVE: BASE_URL + "/artist/deleteArtist/image",
   ARTIST_DATA_UPDATED: BASE_URL + "/artist/update/data",
   ARTIST_SEARCH_BY_NAME: BASE_URL + "/artist/getArtistDataBySearchKeyword",
+  ARTIST_DELETE: BASE_URL + "/artist/delete",
+  ARTIST_PAGINATED: BASE_URL + "/artist/getallpaginatedData",
 }
 
 // Categories API
@@ -33,6 +35,7 @@ export const categorieEndPoint = {
   CATEGORIES_IMAGE_REMOVE: BASE_URL + "/category/deleteCategory/image",
   CATEGORIES_DATA_UPDATED: BASE_URL + "/category/update/data",
   CATEGORIE_SEARCH_BY_NAME: BASE_URL + "/category/getCategoryDataBySearchKeyword",
+  CATEGORIES_DELETE: BASE_URL + "/category/delete",
 }
 
 // Genre API
@@ -45,18 +48,23 @@ export const genreEndPoint = {
   GENRE_IMAGE_REMOVE: BASE_URL + "/genre/deleteGenre/image",
   GENRE_DATA_UPDATED: BASE_URL + "/genre/update/data",
   GENRE_SEARCH_BY_NAME: BASE_URL + "/genre/getGenreDataBySearchKeyword",
+  GENRE_DELETE: BASE_URL + "/genre/delete",
 }
 
 // Venue API service
 export const venueEndPoint = {
   VENUE_CREATION_URL: BASE_URL + "/venue/create",
   ALL_VENUE_DATA_LIST: BASE_URL + "/venue/getall",
-  VENUES_PAGINATED_URL: BASE_URL + "/venue/getAllPaginatedData",
+  VENUES_PAGINATED_URL: BASE_URL + "/venue/getallpaginatedData", // Fixed to match swagger
   VENUE_GET_DATA_BY_ID: BASE_URL + "/venue/getById",
   VENUE_UPLOAD_IMAGE: BASE_URL + "/venue/upload/image",
   VENUE_IMAGE_REMOVE: BASE_URL + "/venue/deleteVenue/image",
   VENUE_DATA_UPDATED: BASE_URL + "/venue/update/data",
+  VENUE_DELETE_URL: BASE_URL + "/venue/delete",
   VENUE_SEARCH_BY_NAME: BASE_URL + "/venue/getVenueDataBySearchKeyword",
+  VENUE_SEARCH_PAGINATED: BASE_URL + "/venue/getPaginatedSearch",
+  // Real API URLs based on your working endpoint
+  VENUE_GET_ALL_PAGINATED_REAL: "https://node.eventingclub.in/venue/getAllPaginatedData",
 }
 
 // Event Tour API
@@ -68,6 +76,8 @@ export const eventTourEndPoint = {
   EVENT_TOUR_DATA_UPDATED: BASE_URL + "/eventtour/update/data",
   EVENT_TOUR_SEARCH_BY_NAME: BASE_URL + "/eventtour/getEventTourDataBySearchKeyword",
   EVENT_TOUR_DELETE: BASE_URL + "/eventtour/delete",
+  EVENT_TOUR_UPLOAD_IMAGE: BASE_URL + "/eventtour/upload/image",
+  EVENT_TOUR_IMAGE_REMOVE: BASE_URL + "/eventtour/deleteEventTour/image",
 }
 
 // Organizer API Endpoints
@@ -186,6 +196,10 @@ export const promocodeEndPoint = {
 // Banner API
 export const bannerEndpoint = {
   GET_ALL_BANNERS: BASE_URL + "/homepagebannerslider/getAll",
+  CREATE_BANNER: BASE_URL + "/homepagebannerslider/create",
+  GET_BY_ID: BASE_URL + "/homepagebannerslider/getById",
+  UPDATE_BANNER: BASE_URL + "/homepagebannerslider/updatebyId",
+  DELETE_BANNER: BASE_URL + "/homepagebannerslider/deleteById",
 }
 
 // City Data
@@ -196,10 +210,12 @@ export const getallcityDataEndPoint = {
 // Scanner Users Endpoints
 export const scannerUserEndpoint = {
   GET_ALL: BASE_URL + "/scanneruser/getAll",
-  CREATE: BASE_URL + "/scanneruser/create",
-  UPDATE: BASE_URL + "/scanneruser/update",
-  DELETE: BASE_URL + "/scanneruser/delete",
+  REGISTER: BASE_URL + "/scanneruser/register",
   GET_BY_ID: BASE_URL + "/scanneruser/getById",
+  UPDATE_DETAILS: BASE_URL + "/scanneruser/updateScannerUserDetailsbyId",
+  ENABLE: BASE_URL + "/scanneruser/enable",
+  DISABLE: BASE_URL + "/scanneruser/disable",
+  UPDATE_PASSWORD: BASE_URL + "/scanneruser/updatePassword",
 }
 
 // Leads Endpoints

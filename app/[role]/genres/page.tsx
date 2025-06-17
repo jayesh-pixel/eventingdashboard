@@ -266,7 +266,6 @@ export default function GenresPage({ params }: GenresPageProps) {
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
-
   const handleCreateGenre = async () => {
     if (!formData.genreName.trim()) {
       toast({
@@ -279,40 +278,65 @@ export default function GenresPage({ params }: GenresPageProps) {
 
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const newGenre: Genre = {
-        _id: `gen${Date.now()}`,
-        Name: formData.genreName,
-        Description: formData.genreDescription,
-        Images: formData.genreImage
-          ? [{ image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.genreName)}`, _id: `img${Date.now()}` }]
-          : [],
-        FilterationDateTime: new Date().toISOString(),
-        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
-        status: 1,
-        __v: 0,
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to create genres.",
+          variant: "destructive",
+        })
+        return
       }
 
-      setGenres([newGenre, ...genres])
-      setIsCreateDialogOpen(false)
-      setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      // Create FormData for multipart/form-data request
+      const formDataToSend = new FormData()
+      formDataToSend.append("Name", formData.genreName)
+      if (formData.genreDescription) {
+        formDataToSend.append("Description", formData.genreDescription)
+      }
+      
+      // Add image if selected
+      if (formData.genreImage) {
+        formDataToSend.append("Images", formData.genreImage)
+      }
+
+      const response = await fetch(genreEndPoint.GENRE_CREATION_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type, let browser set it for FormData
+        },
+        body: formDataToSend,
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to create genre")
+      }
 
       toast({
         title: "Success",
-        description: "Genre created successfully",
+        description: "Genre created successfully!",
       })
-    } catch (error) {
+
+      setIsCreateDialogOpen(false)
+      setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      
+      // Refresh the genres list
+      fetchGenres(currentPage)
+
+    } catch (error: any) {
+      console.error("Genre creation failed:", error)
       toast({
         title: "Error",
-        description: "Failed to create genre",
+        description: error.message || "Failed to create genre. Please try again.",
         variant: "destructive",
       })
     } finally {
       setLoading(false)
-    }
-  }
+    }  }
 
   const handleEditGenre = async () => {
     if (!selectedGenre || !formData.genreName.trim()) {
@@ -322,33 +346,49 @@ export default function GenresPage({ params }: GenresPageProps) {
         variant: "destructive",
       })
       return
-    }
-
-    setLoading(true)
+    }    setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to update genres.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const updatedGenres = genres.map((genre) =>
-        genre._id === selectedGenre._id
-          ? {
-              ...genre,
-              Name: formData.genreName,
-              Description: formData.genreDescription,
-              FilterationDateTime: new Date().toISOString(),
-            }
-          : genre,
-      )
+      const response = await fetch(genreEndPoint.GENRE_DATA_UPDATED, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          genre_id: selectedGenre._id,
+          Name: formData.genreName,
+          Description: formData.genreDescription,
+        }),
+      })
 
-      setGenres(updatedGenres)
-      setIsEditDialogOpen(false)
-      setSelectedGenre(null)
-      setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to update genre")
+      }
 
       toast({
         title: "Success",
-        description: "Genre updated successfully",
+        description: "Genre updated successfully!",
       })
+
+      setIsEditDialogOpen(false)
+      setSelectedGenre(null)
+      setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      
+      // Refresh the genres list
+      fetchGenres(currentPage)
     } catch (error) {
       toast({
         title: "Error",
@@ -359,23 +399,49 @@ export default function GenresPage({ params }: GenresPageProps) {
       setLoading(false)
     }
   }
-
   const handleDeleteGenre = async (genreId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to delete genres.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      setGenres(genres.filter((genre) => genre._id !== genreId))
+      const response = await fetch(genreEndPoint.GENRE_DELETE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          genre_id: genreId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to delete genre")
+      }
 
       toast({
         title: "Success",
-        description: "Genre deleted successfully",
+        description: "Genre deleted successfully!",
       })
-    } catch (error) {
+      
+      // Refresh the genres list
+      fetchGenres(currentPage)
+
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to delete genre",
+        description: error.message || "Failed to delete genre. Please try again.",
         variant: "destructive",
       })
     } finally {

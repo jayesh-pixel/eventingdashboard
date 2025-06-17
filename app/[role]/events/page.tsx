@@ -525,108 +525,107 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Date filter functionality
   const handleDateSelection = (option: string) => {
     setDateFilterOption(option)
-    const today = new Date()
-    let startDate = null
-    let endDate = null
+    setIsManual(option === "Manual")
 
-    switch (option) {
-      case "Today":
-        startDate = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString()
-        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
-        setIsManual(false)
-        break
-      case "Yesterday":
-        const yesterday = new Date(today)
-        yesterday.setDate(today.getDate() - 1)
-        startDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()).toISOString()
-        endDate = new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59).toISOString()
-        setIsManual(false)
-        break
-      case "Last 7 Days":
-        const sevenDaysAgo = new Date(today)
-        sevenDaysAgo.setDate(today.getDate() - 7)
-        startDate = new Date(sevenDaysAgo.getFullYear(), sevenDaysAgo.getMonth(), sevenDaysAgo.getDate()).toISOString()
-        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
-        setIsManual(false)
-        break
-      case "Last 1 Month":
-        const oneMonthAgo = new Date(today)
-        oneMonthAgo.setMonth(today.getMonth() - 1)
-        startDate = new Date(oneMonthAgo.getFullYear(), oneMonthAgo.getMonth(), oneMonthAgo.getDate()).toISOString()
-        endDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59).toISOString()
-        setIsManual(false)
-        break
-      case "Manual":
-        setIsManual(true)
-        // Don't set dates automatically for manual selection
-        break
-      default:
-        setIsManual(false)
-        break
-    }
+    if (option !== "Manual") {
+      const currentDate = new Date()
+      let start: Date | null = null
+      let end: Date | null = null
 
-    if (option !== "Manual" && option !== "") {
-      setStartDate(startDate)
-      setEndDate(endDate)
-      // Apply filters immediately for preset options
-      applyFilters(originalData, debouncedSearchTerm, startDate, endDate)
-    } else if (option === "") {
-      // Clear date filters
-      setStartDate(null)
-      setEndDate(null)
-      setIsManual(false)
-      applyFilters(originalData, debouncedSearchTerm, null, null)
+      switch (option) {
+        case "Today":
+          start = new Date(currentDate.setHours(0, 1, 1, 0))
+          end = new Date(currentDate.setHours(23, 59, 59, 999))
+          break
+        case "Yesterday":
+          start = new Date(currentDate.setDate(currentDate.getDate() - 1))
+          start.setHours(0, 1, 1, 0)
+          end = new Date(start)
+          end.setHours(23, 59, 59, 999)
+          break
+        case "Last 7 Days":
+          start = new Date(currentDate.setDate(currentDate.getDate() - 7))
+          start.setHours(0, 1, 1, 0)
+          end = new Date()
+          end.setHours(23, 59, 59, 999)
+          break
+        case "Last 1 Month":
+          start = new Date(currentDate.setMonth(currentDate.getMonth() - 1))
+          start.setHours(0, 1, 1, 0)
+          end = new Date()
+          end.setHours(23, 59, 59, 999)
+          break
+        default:
+          start = null
+          end = null
+      }
+
+      if (start && end) {
+        setStartDate(start.toISOString())
+        setEndDate(end.toISOString())
+        dateFilterApiCall(start.toISOString(), end.toISOString())
+      }
     }
   }
 
-  // Handle manual date selection
-  const handleManualDateChange = (type: 'start' | 'end', value: string) => {
-    if (type === 'start') {
-      const newStartDate = value ? new Date(value).toISOString() : null
-      setStartDate(newStartDate)
-      applyFilters(originalData, debouncedSearchTerm, newStartDate, endDate)
+  const handleManualDateChange = (value: string, type: "start" | "end") => {
+    if (type === "start") {
+      setStartDate(value)
     } else {
-      const newEndDate = value ? new Date(value + 'T23:59:59').toISOString() : null
-      setEndDate(newEndDate)
-      applyFilters(originalData, debouncedSearchTerm, startDate, newEndDate)
+      setEndDate(value)
     }
   }
 
-  // Apply all filters to the events data
-  const applyFilters = (data: any[], searchTerm: string, filterStartDate: string | null, filterEndDate: string | null) => {
-    let filteredData = [...data]
-
-    // Apply search filter
-    if (searchTerm && searchTerm.trim() !== "") {
-      filteredData = filteredData.filter((event) =>
-        event.eventName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        event.organizerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        event.venueName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        event.city?.toLowerCase().includes(searchTerm.toLowerCase())
-      )
+  const handleManualSubmit = () => {
+    if (startDate && endDate) {
+      dateFilterApiCall(startDate, endDate)
     }
+  }
 
-    // Apply date filter
-    if (filterStartDate && filterEndDate) {
-      filteredData = filteredData.filter((event) => {
-        if (!event.eventStartDate) return false
-        
-        const eventDate = new Date(event.eventStartDate)
-        const startFilter = new Date(filterStartDate)
-        const endFilter = new Date(filterEndDate)
-        
-        return eventDate >= startFilter && eventDate <= endFilter
+  const dateFilterApiCall = async (startDateApiCall: string, endDateApiCall: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      const payload = {
+        AdminRole: 4, // Promoter role ID
+        user_id: user.user_id,
+        startDate: startDateApiCall,
+        endDate: endDateApiCall,
+      }
+
+      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
       })
-    }
 
-    setAllEventsData(filteredData)
-    setCurrentPage(1) // Reset to first page when filters change
-    
-    // Show toast notification for filter results
-    if (searchTerm || filterStartDate) {
+      if (response.ok) {
+        const data = await response.json()
+        const eventsArray = data.data || []
+        const normalizedEvents = normalizeEventsData(eventsArray)
+        setAllEventsData(normalizedEvents)
+        toast({
+          title: "Success",
+          description: data.message || "Events filtered successfully",
+        })
+      } else {
+        setAllEventsData([])
+        toast({
+          title: "No Data",
+          description: "No events found for the selected date range",
+        })
+      }
+    } catch (error) {
+      console.error("Date filter error:", error)
+      setAllEventsData([])
       toast({
-        title: "Filters Applied",
-        description: `Found ${filteredData.length} event(s) matching your criteria`,
+        title: "Error",
+        description: "Failed to filter events by date",
+        variant: "destructive",
       })
     }
   }
@@ -715,10 +714,11 @@ export default function EventsPage({ params }: EventsPageProps) {
       description: "Promoter link copied to clipboard!",
     })
   }
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "INR",
+      currency: "USD",
     }).format(amount)
   }
 
@@ -738,14 +738,13 @@ export default function EventsPage({ params }: EventsPageProps) {
       timeZone: "UTC",
     })
   }
+
   const formatDateForDisplay = (dateString: string) => {
     if (!dateString) return "N/A"
-    const date = new Date(dateString)
-    return date.toLocaleDateString("en-GB", {
+    return new Date(dateString).toLocaleDateString("en-GB", {
       day: "numeric",
       month: "long",
       year: "numeric",
-      timeZone: "UTC"
     })
   }
 
@@ -770,9 +769,10 @@ export default function EventsPage({ params }: EventsPageProps) {
     // Navigate to reports page to check bookings for this event
     window.open(`/${role}/events/${eventId}/report`, '_blank')
   }
+
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    window.location.href = `/${role}/events/${eventId}/booking-tickets`
+    window.open(`/${role}/events/${eventId}/booking-tickets`, '_blank')
   }
 
   if (loading) {
@@ -794,19 +794,39 @@ export default function EventsPage({ params }: EventsPageProps) {
     )
   }
   return (
-    <div className="flex flex-col gap-4 sm:gap-6">      {/* Header */}
+    <div className="flex flex-col gap-4 sm:gap-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold">
           {(role as UserRole) === "promoter" ? "" : "Events Management"}
         </h1>
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full sm:w-auto">
-          {canAddEvent && (
+          {(role as UserRole) === "promoter" && (
+            <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg">
+              <Button
+                variant={viewMode === "cards" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("cards")}
+                className={`text-xs sm:text-sm ${viewMode === "cards" ? "shadow-sm" : ""}`}
+              >
+                Cards
+              </Button>
+              <Button
+                variant={viewMode === "table" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("table")}
+                className={`text-xs sm:text-sm ${viewMode === "table" ? "shadow-sm" : ""}`}
+              >
+                Table
+              </Button>
+            </div>
+          )}          {canAddEvent && (
             <Button onClick={handleCreateEvent} className="w-full sm:w-auto text-sm">
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Event
             </Button>
           )}
         </div>
-      </div>{/* Enhanced Search Bar and Filters */}
+      </div>      {/* Enhanced Search Bar and Filters */}
       <Card className="border-0 shadow-lg bg-gradient-to-r from-card/90 to-card/95 backdrop-blur-sm">
         <CardContent className="p-4 sm:p-6">
           <div className="flex flex-col gap-4">
@@ -824,9 +844,12 @@ export default function EventsPage({ params }: EventsPageProps) {
                 disabled={searchLoading}
               />
               <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
-            </div>            {/* Filters Row */}
+            </div>
+
+            {/* Filters Row */}
             {(role as UserRole) === "promoter" && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">                {/* Date Filter Dropdown */}
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                {/* Date Filter Dropdown */}
                 <div className="flex-1 sm:flex-none">
                   <select
                     className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
@@ -842,68 +865,39 @@ export default function EventsPage({ params }: EventsPageProps) {
                   </select>
                 </div>
 
-                {/* Manual Date Selection - Show when "Manual" is selected */}
+                {/* Manual Date Selection */}
                 {isManual && (
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        Start Date
-                      </label>
+                  <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">Start Date</label>
                       <Input
                         type="date"
-                        value={startDate ? new Date(startDate).toISOString().split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange('start', e.target.value)}
-                        className="w-full border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                        value={startDate ? startDate.split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange(e.target.value, "start")}
+                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
                       />
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-muted-foreground mb-2">
-                        End Date
-                      </label>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-xs font-medium text-muted-foreground">End Date</label>
                       <Input
                         type="date"
-                        value={endDate ? new Date(endDate).toISOString().split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange('end', e.target.value)}
-                        className="w-full border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                        value={endDate ? endDate.split('T')[0] : ''}
+                        onChange={(e) => handleManualDateChange(e.target.value, "end")}
+                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
                       />
+                    </div>
+                    <div className="flex flex-col justify-end">
+                      <Button 
+                        onClick={handleManualSubmit} 
+                        size="sm" 
+                        className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+                        disabled={!startDate || !endDate}
+                      >
+                        ✅ Apply Dates
+                      </Button>
                     </div>
                   </div>
                 )}
-
-                {/* View Toggle for Promoters - Beside Date Filter */}
-                <div className="flex items-center gap-2 bg-muted/50 dark:bg-muted/20 p-1 rounded-lg border border-border/30">
-                  <Button
-                    variant={viewMode === "cards" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("cards")}
-                    className={`text-xs sm:text-sm ${viewMode === "cards" ? "shadow-sm" : ""}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="grid grid-cols-2 gap-0.5 w-3 h-3">
-                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
-                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
-                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
-                        <div className="w-1 h-1 bg-current rounded-[1px]"></div>
-                      </div>
-                      Cards
-                    </div>
-                  </Button>
-                  <Button
-                    variant={viewMode === "table" ? "default" : "ghost"}
-                    size="sm"
-                    onClick={() => setViewMode("table")}
-                    className={`text-xs sm:text-sm ${viewMode === "table" ? "shadow-sm" : ""}`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="flex flex-col gap-0.5 w-3 h-3">
-                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
-                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
-                        <div className="w-3 h-0.5 bg-current rounded-[1px]"></div>
-                      </div>
-                      Table
-                    </div>
-                  </Button>
-                </div>
 
                 {/* Actions */}
                 <div className="flex gap-2 sm:ml-auto">
@@ -919,6 +913,16 @@ export default function EventsPage({ params }: EventsPageProps) {
                       Reset
                     </Button>
                   )}
+                            {(role as UserRole) !== "promoter" && (
+
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
+                  >
+                    <Download className="mr-2 h-4 w-4" /> Export
+                  </Button>
+                            )}
                 </div>
               </div>
             )}
@@ -934,9 +938,10 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <Download className="mr-2 h-4 w-4" /> Export
                 </Button>
               </div>
-            )}          </div>
+            )}
+          </div>
         </CardContent>
-      </Card>{/* Enhanced Tabs */}
+      </Card>      {/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
         <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
                   {(role as UserRole) !== "promoter" && (
@@ -961,7 +966,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-visible">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
               {currentEvents.length === 0 ? (                
                 <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
@@ -980,78 +985,178 @@ export default function EventsPage({ params }: EventsPageProps) {
                     </Button>
                   </div>
                 </div>
-              ) : (                currentEvents.map((event) => (                  <Card
+              ) : (
+                currentEvents.map((event) => (
+                  <Card
                     key={event._id}
-                    className="group hover:shadow-lg transition-all duration-300 border border-border/50 bg-card hover:bg-card/90 cursor-pointer overflow-hidden"
-                    style={{ maxWidth: 320, minWidth: 280, width: "100%" }}
+                    className="group overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
+                    style={{ maxWidth: 410, minWidth: 340, width: "100%" }} // Increased card width
                   >
-                    {/* Compact Image Section */}
+                    {/* Enhanced Image Section with Overlay Effects */}
                     <div className="relative overflow-hidden">
-                      <div className="aspect-[16/9] overflow-hidden">
+                      <div className="aspect-[16/10] overflow-hidden">
                         <img
                           src={event.eventImage || "/placeholder.svg"}
                           alt={event.eventName}
-                          className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
+                          className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
                         />
                       </div>
                       
-                      {/* Status Badge */}
-                      <div className="absolute top-2 right-2">
+                      {/* Gradient overlays */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-70 transition-opacity duration-300" />
+                      <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />                      
+                      {/* Status Badge with enhanced styling */}
+                      <div className="absolute top-4 right-4">
                         <Badge 
                           variant={getStatusBadgeVariant(event.eventStatus)} 
-                          className="text-xs bg-background/90 backdrop-blur-sm"
+                          className="shadow-lg backdrop-blur-md bg-background/90 border-background/20 text-xs font-medium px-3 py-1"
                         >
                           {normalizeEventStatus(event.eventStatus)}
                         </Badge>
                       </div>
-                    </div>
 
-                    {/* Compact Content Section */}
-                    <div className="p-4 space-y-3">
-                      {/* Event Title */}
-                      <h3 className="font-bold text-base leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
-                        {event.eventName}
-                      </h3>
-                      
-                      {/* Event Description */}
-                      <div className="text-sm text-muted-foreground line-clamp-4 leading-relaxed">
-                        {stripHtmlTags(event.eventDescription)}
+                      {/* Featured Badge with enhanced styling */}
+                      {event.featuredEvent && (
+                        <div className="absolute top-4 left-4">
+                          <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm">
+                            <Star className="h-3 w-3 fill-current" />
+                            Featured
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quick Action Overlay with improved positioning */}
+                      <div className="absolute bottom-4 left-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            className="flex-1 bg-white/95 hover:bg-white text-black border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCheckReport(event._id)
+                            }}
+                          >
+                            <BarChart3 className="h-3 w-3 mr-1.5" />
+                            Analytics
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="flex-1 bg-primary/95 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleBookTicket(event._id, event.arrangedEventDateTime)
+                            }}
+                          >
+                            <DollarSign className="h-3 w-3 mr-1.5" />
+                            Book Now
+                          </Button>
+                        </div>
+                      </div>
+                    </div>                    {/* Enhanced Content Section */}
+                    <div className="p-5 space-y-4 overflow-visible">
+                      {/* Header with improved typography */}
+                      <div className="space-y-2">
+                        <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
+                          {event.eventName}
+                        </h3>
+                        <div 
+                          className="text-sm text-muted-foreground line-clamp-3 leading-relaxed"
+                          dangerouslySetInnerHTML={{ 
+                            __html: stripHtmlTags(event.eventDescription).length > 100 
+                              ? stripHtmlTags(event.eventDescription).substring(0, 100) + '...' 
+                              : stripHtmlTags(event.eventDescription)
+                          }}
+                        />
                       </div>
 
-                      {/* Event Details - Date, Time, Location */}
-                      <div className="space-y-2 text-sm">
-                        <div className="font-medium text-foreground">
-                          {formatDateForDisplay(event.eventStartDate)}
+                      {/* Event Details Grid with enhanced styling */}
+                      <div className="space-y-3">
+                        {/* Date & Time */}
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
+                          <div className="flex items-center gap-2 flex-1">
+                            <Calendar className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-medium">{formatDate(event.eventStartDate)}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="font-medium">{formatTime(event.eventStartDate)}</span>
+                          </div>
                         </div>
-                        <div className="font-medium text-foreground">
-                          {formatTime(event.eventStartDate)}
+
+                        {/* Location */}
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
+                          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                          <div className="flex-1">
+                            <span className="font-medium block truncate">
+                              {event.venueName}
+                            </span>
+                            <span className="text-muted-foreground text-xs">
+                              {event.city}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-muted-foreground">
-                          {event.city}
+
+                        {/* Organizer */}
+                        <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
+                          <Users className="h-4 w-4 text-primary flex-shrink-0" />
+                          <span className="font-medium truncate">{event.organizerName}</span>
                         </div>
                       </div>
+                      {/* Enhanced badges and info sections */}
+                      <div className="space-y-3">
+                        {/* Category */}
+                        {event.categoryName && (
+                          <div className="flex items-center justify-center">
+                            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 font-medium px-3 py-1">
+                              🎯 {event.categoryName}
+                            </Badge>
+                          </div>
+                        )}
 
-                      {/* Action Buttons */}
-                      <div className="flex gap-2 pt-2">
+                        {/* Additional Info sections with improved styling */}
+                        {event.bestSuitedFor && (
+                          <div className="p-3 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
+                            <div className="text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
+                              👥 Best suited for age {event.bestSuitedFor}+
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Contact Info */}
+                        {event.bookingPhoneNumber && (
+                          <div className="p-3 bg-gradient-to-r from-green-50/80 to-green-100/80 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
+                            <div className="flex items-center justify-center gap-2 text-sm">
+                              <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
+                              <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Desktop Action Buttons with improved styling */}
+                      <div className="flex gap-3 pt-2 overflow-visible">
                         <Button 
                           size="sm" 
                           variant="outline"
-                          className="flex-1 text-xs h-8 border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200" 
+                          className="flex-1 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 font-medium" 
                           onClick={(e) => {
                             e.stopPropagation()
                             handleCheckReport(event._id)
                           }}
                         >
-                          Check Report
+                          <BarChart3 className="h-4 w-4 mr-2" />
+                          View Report
                         </Button>
                         <Button 
                           size="sm" 
-                          className="flex-1 text-xs h-8 bg-primary hover:bg-primary/90 transition-all duration-200"
+                          className="flex-1 text-sm bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/85 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
+                          style={{ minWidth: 0, whiteSpace: "nowrap" }}
                           onClick={(e) => {
                             e.stopPropagation()
                             handleBookTicket(event._id, event.arrangedEventDateTime)
                           }}
                         >
+                          <DollarSign className="h-4 w-4 mr-2" />
                           Book Tickets
                         </Button>
                       </div>
@@ -1326,7 +1431,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </PaginationItem>
                         {[...Array(Math.min(totalPages, 5))].map((_, i) => {
                           const pageNum = i + 1
-                          return (                            <PaginationItem key={pageNum}>
+                          return (
+                            <PaginationItem key={pageNum}>
                               <PaginationLink
                                 href="#"
                                 isActive={currentPage === pageNum}

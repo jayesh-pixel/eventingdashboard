@@ -23,13 +23,19 @@ export interface Event {
 
 export interface Artist {
   _id: string
-  artistName: string
-  artistDescription: string
-  genre: string
-  country: string
-  artistImage?: string
+  Name: string
+  Email?: string
+  PhoneNo?: string
+  Description?: string
+  Images?: ArtistImage[]
   createdAt: string
-  updatedAt: string
+  status?: number
+}
+
+export interface ArtistImage {
+  _id: string
+  image_path: string
+  createdAt: string
 }
 
 export interface Category {
@@ -372,3 +378,30 @@ export const LeadStatus = {
   Active: 1,
   Contacted: 2,
 } as const
+
+export interface EventTour {
+  _id: string
+  Name: string
+  Description?: string
+  Images?: EventTourImage[]
+  createdAt: string
+  updatedAt?: string
+  status?: number
+  // Additional fields that might come from API response
+  artistId?: string
+  artistName?: string
+  totalEvents?: number
+  startDate?: string
+  endDate?: string
+  cities?: string[]
+  tourName?: string // For backward compatibility
+  tourDescription?: string // For backward compatibility
+  FilterationDateTime?: string
+  __v?: number
+}
+
+export interface EventTourImage {
+  _id: string
+  image_path: string
+  createdAt: string
+}

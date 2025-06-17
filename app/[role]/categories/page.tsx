@@ -135,12 +135,12 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   const [selectedCategory, setSelectedCategory] = React.useState<Category | null>(null)
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
-
   // Form state
   const [formData, setFormData] = React.useState({
     categoryName: "",
     categoryDescription: "",
     categoryImage: null as File | null,
+    categoryPriority: 1,
   })
 
   // API function to fetch categories
@@ -240,13 +240,13 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       ? { text: "Active", variant: "default" } 
       : { text: "Inactive", variant: "secondary" }
   }
-
   const handleEditClick = (category: Category) => {
     setSelectedCategory(category)
     setFormData({
       categoryName: category.Name,
       categoryDescription: category.Description || "",
       categoryImage: null,
+      categoryPriority: category.Priority || 1,
     })
     setIsEditDialogOpen(true)
   }
@@ -259,7 +259,6 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
 
   // For paginated API, we don't slice here since API handles pagination
   const currentCategories = filteredCategories
-
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
@@ -274,44 +273,76 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       return
     }
 
-    setLoading(true)
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      const newCategory: Category = {
-        _id: `cat${Date.now()}`,
-        Name: formData.categoryName,
-        Description: formData.categoryDescription,
-        Images: formData.categoryImage
-          ? [{ image_path: `/placeholder.svg?height=100&width=100&text=${encodeURIComponent(formData.categoryName)}`, _id: `img${Date.now()}` }]
-          : [],
-        FilterationDateTime: new Date().toISOString(),
-        createdAt: new Date().toLocaleString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }).replace(/\//g, '-'),
-        status: 1,
-        Priority: categories.length + 1,
-        __v: 0,
-      }
-
-      setCategories([newCategory, ...categories])
-      setIsCreateDialogOpen(false)
-      setFormData({ categoryName: "", categoryDescription: "", categoryImage: null })
-
-      toast({
-        title: "Success",
-        description: "Category created successfully",
-      })
-    } catch (error) {
+    if (formData.categoryPriority < 0 || formData.categoryPriority > 10) {
       toast({
         title: "Error",
-        description: "Failed to create category",
+        description: "Priority must be between 0 and 10",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to create categories.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Create FormData for multipart/form-data request
+      const formDataToSend = new FormData()
+      formDataToSend.append("Name", formData.categoryName)
+      if (formData.categoryDescription) {
+        formDataToSend.append("Description", formData.categoryDescription)
+      }
+      formDataToSend.append("Priority", formData.categoryPriority.toString())
+      
+      // Add image if selected
+      if (formData.categoryImage) {
+        formDataToSend.append("CategoryImages", formData.categoryImage)
+      }
+
+      const response = await fetch(categorieEndPoint.CATEGORIE_CREATION_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type, let browser set it for FormData
+        },
+        body: formDataToSend,
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to create category")
+      }      toast({
+        title: "Success",
+        description: "Category created successfully!",
+      })
+
+      setIsCreateDialogOpen(false)
+      setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
+      
+      // Refresh the categories list
+      fetchCategories(currentPage)
+
+    } catch (error: any) {
+      console.error("Category creation failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create category. Please try again.",
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
   }
-
   const handleEditCategory = async () => {
     if (!selectedCategory || !formData.categoryName.trim()) {
       toast({
@@ -322,31 +353,56 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       return
     }
 
+    if (formData.categoryPriority < 0 || formData.categoryPriority > 10) {
+      toast({
+        title: "Error",
+        description: "Priority must be between 0 and 10",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to update categories.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const updatedCategories = categories.map((category) =>
-        category._id === selectedCategory._id
-          ? {
-              ...category,
-              Name: formData.categoryName,
-              Description: formData.categoryDescription,
-              FilterationDateTime: new Date().toISOString(),
-            }
-          : category,
-      )
+      const response = await fetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },        body: JSON.stringify({
+          category_id: selectedCategory._id,
+          Name: formData.categoryName,
+          Description: formData.categoryDescription,
+          Priority: formData.categoryPriority,
+        }),
+      })
 
-      setCategories(updatedCategories)
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to update category")
+      }      toast({
+        title: "Success",
+        description: "Category updated successfully!",
+      })
+
       setIsEditDialogOpen(false)
       setSelectedCategory(null)
-      setFormData({ categoryName: "", categoryDescription: "", categoryImage: null })
-
-      toast({
-        title: "Success",
-        description: "Category updated successfully",
-      })
+      setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
+      
+      // Refresh the categories list
+      fetchCategories(currentPage)
     } catch (error) {
       toast({
         title: "Error",
@@ -357,24 +413,49 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       setLoading(false)
     }
   }
-
   const handleDeleteCategory = async (categoryId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to delete categories.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const updatedCategories = categories.filter((category) => category._id !== categoryId)
-      setCategories(updatedCategories)
+      const response = await fetch(categorieEndPoint.CATEGORIES_DELETE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          category_id: categoryId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to delete category")
+      }
 
       toast({
         title: "Success",
-        description: "Category deleted successfully",
+        description: "Category deleted successfully!",
       })
-    } catch (error) {
+      
+      // Refresh the categories list
+      fetchCategories(currentPage)
+
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to delete category",
+        description: error.message || "Failed to delete category. Please try again.",
         variant: "destructive",
       })
     } finally {
@@ -414,19 +495,19 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       setLoading(false)
     }
   }
-
   const openEditDialog = (category: Category) => {
     setSelectedCategory(category)
     setFormData({
       categoryName: category.Name,
       categoryDescription: category.Description || "",
       categoryImage: null,
+      categoryPriority: category.Priority || 1,
     })
     setIsEditDialogOpen(true)
   }
 
   const resetForm = () => {
-    setFormData({ categoryName: "", categoryDescription: "", categoryImage: null })
+    setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
     setSelectedCategory(null)
   }
 
@@ -462,8 +543,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
                   placeholder="Enter category name"
                 />
-              </div>
-              <div className="space-y-2">
+              </div>              <div className="space-y-2">
                 <Label htmlFor="categoryDescription">Description</Label>
                 <Textarea
                   id="categoryDescription"
@@ -471,6 +551,18 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   onChange={(e) => setFormData({ ...formData, categoryDescription: e.target.value })}
                   placeholder="Enter category description"
                   rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="categoryPriority">Priority (0-10) *</Label>
+                <Input
+                  id="categoryPriority"
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={formData.categoryPriority}
+                  onChange={(e) => setFormData({ ...formData, categoryPriority: parseInt(e.target.value) || 1 })}
+                  placeholder="Enter priority (0-10)"
                 />
               </div>
               <div className="space-y-2">
@@ -518,12 +610,12 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
           <CardDescription>Manage event categories in the system.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
+          <Table>            <TableHeader>
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Category Name</TableHead>
                 <TableHead className="hidden md:table-cell">Description</TableHead>
+                <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="hidden lg:table-cell">Created Date</TableHead>
                 <TableHead>
@@ -658,8 +750,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
                 placeholder="Enter category name"
               />
-            </div>
-            <div className="space-y-2">
+            </div>            <div className="space-y-2">
               <Label htmlFor="editCategoryDescription">Description</Label>
               <Textarea
                 id="editCategoryDescription"
@@ -667,6 +758,18 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 onChange={(e) => setFormData({ ...formData, categoryDescription: e.target.value })}
                 placeholder="Enter category description"
                 rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editCategoryPriority">Priority (0-10) *</Label>
+              <Input
+                id="editCategoryPriority"
+                type="number"
+                min="0"
+                max="10"
+                value={formData.categoryPriority}
+                onChange={(e) => setFormData({ ...formData, categoryPriority: parseInt(e.target.value) || 1 })}
+                placeholder="Enter priority (0-10)"
               />
             </div>
             <div className="space-y-2">
