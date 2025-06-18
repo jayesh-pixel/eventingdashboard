@@ -104,18 +104,7 @@ export interface Promoter {
   promoterStatus?: "Active" | "Inactive"
 }
 
-export interface Customer {
-  _id: string
-  customerName: string
-  customerEmail: string
-  customerPhone: string
-  customerAddress: string
-  city: string
-  state: string
-  country: string
-  createdAt: string
-  updatedAt: string
-}
+// Customer Types (moved to line 121)
 
 // Customer Types
 export interface Customer {
@@ -130,6 +119,10 @@ export interface Customer {
   Otp?: number
   OtpExpiryTime?: number
   __v: number
+  // Additional location fields from API
+  country?: string
+  state?: string
+  city?: string
 }
 
 export interface CustomersApiResponse {
@@ -140,6 +133,32 @@ export interface CustomersApiResponse {
     currentPage: number
     totalCustomers: number
     customerData: Customer[]
+  }
+}
+
+// Customer Bookings Interface
+export interface CustomerBooking {
+  Booking_id: string
+  EventName: string
+  TicketName: string
+  TicketPrice: number
+  TicketQuantity: number
+  EventDate: string
+  EventTime: string
+  EventVenue: string
+  VenueCity: string
+  EventTicketType: string
+  TotalAmount: number
+}
+
+export interface CustomerBookingsApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: number
+    totalBookings: number
+    BookingsData: CustomerBooking[]
   }
 }
 

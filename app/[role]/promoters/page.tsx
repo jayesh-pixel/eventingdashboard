@@ -551,13 +551,14 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           <p className="text-muted-foreground">Manage promoter accounts and permissions</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchPromoters} disabled={loading}>
+          {/* <Button variant="outline" onClick={fetchPromoters} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
-          </Button>
-          <Button onClick={openCreateDialog}>
+          </Button> */}
+          <Button onClick={openCreateDialog}                           className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+>
             <Plus className="mr-2 h-4 w-4" />
-            Add Promoter
+            Add 
           </Button>
         </div>
       </div>

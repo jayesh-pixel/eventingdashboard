@@ -34,6 +34,7 @@ import { Plus, Search, AlertCircle, Loader2, UserCheck, UserX } from "lucide-rea
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { scannerUserEndpoint } from "@/lib/api-endpoints"
 import { eventEndPoint } from "@/lib/api-endpoints"
+import { organizerEndpoint } from "@/lib/api-endpoints"
 import { ScannerUser, ScannerUsersApiResponse, ScannerUserType, ScannerUserStatus } from "@/lib/types"
 import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
@@ -72,10 +73,13 @@ export default function ScannerUsersPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<ScannerUser | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  
-  // Events for dropdown
+    // Events for dropdown
   const [events, setEvents] = useState<any[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
+  
+  // Organizers for dropdown
+  const [organizers, setOrganizers] = useState<any[]>([])
+  const [loadingOrganizers, setLoadingOrganizers] = useState(false)
   
   // Form state
   const [formData, setFormData] = useState({
@@ -85,18 +89,58 @@ export default function ScannerUsersPage() {
     selectedEvents: [] as string[],
     selectedOrganizers: [] as string[],
   })
-
   const fetchEvents = async () => {
     try {
       setLoadingEvents(true)
       const authToken = getValidToken()
       
-      if (!authToken) {
-        console.warn("No auth token available")
+      if (!authToken || !user) {
+        console.warn("No auth token or user data available")
+        return
+      }      const payload = {
+        AdminRole: 1,
+        user_id: user.user_id
+      }
+
+      const response = await fetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`,
+          "Content-Type": "application/json",
+        },        body: JSON.stringify(payload),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Events API Response:', data)
+        if (!data.error && data.data) {
+          setEvents(data.data)
+        } else {
+          console.warn('Events API returned error or no data:', data)
+          setEvents([])
+        }
+      } else {
+        console.error('Events API request failed:', response.status, response.statusText)
+        setEvents([])
+      }
+    } catch (error) {
+      console.error("Error fetching events:", error)
+    } finally {
+      setLoadingEvents(false)
+    }
+  }
+
+  const fetchOrganizers = async () => {
+    try {
+      setLoadingOrganizers(true)
+      const authToken = getValidToken()
+      
+      if (!authToken || !user) {
+        console.warn("No auth token or user data available")
         return
       }
 
-      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
+      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -106,14 +150,22 @@ export default function ScannerUsersPage() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Organizers API Response:', data)
         if (!data.error && data.data) {
-          setEvents(data.data)
+          setOrganizers(data.data)
+        } else {
+          console.warn('Organizers API returned error or no data:', data)
+          setOrganizers([])
         }
+      } else {
+        console.error('Organizers API request failed:', response.status, response.statusText)
+        setOrganizers([])
       }
     } catch (error) {
-      console.error("Error fetching events:", error)
+      console.error("Error fetching organizers:", error)
+      setOrganizers([])
     } finally {
-      setLoadingEvents(false)
+      setLoadingOrganizers(false)
     }
   }
 
@@ -232,12 +284,19 @@ export default function ScannerUsersPage() {
         variant: "destructive",
       })
       return
-    }
-
-    if (formData.userType === "1" && formData.selectedEvents.length === 0) {
+    }    if (formData.userType === "1" && formData.selectedEvents.length === 0) {
       toast({
         title: "Error", 
         description: "Event Scanner must have at least one event assigned",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.userType === "2" && formData.selectedOrganizers.length === 0) {
+      toast({
+        title: "Error", 
+        description: "Organizer Scanner must have at least one organizer assigned",
         variant: "destructive",
       })
       return
@@ -383,7 +442,6 @@ export default function ScannerUsersPage() {
       setSubmitting(false)
     }
   }
-
   const openEditDialog = (user: ScannerUser) => {
     setSelectedUser(user)
     setFormData({
@@ -393,6 +451,12 @@ export default function ScannerUsersPage() {
       selectedEvents: user.Events.map(e => e.event_id),
       selectedOrganizers: user.Organizers.map(o => o.organizer_id),
     })
+    
+    // Fetch organizers if this is an organizer scanner
+    if (user.UserType === ScannerUserType.Organizer) {
+      fetchOrganizers()
+    }
+    
     setIsEditDialogOpen(true)
   }
 
@@ -423,9 +487,10 @@ export default function ScannerUsersPage() {
           if (!open) resetForm()
         }}>
           <DialogTrigger asChild>
-            <Button>
+            <Button                           className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+>
               <Plus className="mr-2 h-4 w-4" />
-              Create Scanner User
+              Create 
             </Button>
           </DialogTrigger>          <DialogContent className="max-w-2xl">
             <DialogHeader>
@@ -460,7 +525,12 @@ export default function ScannerUsersPage() {
               
               <div className="space-y-2">
                 <Label htmlFor="userType">User Type *</Label>
-                <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })}>
+                <Select value={formData.userType} onValueChange={(value) => {
+                  setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })
+                  if (value === "2") {
+                    fetchOrganizers()
+                  }
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select user type" />
                   </SelectTrigger>
@@ -481,11 +551,14 @@ export default function ScannerUsersPage() {
                         Loading events...
                       </div>
                     ) : events.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">No events available</p>
+                      <div className="text-center py-4">
+                        <p className="text-muted-foreground text-sm mb-2">No published events available</p>
+                        <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
+                      </div>
                     ) : (
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {events.map((event) => (
-                          <div key={event._id} className="flex items-center space-x-2">
+                          <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
                             <input
                               type="checkbox"
                               id={`event-${event._id}`}
@@ -503,11 +576,18 @@ export default function ScannerUsersPage() {
                                   })
                                 }
                               }}
-                              className="rounded border-gray-300"
+                              className="rounded border-gray-300 mt-1"
                             />
-                            <Label htmlFor={`event-${event._id}`} className="text-sm font-normal">
-                              {event.eventName || event.name || 'Unnamed Event'}
-                            </Label>
+                            <div className="flex-1">                              <Label htmlFor={`event-${event._id}`} className="text-sm font-medium cursor-pointer">
+                                {event.EventName || event.eventName || event.name || 'Unnamed Event'}
+                              </Label>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                  <span>📍 {event.VenueName || 'Venue TBA'}</span>
+                                  <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                                </div>
+                              </div>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -523,12 +603,62 @@ export default function ScannerUsersPage() {
 
               {formData.userType === "2" && (
                 <div className="space-y-2">
-                  <Label>Organizer Assignment</Label>
-                  <div className="border rounded-md p-3">
-                    <p className="text-sm text-muted-foreground">
-                      Organizer assignment will be configured based on organizer selection.
-                    </p>
+                  <Label>Organizer Assignment *</Label>
+                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                    {loadingOrganizers ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading organizers...
+                      </div>
+                    ) : organizers.length === 0 ? (
+                      <div className="text-center py-4">
+                        <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
+                        <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {organizers.map((organizer) => (
+                          <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              id={`organizer-${organizer._id}`}
+                              checked={formData.selectedOrganizers.includes(organizer._id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({
+                                    ...formData,
+                                    selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
+                                  })
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
+                                  })
+                                }
+                              }}
+                              className="rounded border-gray-300 mt-1"
+                            />                            <div className="flex-1">
+                              <Label htmlFor={`organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
+                                {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
+                              </Label>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                  <span>📧 {organizer.Email || 'No email'}</span>
+                                  <span>📱 {organizer.Phone1 || 'No phone'}</span>
+                                  <span>🏢 {organizer.CompanyName || 'No company'}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  {formData.selectedOrganizers.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {formData.selectedOrganizers.length} organizer(s) selected
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -599,7 +729,12 @@ export default function ScannerUsersPage() {
             
             <div className="space-y-2">
               <Label htmlFor="editUserType">User Type *</Label>
-              <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })}>
+              <Select value={formData.userType} onValueChange={(value) => {
+                setFormData({ ...formData, userType: value, selectedEvents: [], selectedOrganizers: [] })
+                if (value === "2") {
+                  fetchOrganizers()
+                }
+              }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select user type" />
                 </SelectTrigger>
@@ -620,11 +755,14 @@ export default function ScannerUsersPage() {
                       Loading events...
                     </div>
                   ) : events.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">No events available</p>
+                    <div className="text-center py-4">
+                      <p className="text-muted-foreground text-sm mb-2">No published events available</p>
+                      <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
+                    </div>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                       {events.map((event) => (
-                        <div key={event._id} className="flex items-center space-x-2">
+                        <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
                           <input
                             type="checkbox"
                             id={`edit-event-${event._id}`}
@@ -642,11 +780,18 @@ export default function ScannerUsersPage() {
                                 })
                               }
                             }}
-                            className="rounded border-gray-300"
-                          />
-                          <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-normal">
-                            {event.eventName || event.name || 'Unnamed Event'}
-                          </Label>
+                            className="rounded border-gray-300 mt-1"
+                          />                            <div className="flex-1">
+                              <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-medium cursor-pointer">
+                                {event.EventName || event.eventName || event.name || 'Unnamed Event'}
+                              </Label>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                  <span>📍 {event.VenueName || 'Venue TBA'}</span>
+                                  <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                                </div>
+                              </div>
+                            </div>
                         </div>
                       ))}
                     </div>
@@ -662,12 +807,62 @@ export default function ScannerUsersPage() {
 
             {formData.userType === "2" && (
               <div className="space-y-2">
-                <Label>Organizer Assignment</Label>
-                <div className="border rounded-md p-3">
-                  <p className="text-sm text-muted-foreground">
-                    Organizer assignment will be configured based on organizer selection.
-                  </p>
+                <Label>Organizer Assignment *</Label>
+                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
+                  {loadingOrganizers ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      Loading organizers...
+                    </div>
+                  ) : organizers.length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
+                      <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {organizers.map((organizer) => (
+                        <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                          <input
+                            type="checkbox"
+                            id={`edit-organizer-${organizer._id}`}
+                            checked={formData.selectedOrganizers.includes(organizer._id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({
+                                  ...formData,
+                                  selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
+                                })
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
+                                })
+                              }
+                            }}
+                            className="rounded border-gray-300 mt-1"
+                          />                            <div className="flex-1">
+                              <Label htmlFor={`edit-organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
+                                {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
+                              </Label>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                  <span>📧 {organizer.Email || 'No email'}</span>
+                                  <span>📱 {organizer.Phone1 || 'No phone'}</span>
+                                  <span>🏢 {organizer.CompanyName || 'No company'}</span>
+                                </div>
+                              </div>
+                            </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                {formData.selectedOrganizers.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    {formData.selectedOrganizers.length} organizer(s) selected
+                  </p>
+                )}
               </div>
             )}
           </div>

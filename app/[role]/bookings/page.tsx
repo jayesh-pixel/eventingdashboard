@@ -19,12 +19,31 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerFooter,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { MoreHorizontal, Download, Filter, Loader2, AlertCircle } from "lucide-react"
+import { MoreHorizontal, Download, Filter, Loader2, AlertCircle, ChevronDown, X } from "lucide-react"
+import { useIsMobile } from "@/components/ui/use-mobile"
 import * as XLSX from "xlsx"
 import type { UserRole } from "@/lib/navigation"
 import type { Booking } from "@/lib/types"
@@ -57,9 +76,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     resolvedParams = params
   }
   const { role } = resolvedParams
-
   const { user } = useAuth()
   const { toast } = useToast()
+  const isMobile = useIsMobile()
+  
   // State management
   const [loading, setLoading] = React.useState(true)
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
@@ -80,6 +100,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [venueFilter, setVenueFilter] = React.useState<string>("all")
   const [eventNameFilter, setEventNameFilter] = React.useState<string>("all")
 
+  // Mobile UI state
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = React.useState(false)
+  const [isTabsDropdownOpen, setIsTabsDropdownOpen] = React.useState(false)
   // Helper function to show error popup
   const showErrorPopup = (message: string) => {
     setErrorMessage(message)
@@ -88,6 +111,261 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
   // Filter popup state
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
+
+  // Helper function to get available tabs based on role
+  const getAvailableTabs = () => {
+    const tabs = []
+    
+    if ((role as UserRole) !== "promoter") {
+      tabs.push({
+        value: "all",
+        label: "All Bookings",
+        count: filteredBookings.length
+      })
+    }
+
+    if ((role as UserRole) === "promoter") {
+      tabs.push({
+        value: "my-bookings",
+        label: "My Bookings",
+        count: filteredBookings.length
+      })
+    }
+
+    if ((role as UserRole) === "superadmin") {
+      tabs.push({
+        value: "promoter",
+        label: "Promoter",
+        count: bookingsData.filter((b) => b.bookingChannel === "Promoter").length
+      })
+    }
+
+    if ((role as UserRole) !== "promoter") {
+      tabs.push({
+        value: "online",
+        label: "Online",
+        count: bookingsData.filter((b) => b.bookingChannel === "Online").length
+      })
+    }
+
+    if ((role as UserRole) === "superadmin") {
+      tabs.push({
+        value: "bulk",
+        label: "Bulk",
+        count: bookingsData.filter((b) => b.bookingChannel === "Bulk").length
+      })
+    }
+
+    return tabs
+  }
+
+  // Get active tab label for mobile dropdown
+  const getActiveTabLabel = () => {
+    const tabs = getAvailableTabs()
+    const activeTabData = tabs.find(tab => tab.value === activeTab)
+    return activeTabData ? `${activeTabData.label} (${activeTabData.count})` : "Select Tab"
+  }
+  // Mobile tabs component
+  const MobileTabs = () => (
+    <div className="space-y-3">
+      {/* Active tab dropdown */}
+      <DropdownMenu open={isTabsDropdownOpen} onOpenChange={setIsTabsDropdownOpen}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between h-12 text-left font-medium"
+          >
+            <span className="truncate">{getActiveTabLabel()}</span>
+            <ChevronDown className={`h-4 w-4 opacity-50 transition-transform duration-200 ${isTabsDropdownOpen ? 'rotate-180' : ''}`} />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="w-full min-w-[300px]" align="start">
+          <DropdownMenuLabel>Select Tab</DropdownMenuLabel>
+          {getAvailableTabs().map((tab) => (
+            <DropdownMenuItem
+              key={tab.value}
+              onClick={() => {
+                setActiveTab(tab.value)
+                setIsTabsDropdownOpen(false)
+              }}
+              className={`${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""} cursor-pointer`}
+            >
+              <div className="flex justify-between items-center w-full">
+                <span className="font-medium">{tab.label}</span>
+                <Badge variant={activeTab === tab.value ? "default" : "secondary"} className="ml-2">
+                  {tab.count}
+                </Badge>
+              </div>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Quick action buttons */}
+      <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+        <Sheet open={isFilterSheetOpen} onOpenChange={setIsFilterSheetOpen}>
+          <SheetTrigger asChild>
+            <Button variant="outline" size="sm" className="flex-shrink-0 relative">
+              <Filter className="mr-2 h-4 w-4" />
+              Filters
+              {(statusFilter !== "all" || channelFilter !== "all" || cityFilter !== "all" || 
+                venueFilter !== "all" || eventNameFilter !== "all") && (
+                <div className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full flex items-center justify-center">
+                  <div className="h-1.5 w-1.5 bg-white rounded-full" />
+                </div>
+              )}
+            </Button>
+          </SheetTrigger>
+        </Sheet>
+        
+        <Button variant="outline" size="sm" onClick={exportToExcel} className="flex-shrink-0">
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
+
+        {/* Quick reset button if filters are active */}
+        {(statusFilter !== "all" || channelFilter !== "all" || cityFilter !== "all" || 
+          venueFilter !== "all" || eventNameFilter !== "all") && (
+          <Button variant="ghost" size="sm" onClick={resetAllFilters} className="flex-shrink-0 text-muted-foreground">
+            <X className="mr-2 h-4 w-4" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      {/* Active filters preview for mobile */}
+      {(statusFilter !== "all" || channelFilter !== "all" || cityFilter !== "all" || 
+        venueFilter !== "all" || eventNameFilter !== "all") && (
+        <div className="flex gap-1 overflow-x-auto pb-1 scrollbar-hide">
+          {statusFilter !== "all" && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              {statusFilter}
+            </Badge>
+          )}
+          {channelFilter !== "all" && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              {channelFilter}
+            </Badge>
+          )}
+          {cityFilter !== "all" && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              {cityFilter}
+            </Badge>
+          )}
+          {venueFilter !== "all" && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              {venueFilter}
+            </Badge>
+          )}
+          {eventNameFilter !== "all" && (
+            <Badge variant="secondary" className="flex-shrink-0 text-xs">
+              Event: {eventNameFilter.length > 15 ? `${eventNameFilter.substring(0, 15)}...` : eventNameFilter}
+            </Badge>
+          )}
+        </div>
+      )}
+    </div>
+  )
+
+  // Desktop tabs component (existing style)
+  const DesktopTabs = () => (
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <TabsList className="flex w-full overflow-x-auto whitespace-nowrap gap-1 bg-muted p-1 rounded-md scrollbar-hide lg:w-auto lg:overflow-visible">
+        {getAvailableTabs().map((tab) => (
+          <TabsTrigger
+            key={tab.value}
+            value={tab.value}
+            className="text-xs whitespace-nowrap flex-shrink-0 lg:text-sm"
+          >
+            {tab.label} ({tab.count})
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      <div className="flex items-center gap-2">
+        <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm">
+              <Filter className="mr-2 h-4 w-4" /> Filters
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Event Filter</DialogTitle>
+              <DialogDescription>
+                Filter bookings by city, venue, and event name
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">City</label>
+                <Select value={cityFilter} onValueChange={setCityFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select City" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Cities</SelectItem>
+                    {getUniqueCities.map((city) => (
+                      <SelectItem key={city} value={city}>
+                        {city}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Venue</label>
+                <Select value={venueFilter} onValueChange={setVenueFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Venue" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Venues</SelectItem>
+                    {getUniqueVenues.map((venue) => (
+                      <SelectItem key={venue} value={venue}>
+                        {venue}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Event Name</label>
+                <Select value={eventNameFilter} onValueChange={setEventNameFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Event names" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Events</SelectItem>
+                    {getUniqueEventNames.map((eventName) => (
+                      <SelectItem key={eventName} value={eventName}>
+                        {eventName}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={resetAllFilters}
+                className="mr-2"
+              >
+                Reset All
+              </Button>
+              <Button onClick={() => setIsFilterDialogOpen(false)}>
+                Apply Filters
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <Button variant="outline" size="sm" onClick={exportToExcel}>
+          <Download className="mr-2 h-4 w-4" /> Export
+        </Button>
+      </div>
+    </div>
+  )
 
   // Helper function to normalize booking data
   const normalizeBookingData = (bookings: any[]): Booking[] => {
@@ -595,169 +873,70 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         <div className="flex items-center justify-between px-4 sm:px-6">
           <h1 className="text-2xl font-semibold">
             {(role as UserRole) === "promoter" ? "My Bookings" : "Bookings Management"}
-          </h1>        </div>
-
-        <div className="w-full max-w-full overflow-hidden">
+          </h1>        </div>        <div className="w-full max-w-full overflow-auto">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="flex items-center justify-between px-4 sm:px-6">              <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4 lg:w-auto">
-                
-                {(role as UserRole) !== "promoter" && (
-                  <TabsTrigger value="all" className="text-xs lg:text-sm">
-                    All Bookings ({filteredBookings.length})
-                  </TabsTrigger>
-                )}
-                {(role as UserRole) === "promoter" && (
-                  <TabsTrigger value="my-bookings" className="text-xs lg:text-sm">
-                    My Bookings ({filteredBookings.length})
-                  </TabsTrigger>
-                )}
-                {(role as UserRole) === "superadmin" && (
-                  <TabsTrigger value="promoter" className="text-xs lg:text-sm">
-                    Promoter ({bookingsData.filter((b) => b.bookingChannel === "Promoter").length})
-                  </TabsTrigger>
-                )}
-                {(role as UserRole) !== "promoter" && (
-                  <TabsTrigger value="online" className="text-xs lg:text-sm">
-                    Online ({bookingsData.filter((b) => b.bookingChannel === "Online").length})
-                  </TabsTrigger>
-                )}
-                {(role as UserRole) === "superadmin" && (
-                  <TabsTrigger value="bulk" className="text-xs lg:text-sm">
-                    Bulk ({bookingsData.filter((b) => b.bookingChannel === "Bulk").length})
-                  </TabsTrigger>
-                )}
-              </TabsList>              <div className="flex items-center gap-2">
-                <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Filter className="mr-2 h-4 w-4" /> Filters
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Event Filter</DialogTitle>
-                      <DialogDescription>
-                        Filter bookings by city, venue, and event name
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">City</label>
-                        <Select value={cityFilter} onValueChange={setCityFilter}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select City" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Cities</SelectItem>
-                            {getUniqueCities.map((city) => (
-                              <SelectItem key={city} value={city}>
-                                {city}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Venue</label>
-                        <Select value={venueFilter} onValueChange={setVenueFilter}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Venue" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Venues</SelectItem>
-                            {getUniqueVenues.map((venue) => (
-                              <SelectItem key={venue} value={venue}>
-                                {venue}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-sm font-medium">Event Name</label>
-                        <Select value={eventNameFilter} onValueChange={setEventNameFilter}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Event names" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Events</SelectItem>
-                            {getUniqueEventNames.map((eventName) => (
-                              <SelectItem key={eventName} value={eventName}>
-                                {eventName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        variant="outline"
-                        onClick={resetAllFilters}
-                        className="mr-2"
-                      >
-                        Reset All
-                      </Button>
-                      <Button onClick={() => setIsFilterDialogOpen(false)}>
-                        Apply Filters
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>                </Dialog>
-                <Button variant="outline" size="sm" onClick={exportToExcel}>
-                  <Download className="mr-2 h-4 w-4" /> Export
-                </Button>
-              </div>
-            </div>
-
-            {/* Filters Section */}
             <div className="px-4 sm:px-6">
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-base">Filter Bookings</CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Input
-                    placeholder="Search by Customer Name, Booking ID, Phone, Email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                                    {(role as UserRole) !== "promoter" && (
+              {/* Mobile layout */}
+              {isMobile ? <MobileTabs /> : <DesktopTabs />}
+            </div>            {/* Filters Section - Desktop Only */}
+            {!isMobile && (
+              <div className="px-4 sm:px-6">
+                <Card className="mt-4">
+                  <CardHeader>
+                    <CardTitle className="text-base">Filter Bookings</CardTitle>
+                  </CardHeader>
+                  <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Input
+                      placeholder="Search by Customer Name, Booking ID, Phone, Email..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {(role as UserRole) !== "promoter" && (
+                      <Select value={statusFilter} onValueChange={setStatusFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Filter by Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Statuses</SelectItem>
+                          <SelectItem value="Confirmed">Confirmed</SelectItem>
+                          <SelectItem value="Booked">Booked</SelectItem>
+                          <SelectItem value="Pending">Pending</SelectItem>
+                          <SelectItem value="Cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    {(role as UserRole) !== "promoter" && (
+                      <Select value={channelFilter} onValueChange={setChannelFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Filter by Channel" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Channels</SelectItem>
+                          <SelectItem value="Online">Online</SelectItem>
+                          <SelectItem value="Promoter">Promoter</SelectItem>
+                          <SelectItem value="Bulk">Bulk</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
+                    <Button variant="outline" onClick={resetAllFilters}>
+                      Clear Filters
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Status" />
-                    </SelectTrigger>
-                    
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      <SelectItem value="Confirmed">Confirmed</SelectItem>
-                      <SelectItem value="Booked">Booked</SelectItem>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="Cancelled">Cancelled</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  )}
-                  {(role as UserRole) !== "promoter" && (
-                    <Select value={channelFilter} onValueChange={setChannelFilter}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Filter by Channel" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Channels</SelectItem>
-                        <SelectItem value="Online">Online</SelectItem>
-                        <SelectItem value="Promoter">Promoter</SelectItem>
-                        <SelectItem value="Bulk">Bulk</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}                  <Button
-                    variant="outline"
-                    onClick={resetAllFilters}
-                  >
-                    Clear Filters
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
+            {/* Mobile Search Bar */}
+            {isMobile && (
+              <div className="px-4 sm:px-6 mt-4">
+                <Input
+                  placeholder="Search bookings..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+            )}
 
             <TabsContent value={activeTab} className="mt-4">
               <Card>
@@ -845,8 +1024,199 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 </CardContent>
               </Card>
             </TabsContent>
-          </Tabs>
-        </div>
+          </Tabs>        </div>        {/* Mobile Filter Sheet */}
+        <Sheet open={isFilterSheetOpen} onOpenChange={setIsFilterSheetOpen}>
+          <SheetContent side="bottom" className="h-[85vh] flex flex-col">
+            <SheetHeader className="text-left">
+              <SheetTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filter Bookings
+              </SheetTitle>
+              <SheetDescription>
+                Apply filters to narrow down your booking results
+              </SheetDescription>
+            </SheetHeader>
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="grid gap-6 py-6">
+                {/* Quick search in mobile filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Search</label>
+                  <Input
+                    placeholder="Search by customer, booking ID, phone..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                {(role as UserRole) !== "promoter" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Booking Status</label>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Filter by Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        <SelectItem value="Confirmed">Confirmed</SelectItem>
+                        <SelectItem value="Booked">Booked</SelectItem>
+                        <SelectItem value="Pending">Pending</SelectItem>
+                        <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Channel Filter */}
+                {(role as UserRole) !== "promoter" && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Booking Channel</label>
+                    <Select value={channelFilter} onValueChange={setChannelFilter}>
+                      <SelectTrigger className="h-12">
+                        <SelectValue placeholder="Filter by Channel" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Channels</SelectItem>
+                        <SelectItem value="Online">Online</SelectItem>
+                        <SelectItem value="Promoter">Promoter</SelectItem>
+                        <SelectItem value="Bulk">Bulk</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* City Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">City</label>
+                  <Select value={cityFilter} onValueChange={setCityFilter}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Select City" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Cities</SelectItem>
+                      {getUniqueCities.map((city) => (
+                        <SelectItem key={city} value={city}>
+                          {city}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Venue Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Venue</label>
+                  <Select value={venueFilter} onValueChange={setVenueFilter}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Select Venue" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Venues</SelectItem>
+                      {getUniqueVenues.map((venue) => (
+                        <SelectItem key={venue} value={venue}>
+                          {venue}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Event Name Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Event Name</label>
+                  <Select value={eventNameFilter} onValueChange={setEventNameFilter}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Select Event" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Events</SelectItem>
+                      {getUniqueEventNames.map((eventName) => (
+                        <SelectItem key={eventName} value={eventName}>
+                          {eventName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Active Filters Display */}
+                {(statusFilter !== "all" || channelFilter !== "all" || cityFilter !== "all" || 
+                  venueFilter !== "all" || eventNameFilter !== "all") && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Active Filters</label>
+                    <div className="flex flex-wrap gap-2">
+                      {statusFilter !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Status: {statusFilter}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setStatusFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      {channelFilter !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Channel: {channelFilter}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setChannelFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      {cityFilter !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          City: {cityFilter}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setCityFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      {venueFilter !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Venue: {venueFilter}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setVenueFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                      {eventNameFilter !== "all" && (
+                        <Badge variant="secondary" className="flex items-center gap-1">
+                          Event: {eventNameFilter}
+                          <X
+                            className="h-3 w-3 cursor-pointer hover:text-destructive"
+                            onClick={() => setEventNameFilter("all")}
+                          />
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Sticky Footer Actions */}
+            <div className="flex gap-3 pt-4 border-t bg-background">
+              <Button
+                variant="outline"
+                onClick={resetAllFilters}
+                className="flex-1 h-12"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Reset All
+              </Button>
+              <Button
+                onClick={() => setIsFilterSheetOpen(false)}
+                className="flex-1 h-12"
+              >
+                Apply Filters
+              </Button>
+            </div>
+          </SheetContent>
+        </Sheet>
 
         {/* Error Dialog */}
         <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>

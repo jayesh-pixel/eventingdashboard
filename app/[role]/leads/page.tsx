@@ -246,7 +246,7 @@ export default function LeadsPage() {
                     <TableHead>City</TableHead>
                     <TableHead>Received At</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    {/* <TableHead>Actions</TableHead> */}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -281,7 +281,7 @@ export default function LeadsPage() {
                           {statusLabels[lead.status as keyof typeof statusLabels] || 'Unknown'}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      {/* <TableCell>
                         <div className="flex gap-2">
                           <Button 
                             variant="outline" 
@@ -298,7 +298,7 @@ export default function LeadsPage() {
                             Contact
                           </Button>
                         </div>
-                      </TableCell>
+                      </TableCell> */}
                     </TableRow>
                   ))}
                 </TableBody>
