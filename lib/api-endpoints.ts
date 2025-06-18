@@ -114,6 +114,8 @@ export const organizerEndpoint = {
     BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
+  ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",
+  ORGANIZER_TOTAL_SALES_DATA_URL: BASE_URL + "/organizer/totalSalesData",
 }
 
 // Promoter API Endpoint

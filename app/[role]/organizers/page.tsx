@@ -12,9 +12,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -37,23 +39,106 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import type { UserRole } from "@/lib/navigation"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
-import { mockOrganizers } from "@/lib/mock-data"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
 }
 
+// Interface matching the actual API response structure
 interface Organizer {
   _id: string
-  organizerName: string
-  email: string
-  phone: string
-  status: "Active" | "Inactive" | "Disabled"
-  totalEvents: number
-  totalSales: number
-  convenienceFeeCharged: number
-  pendingAmount: number
+  OwnerType: string
+  CompanyName: string
+  FullName: string
+  Phone1: string | null
+  Username: string
+  Email: string | null
+  Password: string
+  Country: string
+  CountryIsoCode: string
+  State: string
+  StateIsoCode: string
+  City: string
+  CityIsoCode: string
+  FilterationDateTime: string
   createdAt: string
+  CreatedBy: string
+  createduser_id: string
+  status: number
+  __v: number
+  resetPasswordExpires?: string
+  resetPasswordToken?: string
+}
+
+// API response structure for paginated organizers
+interface PaginatedOrganizersResponse {
+  error: boolean
+  message: string
+  data: Organizer[] | {
+    OrganizerData: Organizer[]
+    totalPages: number
+    currentPage: number
+    totalOrganizers: number
+    hasNextPage?: boolean
+    hasPreviousPage?: boolean
+  }
+}
+
+// API request structure for paginated data
+interface PaginationRequest {
+  page: number
+  limit: number
+}
+
+// API request structure for search
+interface SearchRequest {
+  page: number
+  limit: number
+  search_keyword: string
+}
+
+// Sales data interfaces
+interface SalesEvent {
+  event_id: string
+  EventName: string
+  EventStartDate: string
+  totalOnlineSales: number
+  totalPromoterSales: number
+  totalConvenienceFeeAmount: number
+  totalSales: number
+  PendingAmount: number
+}
+
+interface SalesDataResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages: number
+    currentPage: string
+    totalEvents: number
+    EventsData: SalesEvent[]
+  }
+}
+
+interface TotalSalesDataResponse {
+  error: boolean
+  message: string
+  data: {
+    totalEventCount: number
+    totalSalesSum: number
+    totalPendingAmountSum: number
+    totalConvenienceFeeAmountSum: number
+  }
+}
+
+interface SalesRequest {
+  organizer_id: string
+  page: string
+  limit: string
+}
+
+interface TotalSalesRequest {
+  organizer_id: string
 }
 
 const ITEMS_PER_PAGE = 10
@@ -66,33 +151,140 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const { user } = useAuth()
 
   const [organizers, setOrganizers] = React.useState<Organizer[]>([])
-  const [originalData, setOriginalData] = React.useState<Organizer[]>([])
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalOrganizers, setTotalOrganizers] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
   const [isFormOpen, setIsFormOpen] = React.useState(false)
   const [editingOrganizer, setEditingOrganizer] = React.useState<Organizer | null>(null)
-  const [isAccountManagerOpen, setIsAccountManagerOpen] = React.useState(false)
-  const [selectedOrganizerForAccounts, setSelectedOrganizerForAccounts] = React.useState<Organizer | null>(null)
+  const [isSalesDialogOpen, setIsSalesDialogOpen] = React.useState(false)
+  const [selectedOrganizerForSales, setSelectedOrganizerForSales] = React.useState<Organizer | null>(null)
+  const [salesData, setSalesData] = React.useState<SalesEvent[]>([])
+  const [totalSalesData, setTotalSalesData] = React.useState<TotalSalesDataResponse['data'] | null>(null)
+  const [salesLoading, setSalesLoading] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
-  const [useMockData, setUseMockData] = React.useState(false)
-
+  // Form data state for organizer creation
   const [formData, setFormData] = React.useState({
-    organizerName: "",
-    email: "",
-    phone: "",
+    // Basic Info
+    OwnerType: "", // "ownClub" or "eventCompany"
+    CompanyName: "", // Club name or company name based on owner type
+    FullName: "",
+    Username: "",
+    Email: "",
+    Phone1: "",
+    
+    // Address Info (simplified)
+    Country: "India",
+    CountryIsoCode: "IN", 
+    State: "",
+    StateIsoCode: "",
+    City: "",
+    CityIsoCode: "",
+    
+    // Security
     password: "",
+    showPassword: false,
+    
+    // Notifications
+    sendEmailNotification: false,
   })
 
-  const [accountFormData, setAccountFormData] = React.useState({
-    date: "",
-    remark: "",
-    amountReceived: "",
-  })
+  // Form validation errors
+  const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
-  // Fetch organizers data with API integration
-  const fetchOrganizers = async () => {
+  
+  // Form validation
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {}
+    
+    // Owner Type is required
+    if (!formData.OwnerType) {
+      errors.OwnerType = "Please select Owner Type"
+    }
+    
+    // Company/Club name is required when owner type is selected
+    if (formData.OwnerType && !formData.CompanyName.trim()) {
+      errors.CompanyName = formData.OwnerType === "ownClub" ? "Club name is required" : "Company name is required"
+    }
+    
+    // Full Name validation
+    if (!formData.FullName.trim()) {
+      errors.FullName = "Full name is required"
+    } else if (formData.FullName.trim().length < 3) {
+      errors.FullName = "Full name must be at least 3 characters"
+    } else if (formData.FullName.trim().length > 50) {
+      errors.FullName = "Full name must not exceed 50 characters"
+    }
+    
+    // Username validation
+    if (!formData.Username.trim()) {
+      errors.Username = "Username is required"
+    } else if (formData.Username.trim().length < 3) {
+      errors.Username = "Username must be at least 3 characters"
+    } else if (formData.Username.trim().length > 50) {
+      errors.Username = "Username must not exceed 50 characters"
+    }
+    
+    // Email validation (optional but if provided, must be valid)
+    if (formData.Email && formData.Email.trim() !== "") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.Email)) {
+        errors.Email = "Please enter a valid email address"
+      }
+    }
+    
+    // Phone validation (optional but if provided, must be valid 10-digit number)
+    if (formData.Phone1 && formData.Phone1.trim() !== "") {
+      const phoneRegex = /^[1-9][0-9]{9}$/
+      if (!phoneRegex.test(formData.Phone1.replace(/\D/g, ''))) {
+        errors.Phone1 = "Please enter a valid 10-digit phone number"
+      }
+    }
+    
+    // Password validation (required for new organizers)
+    if (!editingOrganizer) {
+      if (!formData.password) {
+        errors.password = "Password is required"
+      } else if (formData.password.length < 6) {
+        errors.password = "Password must be at least 6 characters"
+      }
+    }
+    
+    setFormErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Generate password function
+  const handleGeneratePassword = () => {
+    const length = 12
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    
+    setFormData({ ...formData, password })
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(password).then(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}\nPassword copied to clipboard!`,
+      })
+    }).catch(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}`,
+      })
+    })
+  }
+
+  
+  
+  // Fetch organizers with pagination
+  const fetchOrganizers = async (page: number = 1) => {
     try {
       setLoading(true)
       setApiError(null)
@@ -105,55 +297,81 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         return
       }
 
-      console.log("Fetching organizers with API...")
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
-        method: "GET",
+      console.log(`Fetching organizers page ${page}...`)
+      
+      const requestBody: PaginationRequest = {
+        page: page,
+        limit: ITEMS_PER_PAGE
+      }
+
+      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_PAGINATED_DATA_URL, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`)
-      }
-
-      const data = await response.json()
+      }      const data: PaginatedOrganizersResponse = await response.json()
       console.log("Organizers API response:", data)
 
-      // Handle different response structures
-      let organizersData = []
-      if (data.organizers) {
-        organizersData = data.organizers
-      } else if (Array.isArray(data)) {
-        organizersData = data
-      } else if (data.data && Array.isArray(data.data)) {
-        organizersData = data.data
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch organizers")
+      }      // Defensive programming - handle different response structures
+      if (!data.data) {        console.warn("No data in API response:", data)
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError("No data received from server")
+        return
       }
 
-      // Normalize the data to match our interface
-      const normalizedOrganizers = organizersData.map((org: any) => ({
-        _id: org._id || org.id,
-        organizerName: org.organizerName || org.FullName || org.name || org.organizerName,
-        email: org.email || org.Email,
-        phone: org.phone || org.Phone1 || org.phoneNumber,
-        status: org.status || org.Status || "Active",
-        totalEvents: org.totalEvents || 0,
-        totalSales: org.totalSales || 0,
-        convenienceFeeCharged: org.convenienceFeeCharged || 0,
-        pendingAmount: org.pendingAmount || 0,
-        createdAt: org.createdAt || org.CreatedAt || new Date().toISOString(),
-      }))
+      // Handle different response structures
+      let organizersData: Organizer[] = []
+      let currentPageData = 1
+      let totalPagesData = 1
+      let totalOrganizersData = 0
+      
+      if (Array.isArray(data.data)) {
+        // Simple array response (your current API structure)
+        organizersData = data.data
+        totalOrganizersData = data.data.length
+        // For simple array, we'll implement client-side pagination
+        totalPagesData = Math.ceil(data.data.length / ITEMS_PER_PAGE)
+        currentPageData = currentPage
+      } else if (data.data.OrganizerData && Array.isArray(data.data.OrganizerData)) {
+        // Paginated response structure
+        organizersData = data.data.OrganizerData
+        currentPageData = data.data.currentPage || 1
+        totalPagesData = data.data.totalPages || 1
+        totalOrganizersData = data.data.totalOrganizers || 0
+      } else {
+        console.warn("Unexpected API response structure:", data)
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError("Invalid response structure from server")
+        return
+      }
 
-      setOrganizers(normalizedOrganizers)
-      setOriginalData(normalizedOrganizers)
-      setUseMockData(false)
+      // Set the paginated data
+      setOrganizers(organizersData)
+      setCurrentPage(currentPageData)
+      setTotalPages(totalPagesData)
+      setTotalOrganizers(totalOrganizersData)
       setApiError(null)
     } catch (error) {
       console.error("Error fetching organizers:", error)
       
       // Extract meaningful error message
       let errorMessage = "Failed to load organizers"
+
+
       if (error instanceof Error) {
         errorMessage = error.message
       } else if (typeof error === 'string') {
@@ -162,17 +380,18 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       
       setApiError(errorMessage)
       setOrganizers([])
-      setOriginalData([])
-      setUseMockData(false)
+      setCurrentPage(1)
+      setTotalPages(1)
+      setTotalOrganizers(0)
     } finally {
       setLoading(false)
     }
   }
 
-  // Search with API integration
-  const searchOrganizers = async (keyword: string) => {
+  // Search organizers with pagination
+  const searchOrganizers = async (keyword: string, page: number = 1) => {
     if (!keyword.trim()) {
-      setOrganizers(originalData)
+      fetchOrganizers(page)
       return
     }
 
@@ -182,63 +401,80 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
       const authToken = localStorage.getItem("authToken")
       if (!user || !authToken) {
-        // Fallback to local filtering when no auth
-        const filtered = originalData.filter((org) =>
-          org.organizerName.toLowerCase().includes(keyword.toLowerCase()) ||
-          org.email.toLowerCase().includes(keyword.toLowerCase())
-        )
-        setOrganizers(filtered)
+        setApiError("Authentication required for search.")
         return
       }
 
-      const response = await fetch(organizerEndpoint.SEARCH_ORGANIZER_BY_ORGANIZER_NAME, {
+      const requestBody: SearchRequest = {
+        page: page,
+        limit: ITEMS_PER_PAGE,
+        search_keyword: keyword
+      }
+
+      const response = await fetch(organizerEndpoint.GET_ORGANIZERS_PAGINATED_SEARCH_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ search_keyword: keyword }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
         throw new Error(`Search API error: ${response.status}`)
-      }
-
-      const data = await response.json()
+      }      const data: PaginatedOrganizersResponse = await response.json()
       console.log("Search response:", data)
 
-      let organizersData = []
-      if (data.organizers) {
-        organizersData = data.organizers
-      } else if (Array.isArray(data)) {
-        organizersData = data
-      } else if (data.data && Array.isArray(data.data)) {
+      if (data.error) {
+        throw new Error(data.message || "Search failed")
+      }      // Defensive programming - handle different response structures
+      if (!data.data) {
+        console.warn("No data in search response:", data)
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError("No data received from server")
+        return
+      }      // Handle different response structures
+      let organizersData: Organizer[] = []
+      let currentPageData = 1
+      let totalPagesData = 1
+      let totalOrganizersData = 0
+      
+      if (Array.isArray(data.data)) {
+        // Simple array response (your current API structure)
         organizersData = data.data
+        totalOrganizersData = data.data.length
+        // For simple array, we'll implement client-side pagination
+        totalPagesData = Math.ceil(data.data.length / ITEMS_PER_PAGE)
+        currentPageData = page
+      } else if (data.data.OrganizerData && Array.isArray(data.data.OrganizerData)) {
+        // Paginated response structure
+        organizersData = data.data.OrganizerData
+        currentPageData = data.data.currentPage || 1
+        totalPagesData = data.data.totalPages || 1
+        totalOrganizersData = data.data.totalOrganizers || 0
+      } else {
+        console.warn("Unexpected search response structure:", data)
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError("Invalid response structure from server")
+        return
       }
 
-      const normalizedOrganizers = organizersData.map((org: any) => ({
-        _id: org._id || org.id,
-        organizerName: org.organizerName || org.FullName || org.name,
-        email: org.email || org.Email,
-        phone: org.phone || org.Phone1,
-        status: org.status || org.Status || "Active",
-        totalEvents: org.totalEvents || 0,
-        totalSales: org.totalSales || 0,
-        convenienceFeeCharged: org.convenienceFeeCharged || 0,
-        pendingAmount: org.pendingAmount || 0,
-        createdAt: org.createdAt || org.CreatedAt || new Date().toISOString(),
-      }))
-
-      setOrganizers(normalizedOrganizers)
+      // Set the search results
+      setOrganizers(organizersData)
+      setCurrentPage(currentPageData)
+      setTotalPages(totalPagesData)
+      setTotalOrganizers(totalOrganizersData)
+      setApiError(null)
     } catch (error) {
       console.error("Error searching organizers:", error)
-      // Fallback to local filtering
-      const filtered = originalData.filter((org) =>
-        org.organizerName.toLowerCase().includes(keyword.toLowerCase()) ||
-        org.email.toLowerCase().includes(keyword.toLowerCase())
-      )
-      setOrganizers(filtered)
-      setApiError("Search failed. Using local filtering.")
+      setApiError("Search failed. Please try again.")
+      setOrganizers([])
     } finally {
       setLoading(false)
     }
@@ -246,7 +482,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
   // Initialize data on component mount
   React.useEffect(() => {
-    fetchOrganizers()
+    fetchOrganizers(1)
   }, [user])
 
   // Search with debounce
@@ -260,73 +496,142 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
   React.useEffect(() => {
     if (debouncedSearchTerm === "") {
-      setOrganizers(originalData)
-      return
+      fetchOrganizers(currentPage)
+    } else {
+      searchOrganizers(debouncedSearchTerm, 1) // Always start from page 1 for new searches
+      setCurrentPage(1)
     }
-    searchOrganizers(debouncedSearchTerm)
-  }, [debouncedSearchTerm, originalData])
-
-  const filteredOrganizers = organizers
-  const totalPages = Math.ceil(filteredOrganizers.length / ITEMS_PER_PAGE)
-  const currentOrganizers = filteredOrganizers.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
-
-  const handlePageChange = (page: number) => setCurrentPage(page)
-
-  const resetForm = () => {
-    setFormData({ organizerName: "", email: "", phone: "", password: "" })
-    setEditingOrganizer(null)
+  }, [debouncedSearchTerm])
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page)
+    if (debouncedSearchTerm) {
+      searchOrganizers(debouncedSearchTerm, page)
+    } else {
+      fetchOrganizers(page)
+    }
   }
 
+  const resetForm = () => {
+    setFormData({
+      // Basic Info
+      OwnerType: "",
+      CompanyName: "",
+      FullName: "",
+      Username: "",
+      Email: "",
+      Phone1: "",
+      
+      // Address Info
+      Country: "India",
+      CountryIsoCode: "IN",
+      State: "",
+      StateIsoCode: "",
+      City: "",
+      CityIsoCode: "",
+      
+      // Security
+      password: "",
+      showPassword: false,
+      
+      // Notifications
+      sendEmailNotification: false,
+    })
+    setEditingOrganizer(null)
+    setFormErrors({})
+  }
   const handleFormSubmit = async () => {
-    if (!formData.organizerName || !formData.email) {
+    // Validate final step
+  
+
+    if (!formData.FullName || !formData.Email) {
       toast({ title: "Error", description: "Name and Email are required.", variant: "destructive" })
       return
     }
     setLoading(true)
     
     try {
-      // Simulate API call - in real implementation, call the API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = localStorage.getItem("authToken")
+      if (!user || !authToken) {
+        throw new Error("Authentication required")
+      }
+
+      // Prepare the payload based on the current API structure
+      const payload = {
+        OwnerType: formData.OwnerType,
+        CompanyName: formData.CompanyName,
+        FullName: formData.FullName,
+        Phone1: formData.Phone1,
+        Username: formData.Username,
+        Email: formData.Email,
+        Password: editingOrganizer ? undefined : formData.password, // Only include password for new organizers
+        Country: formData.Country,
+        CountryIsoCode: formData.CountryIsoCode,
+        State: formData.State,
+        StateIsoCode: formData.StateIsoCode,
+        City: formData.City,
+        CityIsoCode: formData.CityIsoCode,
+        // Add additional fields that might be supported by the API
       
-      if (editingOrganizer) {
-        setOrganizers(
-          organizers.map((org) =>
-            org._id === editingOrganizer._id
-              ? {
-                  ...editingOrganizer,
-                  ...formData,
-                  totalEvents: org.totalEvents,
-                  totalSales: org.totalSales,
-                  convenienceFeeCharged: org.convenienceFeeCharged,
-                  pendingAmount: org.pendingAmount,
-                }
-              : org,
-          ),
-        )
-        toast({ title: "Success", description: "Organizer updated." })
-      } else {
-        const newOrganizer: Organizer = {
-          _id: `org${Date.now()}`,
-          ...formData,
-          status: "Active",
-          totalEvents: 0,
-          totalSales: 0,
-          convenienceFeeCharged: 0,
-          pendingAmount: 0,
-          createdAt: new Date().toISOString(),
+      }
+
+      // Remove undefined fields
+      Object.keys(payload).forEach(key => {
+        if (payload[key as keyof typeof payload] === undefined) {
+          delete payload[key as keyof typeof payload]
         }
-        setOrganizers([newOrganizer, ...organizers])
-        toast({ title: "Success", description: "Organizer created." })
+      })
+
+      let response
+      if (editingOrganizer) {
+        // TODO: Implement update API call when endpoint is available
+        response = await fetch(`/api/organizers/${editingOrganizer._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        })
+      } else {
+        // TODO: Replace with actual create organizer endpoint
+        response = await fetch(organizerEndpoint.REGISTER_ORGANIZER_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        })
+      }
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.error) {
+        throw new Error(result.message || "Operation failed")
+      }
+      
+      toast({ 
+        title: "Success", 
+        description: editingOrganizer ? "Organizer updated successfully." : "Organizer created successfully." 
+      })
+      
+      // Refresh the current page
+      if (debouncedSearchTerm) {
+        searchOrganizers(debouncedSearchTerm, currentPage)
+      } else {
+        fetchOrganizers(currentPage)
       }
     } catch (error) {
       console.error("Error saving organizer:", error)
       toast({ 
         title: "Error", 
-        description: "Failed to save organizer. Please try again.", 
+        description: error instanceof Error ? error.message : "Failed to save organizer. Please try again.", 
         variant: "destructive" 
       })
-    } finally {
-      setLoading(false)
+    } finally {      setLoading(false)
       setIsFormOpen(false)
       resetForm()
     }
@@ -335,24 +640,46 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const handleEdit = (organizer: Organizer) => {
     setEditingOrganizer(organizer)
     setFormData({
-      organizerName: organizer.organizerName,
-      email: organizer.email,
-      phone: organizer.phone,
+      // Basic Info
+      OwnerType: organizer.OwnerType === "Club" ? "ownClub" : "eventCompany",
+      CompanyName: organizer.CompanyName || "",
+      FullName: organizer.FullName || "",
+      Username: organizer.Username || "",
+      Email: organizer.Email || "",
+      Phone1: organizer.Phone1 || "",
+      
+      // Address Info
+      Country: organizer.Country || "India",
+      CountryIsoCode: organizer.CountryIsoCode || "IN",
+      State: organizer.State || "",
+      StateIsoCode: organizer.StateIsoCode || "",
+      City: organizer.City || "",
+      CityIsoCode: organizer.CityIsoCode || "",
+      
+      // Security
       password: "",
+      showPassword: false,
+      
+      // Notifications
+      sendEmailNotification: false,
     })
+    setFormErrors({})
     setIsFormOpen(true)
   }
 
   const handleDisable = async (organizerId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
+      // TODO: Implement actual API call for updating organizer status
       await new Promise((resolve) => setTimeout(resolve, 500))
-      setOrganizers(
-        organizers.map((org) =>
-          org._id === organizerId ? { ...org, status: org.status === "Disabled" ? "Active" : "Disabled" } : org,
-        ),
-      )
+      
+      // Refresh the current page
+      if (debouncedSearchTerm) {
+        searchOrganizers(debouncedSearchTerm, currentPage)
+      } else {
+        fetchOrganizers(currentPage)
+      }
+      
       toast({ title: "Success", description: "Organizer status updated." })
     } catch (error) {
       console.error("Error updating organizer status:", error)
@@ -369,7 +696,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const handleResetPassword = async (organizerId: string) => {
     setLoading(true)
     try {
-      // Simulate API call
+      // TODO: Implement actual API call for password reset
       await new Promise((resolve) => setTimeout(resolve, 1000))
       toast({ title: "Success", description: `Password reset link sent to organizer.` })
     } catch (error) {
@@ -384,35 +711,94 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     }
   }
 
-  const openAccountManager = (organizer: Organizer) => {
-    setSelectedOrganizerForAccounts(organizer)
-    setIsAccountManagerOpen(true)
+
+  // Helper function to get status display text and variant
+  const getStatusDisplay = (status: number) => {
+    switch (status) {
+      case 1:
+        return { text: "Active", variant: "default" as const }
+      case 0:
+        return { text: "Inactive", variant: "secondary" as const }
+      default:
+        return { text: "Unknown", variant: "destructive" as const }
+    }
   }
 
-  const handleAddAccountEntry = async () => {
-    if (!accountFormData.date || !accountFormData.amountReceived) {
-      toast({ title: "Error", description: "Date and Amount Received are required.", variant: "destructive" })
-      return
-    }
-    
+  // Fetch sales data for an organizer
+  const fetchSalesData = async (organizerId: string) => {
     try {
-      // Simulate adding account entry
-      toast({ title: "Success", description: `Account entry added for ${selectedOrganizerForAccounts?.organizerName}.` })
-      setAccountFormData({ date: "", remark: "", amountReceived: "" })
+      setSalesLoading(true)
+
+      const authToken = localStorage.getItem("authToken")
+      if (!user || !authToken) {
+        toast({ title: "Error", description: "Authentication required.", variant: "destructive" })
+        return
+      }
+
+      const salesRequest: SalesRequest = {
+        organizer_id: organizerId,
+        page: "1",
+        limit: "10"
+      }
+
+      const totalSalesRequest: TotalSalesRequest = {
+        organizer_id: organizerId
+      }
+
+      // Fetch both sales data and total sales data concurrently
+      const [salesResponse, totalSalesResponse] = await Promise.all([
+        fetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(salesRequest),
+        }),
+        fetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(totalSalesRequest),
+        })
+      ])
+
+      if (!salesResponse.ok || !totalSalesResponse.ok) {
+        throw new Error("Failed to fetch sales data")
+      }
+
+      const salesData: SalesDataResponse = await salesResponse.json()
+      const totalSalesData: TotalSalesDataResponse = await totalSalesResponse.json()
+
+      if (salesData.error || totalSalesData.error) {
+        throw new Error(salesData.message || totalSalesData.message || "Failed to fetch sales data")
+      }
+
+      setSalesData(salesData.data.EventsData)
+      setTotalSalesData(totalSalesData.data)
     } catch (error) {
-      console.error("Error adding account entry:", error)
+      console.error("Error fetching sales data:", error)
       toast({ 
         title: "Error", 
-        description: "Failed to add account entry.", 
+        description: "Failed to fetch sales data. Please try again.", 
         variant: "destructive" 
       })
+    } finally {
+      setSalesLoading(false)
     }
+  }
+
+  const openSalesDialog = (organizer: Organizer) => {
+    setSelectedOrganizerForSales(organizer)
+    setIsSalesDialogOpen(true)
+    fetchSalesData(organizer._id)
   }
 
   if (role !== "superadmin") {
     return <div className="p-6 text-muted-foreground">Access Denied. Superadmin only.</div>
   }
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -440,7 +826,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               className="ml-2"
               onClick={() => {
                 setApiError(null)
-                fetchOrganizers()
+                fetchOrganizers(currentPage)
               }}
             >
               Retry
@@ -462,11 +848,6 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               disabled={loading}
             />
           </div>
-          {useMockData && (
-            <p className="text-sm text-muted-foreground mt-2">
-              Using sample data - API integration available
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -476,7 +857,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           <CardDescription>
             View and manage event organizers. 
             {loading && " Loading..."}
-            {!loading && ` (${filteredOrganizers.length} total)`}
+            {!loading && ` (${totalOrganizers} total, page ${currentPage} of ${totalPages})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -485,7 +866,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               <Loader2 className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading organizers...</span>
             </div>
-          ) : currentOrganizers.length === 0 ? (
+          ) : !organizers || organizers.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground">
                 {searchTerm ? `No organizers found matching "${searchTerm}"` : "No organizers found"}
@@ -504,58 +885,54 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Username</TableHead>
                   <TableHead>Name</TableHead>
-                  <TableHead className="hidden md:table-cell">Email</TableHead>
-                  <TableHead className="hidden lg:table-cell">Phone</TableHead>
+                  <TableHead>City</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone no.</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Total Sales</TableHead>
-                  <TableHead>
-                    <span className="sr-only">Actions</span>
-                  </TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {currentOrganizers.map((org) => (
-                  <TableRow key={org._id}>
-                    <TableCell className="font-medium">{org.organizerName}</TableCell>
-                    <TableCell className="hidden md:table-cell">{org.email}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{org.phone}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={
-                          org.status === "Active" ? "default" : org.status === "Inactive" ? "secondary" : "destructive"
-                        }
-                      >
-                        {org.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">${org.totalSales.toLocaleString()}</TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button aria-haspopup="true" size="icon" variant="ghost" disabled={loading}>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => handleEdit(org)}>
-                            <Eye className="mr-2 h-4 w-4" /> View & Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openAccountManager(org)}>
-                            <DollarSign className="mr-2 h-4 w-4" /> Manage Accounts
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDisable(org._id)}>
-                            {org.status === "Disabled" ? "Enable" : "Disable"} Organizer
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleResetPassword(org._id)}>
-                            <KeyRound className="mr-2 h-4 w-4" /> Reset Password
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+              </TableHeader>              <TableBody>
+                {(organizers || []).map((org) => {
+                  const statusDisplay = getStatusDisplay(org.status)
+                  return (
+                    <TableRow key={org._id}>
+                      <TableCell className="font-medium">{org.Username || "N/A"}</TableCell>
+                      <TableCell>{org.FullName || "N/A"}</TableCell>
+                      <TableCell>{org.City || "N/A"}</TableCell>
+                      <TableCell>{org.Email || "N/A"}</TableCell>
+                      <TableCell>{org.Phone1 || "N/A"}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusDisplay.variant}>
+                          {statusDisplay.text}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button aria-haspopup="true" size="icon" variant="ghost" disabled={loading}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem onClick={() => handleEdit(org)}>
+                              <Eye className="mr-2 h-4 w-4" /> View & Edit
+                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => openSalesDialog(org)}>
+                              <DollarSign className="mr-2 h-4 w-4" /> Sales
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
+                              {org.status === 0 ? "Enable" : "Disable"} Organizer
+                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => handleResetPassword(org._id)}>
+                              <KeyRound className="mr-2 h-4 w-4" /> Reset Password
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           )}
@@ -572,20 +949,23 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                   />
                 </PaginationItem>
-                {[...Array(totalPages)].map((_, i) => (
-                  <PaginationItem key={i}>
-                    <PaginationLink
-                      href="#"
-                      isActive={currentPage === i + 1}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handlePageChange(i + 1)
-                      }}
-                    >
-                      {i + 1}
-                    </PaginationLink>
-                  </PaginationItem>
-                ))}
+                {[...Array(Math.min(totalPages, 10))].map((_, i) => {
+                  const page = i + 1
+                  return (
+                    <PaginationItem key={i}>
+                      <PaginationLink
+                        href="#"
+                        isActive={currentPage === page}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handlePageChange(page)
+                        }}
+                      >
+                        {page}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
                 <PaginationItem>
                   <PaginationNext
                     href="#"
@@ -600,86 +980,261 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             </Pagination>
           )}
         </CardContent>
-      </Card>
-
-      {/* Sales Report Summary for a selected organizer - This is a simplified concept. 
-          A real implementation would likely be on the "View & Edit" page or a dedicated dashboard for that organizer.
-          For now, let's show it if an organizer is selected for account management.
-      */}
-      {selectedOrganizerForAccounts && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Sales Report: {selectedOrganizerForAccounts.organizerName}</CardTitle>
-          </CardHeader>
-          <CardContent className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-sm text-muted-foreground">Total Events</div>
-              <div className="text-2xl font-bold">{selectedOrganizerForAccounts.totalEvents}</div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-sm text-muted-foreground">Total Sales Received</div>
-              <div className="text-2xl font-bold">${selectedOrganizerForAccounts.totalSales.toLocaleString()}</div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-sm text-muted-foreground">Convenience Fee Charged</div>
-              <div className="text-2xl font-bold">
-                ${selectedOrganizerForAccounts.convenienceFeeCharged.toLocaleString()}
-              </div>
-            </div>
-            <div className="p-4 bg-muted rounded-lg">
-              <div className="text-sm text-muted-foreground">Pending Amount</div>
-              <div className="text-2xl font-bold text-red-600">
-                ${selectedOrganizerForAccounts.pendingAmount.toLocaleString()}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Add/Edit Organizer Dialog */}
+      </Card>      {/* Add/Edit Organizer Dialog */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingOrganizer ? "Edit Organizer" : "Add New Organizer"}</DialogTitle>
+            <DialogTitle>
+              {editingOrganizer ? "Edit Organizer" : "Create New Organizer"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingOrganizer 
+                ? "Update organizer information" 
+                : "Fill in the required information to create a new organizer account"
+              }
+            </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="organizerName">Organizer Name</Label>
-              <Input
-                id="organizerName"
-                value={formData.organizerName}
-                onChange={(e) => setFormData({ ...formData, organizerName: e.target.value })}
-              />
+
+          <div className="space-y-6 py-4">
+            {/* Owner Type Selection */}
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">Owner Type *</Label>
+              <div className="flex gap-6">
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="ownClub"
+                    name="organizerType"
+                    value="ownClub"
+                    checked={formData.OwnerType === "ownClub"}
+                    onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="ownClub" className="ml-2 text-sm font-medium text-gray-900">
+                    Own club
+                  </label>
+                </div>
+                <div className="flex items-center">
+                  <input
+                    type="radio"
+                    id="eventCompany"
+                    name="organizerType"
+                    value="eventCompany"
+                    checked={formData.OwnerType === "eventCompany"}
+                    onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <label htmlFor="eventCompany" className="ml-2 text-sm font-medium text-gray-900">
+                    Event company name
+                  </label>
+                </div>
+              </div>
+              {formErrors.OwnerType && (
+                <div className="text-red-600 text-sm">{formErrors.OwnerType}</div>
+              )}
             </div>
+
+            {/* Conditional Company/Club Name Fields */}
+            {formData.OwnerType === "ownClub" && (
+              <div className="space-y-2">
+                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name *</Label>
+                <Input
+                  id="clubName"
+                  value={formData.CompanyName}
+                  onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
+                  placeholder="Enter your club name"
+                />
+                {formErrors.CompanyName && (
+                  <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
+                )}
+              </div>
+            )}
+
+            {formData.OwnerType === "eventCompany" && (
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name *</Label>
+                <Input
+                  id="companyName"
+                  value={formData.CompanyName}
+                  onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
+                  placeholder="Enter event company name"
+                />
+                {formErrors.CompanyName && (
+                  <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
+                )}
+              </div>
+            )}
+
+            {/* Full Name */}
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="organizerFullName" className="text-sm font-medium">Full Name *</Label>
               <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                id="organizerFullName"
+                value={formData.FullName}
+                onChange={(e) => setFormData({ ...formData, FullName: e.target.value })}
+                placeholder="Enter organizer full name"
               />
+              {formErrors.FullName && (
+                <div className="text-red-600 text-sm">{formErrors.FullName}</div>
+              )}
             </div>
+
+            {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="organizerusername" className="text-sm font-medium">Username *</Label>
               <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                id="organizerusername"
+                value={formData.Username}
+                onChange={(e) => setFormData({ ...formData, Username: e.target.value })}
+                placeholder="Enter organizer username"
               />
+              {formErrors.Username && (
+                <div className="text-red-600 text-sm">{formErrors.Username}</div>
+              )}
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Email */}
+              <div className="space-y-2">
+                <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id</Label>
+                <Input
+                  id="organizerEmail"
+                  type="email"
+                  value={formData.Email}
+                  onChange={(e) => setFormData({ ...formData, Email: e.target.value })}
+                  placeholder="Enter organizer emailId"
+                />
+                {formErrors.Email && (
+                  <div className="text-red-600 text-sm">{formErrors.Email}</div>
+                )}
+              </div>
+
+              {/* Phone Number */}
+              <div className="space-y-2">
+                <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No.</Label>
+                <Input
+                  id="organizerPhoneNo"
+                  value={formData.Phone1}
+                  onChange={(e) => setFormData({ ...formData, Phone1: e.target.value })}
+                  placeholder="Enter organizer phone number"
+                />
+                {formErrors.Phone1 && (
+                  <div className="text-red-600 text-sm">{formErrors.Phone1}</div>
+                )}
+              </div>
+            </div>
+
+            {/* Address Information */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Address Information</Label>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="country" className="text-sm">Country</Label>
+                  <Input
+                    id="country"
+                    value="India"
+                    disabled
+                    className="bg-gray-50"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="state" className="text-sm">State</Label>
+                  <Select 
+                    value={formData.State} 
+                    onValueChange={(value) => setFormData({ 
+                      ...formData, 
+                      State: value, 
+                      StateIsoCode: value.toLowerCase().replace(/\s+/g, '') 
+                    })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select state" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Maharashtra">Maharashtra</SelectItem>
+                      <SelectItem value="Karnataka">Karnataka</SelectItem>
+                      <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
+                      <SelectItem value="Gujarat">Gujarat</SelectItem>
+                      <SelectItem value="Rajasthan">Rajasthan</SelectItem>
+                      <SelectItem value="Uttar Pradesh">Uttar Pradesh</SelectItem>
+                      <SelectItem value="West Bengal">West Bengal</SelectItem>
+                      <SelectItem value="Delhi">Delhi</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="text-sm">City</Label>
+                  <Input
+                    id="city"
+                    value={formData.City}
+                    onChange={(e) => setFormData({ 
+                      ...formData, 
+                      City: e.target.value,
+                      CityIsoCode: e.target.value.toLowerCase().replace(/\s+/g, '')
+                    })}
+                    placeholder="Enter city"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Password */}
             {!editingOrganizer && (
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="organizerPassword"
+                    type={formData.showPassword ? "text" : "password"}
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Generate the Password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3"
+                    onClick={() => setFormData({ ...formData, showPassword: !formData.showPassword })}
+                  >
+                    {formData.showPassword ? (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+                {formErrors.password && (
+                  <div className="text-red-600 text-sm">{formErrors.password}</div>
+                )}
+                
+                {/* Generate Password Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGeneratePassword}
+                  className="w-full"
+                >
+                  Generate Password
+                </Button>
+              </div>
+            )}
+
+            {/* Send Email Notification */}
+            {!editingOrganizer && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="sendEmail"
+                  checked={formData.sendEmailNotification}
+                  onCheckedChange={(checked) => setFormData({ ...formData, sendEmailNotification: checked === true })}
+                  disabled={!formData.Email || formData.Email.trim() === ""}
                 />
+                <Label htmlFor="sendEmail" className="text-sm">
+                  Tick here to send a new account information message to this individual
+                </Label>
               </div>
             )}
           </div>
+
           <DialogFooter>
             <Button
               variant="outline"
@@ -690,68 +1245,101 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             >
               Cancel
             </Button>
-            <Button onClick={handleFormSubmit} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {editingOrganizer ? "Save Changes" : "Create Organizer"}
+            
+            <Button
+              onClick={handleFormSubmit}
+              disabled={loading}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {editingOrganizer ? "Save Changes" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
-
-      {/* Event-wise Account Management Dialog */}
-      <Dialog open={isAccountManagerOpen} onOpenChange={setIsAccountManagerOpen}>
-        <DialogContent className="max-w-2xl">
+      </Dialog>{/* Sales Data Dialog */}
+      <Dialog open={isSalesDialogOpen} onOpenChange={setIsSalesDialogOpen}>
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Account Management: {selectedOrganizerForAccounts?.organizerName}</DialogTitle>
-            <DialogDescription>Manage event-wise account entries.</DialogDescription>
+            <DialogTitle>Sales Data: {selectedOrganizerForSales?.FullName}</DialogTitle>
+            <DialogDescription>View sales data and events for this organizer.</DialogDescription>
           </DialogHeader>
-          <div className="py-4 space-y-4">
-            {/* This would typically list events and their account status. For now, a simple form to add an entry. */}
-            <h3 className="text-lg font-medium">Add New Account Entry</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-              <div className="space-y-2">
-                <Label htmlFor="accountDate">Date</Label>
-                <Input
-                  id="accountDate"
-                  type="date"
-                  value={accountFormData.date}
-                  onChange={(e) => setAccountFormData({ ...accountFormData, date: e.target.value })}
-                />
+          <div className="py-4">
+            {salesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="ml-2">Loading sales data...</span>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="amountReceived">Amount Received</Label>
-                <Input
-                  id="amountReceived"
-                  type="number"
-                  placeholder="0.00"
-                  value={accountFormData.amountReceived}
-                  onChange={(e) => setAccountFormData({ ...accountFormData, amountReceived: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleAddAccountEntry} className="md:self-end">
-                <FilePlus className="mr-2 h-4 w-4" /> Add Entry
-              </Button>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="accountRemark">Remark</Label>
-              <Textarea
-                id="accountRemark"
-                placeholder="Payment for 'Summer Fest'..."
-                value={accountFormData.remark}
-                onChange={(e) => setAccountFormData({ ...accountFormData, remark: e.target.value })}
-              />
-            </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Total Sales Summary */}
+                {totalSalesData && (
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Sales Summary</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <div className="p-4 bg-muted rounded-lg">
+                        <div className="text-sm text-muted-foreground">Total Events</div>
+                        <div className="text-2xl font-bold">{totalSalesData.totalEventCount}</div>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg">
+                        <div className="text-sm text-muted-foreground">Total Sales</div>
+                        <div className="text-2xl font-bold">₹{totalSalesData.totalSalesSum.toLocaleString()}</div>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg">
+                        <div className="text-sm text-muted-foreground">Pending Amount</div>
+                        <div className="text-2xl font-bold text-red-600">₹{totalSalesData.totalPendingAmountSum.toLocaleString()}</div>
+                      </div>
+                      <div className="p-4 bg-muted rounded-lg">
+                        <div className="text-sm text-muted-foreground">Convenience Fee</div>
+                        <div className="text-2xl font-bold">₹{totalSalesData.totalConvenienceFeeAmountSum.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-            {/* Placeholder for listing existing account entries */}
-            <div className="mt-4 border-t pt-4">
-              <h4 className="text-md font-medium mb-2">Existing Entries (Placeholder)</h4>
-              <p className="text-sm text-muted-foreground">
-                Event-wise account entries would be listed here with options to delete.
-              </p>
-            </div>
+                {/* Events Table */}
+                <div>
+                  <h3 className="text-lg font-medium mb-4">Events</h3>
+                  {!salesData || salesData.length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-muted-foreground">
+                        No events found for this organizer.
+                      </div>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Event Name</TableHead>
+                          <TableHead>Start Date</TableHead>
+                          <TableHead>Online Sales</TableHead>
+                          <TableHead>Promoter Sales</TableHead>
+                          <TableHead>Total Sales</TableHead>
+                          <TableHead>Convenience Fee</TableHead>
+                          <TableHead>Pending Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {salesData.map((event) => (
+                          <TableRow key={event.event_id}>
+                            <TableCell className="font-medium">{event.EventName}</TableCell>
+                            <TableCell>{event.EventStartDate}</TableCell>
+                            <TableCell>₹{event.totalOnlineSales.toLocaleString()}</TableCell>
+                            <TableCell>₹{event.totalPromoterSales.toLocaleString()}</TableCell>
+                            <TableCell className="font-semibold">₹{event.totalSales.toLocaleString()}</TableCell>
+                            <TableCell>₹{event.totalConvenienceFeeAmount.toLocaleString()}</TableCell>
+                            <TableCell className="text-red-600 font-semibold">₹{event.PendingAmount.toLocaleString()}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAccountManagerOpen(false)}>
+            <Button variant="outline" onClick={() => setIsSalesDialogOpen(false)}>
               Close
             </Button>
           </DialogFooter>

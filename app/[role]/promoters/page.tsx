@@ -14,6 +14,15 @@ import { promoterEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -27,6 +36,8 @@ import {
   Alert,
   AlertDescription,
 } from "@/components/ui/alert"
+import { AddressSelector } from "@/components/address-selector"
+import AddAddress from "@/components/add-address"
 
 interface PromotersPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -36,8 +47,8 @@ interface Promoter {
   _id: string
   FullName: string
   Username: string
-  Email: string
-  Phone1: string
+  Email: string | null
+  Phone1: string | null
   Country: string
   CountryIsoCode?: string
   State: string
@@ -45,15 +56,27 @@ interface Promoter {
   City: string
   CityIsoCode?: string
   ProfileImage?: string
-  Status: number // 0 = Inactive, 1 = Active
+  status: number // Changed from Status to status (lowercase) to match API
   createdAt: string
-  updatedAt: string
+  updatedAt?: string
+  FilterationDateTime?: string
+  CreatedBy?: string
+  createduser_id?: string
+  Password?: string
+  __v?: number
 }
 
 interface PromotersApiResponse {
   error: boolean
   message: string
-  data: Promoter[]
+  data: Promoter[] | {
+    PromoterData: Promoter[]  // Changed from PromotersData to PromoterData
+    totalPages: number
+    currentPage: number
+    totalPromoters: number
+    hasNextPage: boolean
+    hasPreviousPage: boolean
+  }
 }
 
 const statusColors = {
@@ -78,7 +101,6 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   
   const { toast } = useToast()
   const { user } = useAuth()
-
   // State management
   const [promoters, setPromoters] = React.useState<Promoter[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -89,13 +111,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   const [selectedPromoter, setSelectedPromoter] = React.useState<Promoter | null>(null)
   const [showViewDialog, setShowViewDialog] = React.useState(false)
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = React.useState(1)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalPromoters, setTotalPromoters] = React.useState(0)
+  const [itemsPerPage] = React.useState(10)
+  
   // CRUD dialogs
   const [showCreateDialog, setShowCreateDialog] = React.useState(false)
   const [showEditDialog, setShowEditDialog] = React.useState(false)
   const [showStatusDialog, setShowStatusDialog] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [statusAction, setStatusAction] = React.useState<'enable' | 'disable'>('disable')
-    // Form data
+  // Form data
   const [formData, setFormData] = React.useState({
     FullName: "",
     Username: "",
@@ -109,6 +137,24 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     City: "",
     CityIsoCode: "",
   })
+  // Address selector state
+  const [stateIsoCode, setStateIsoCode] = React.useState("")
+  const [stateName, setStateName] = React.useState("")
+  const [cityIsoCode, setCityIsoCode] = React.useState("")
+  const [cityName, setCityName] = React.useState("")
+
+  // Sync address selector with form data
+  React.useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      State: stateName,
+      StateIsoCode: stateIsoCode,
+      City: cityName,
+      CityIsoCode: cityIsoCode,
+      Country: "India", // Always India for this component
+      CountryIsoCode: "IN"
+    }))
+  }, [stateIsoCode, stateName, cityIsoCode, cityName])
 
   // Debounce search term
   React.useEffect(() => {
@@ -117,9 +163,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     }, 300)
     return () => clearTimeout(timer)
   }, [searchTerm])
-
-  // Fetch promoters data
-  const fetchPromoters = React.useCallback(async () => {
+  // Fetch promoters data with pagination
+  const fetchPromoters = React.useCallback(async (page: number = 1, searchKeyword: string = "") => {
     if (!user) return
     
     setLoading(true)
@@ -131,12 +176,24 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         throw new Error("No valid authentication token found")
       }
 
-      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
-        method: "GET",
+      // Use the paginated endpoint
+      const endpoint = searchKeyword 
+        ? promoterEndpoint.SEARCH_PROMOTER_PAGINATED 
+        : promoterEndpoint.GET_ALL_PROMOTER_DATA_PAGINATED_URL
+
+      const requestBody = {
+        page: page.toString(),
+        limit: itemsPerPage.toString(),
+        ...(searchKeyword && { search_keyword: searchKeyword })
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
@@ -147,35 +204,62 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       
       if (result.error) {
         throw new Error(result.message || "Failed to fetch promoters")
+      }      // Handle paginated response structure
+      if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
+        const paginatedData = result.data as {
+          PromoterData: Promoter[]  // Changed from PromotersData to PromoterData
+          totalPages: number
+          currentPage: number
+          totalPromoters: number
+          hasNextPage: boolean
+          hasPreviousPage: boolean
+        }
+        setPromoters(paginatedData.PromoterData || [])  // Changed from PromotersData to PromoterData
+        setTotalPages(paginatedData.totalPages || 1)
+        setTotalPromoters(paginatedData.totalPromoters || 0)
+        setCurrentPage(paginatedData.currentPage || page)
+      } else {
+        // Fallback for non-paginated response
+        setPromoters(Array.isArray(result.data) ? result.data : [])
+        setTotalPages(1)
+        setTotalPromoters(Array.isArray(result.data) ? result.data.length : 0)
+        setCurrentPage(1)
       }
 
-      setPromoters(result.data || [])
     } catch (error) {
       console.error("Error fetching promoters:", error)
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred"
       setApiError(errorMessage)
       setShowErrorDialog(true)
       setPromoters([])
+      setTotalPages(1)
+      setTotalPromoters(0)
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, itemsPerPage])
 
+  // Handle page changes
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage)
+      fetchPromoters(newPage, debouncedSearchTerm)
+    }
+  }
   // Initial load
   React.useEffect(() => {
-    fetchPromoters()
+    fetchPromoters(1, "") // Always start from page 1 on initial load
   }, [fetchPromoters])
 
-  // Filter promoters based on search
-  const filteredPromoters = React.useMemo(() => {
-    if (!debouncedSearchTerm) return promoters
-    return promoters.filter((promoter) => 
-      promoter.FullName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      promoter.Email.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      promoter.Username.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-      promoter.Phone1.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-    )
-  }, [promoters, debouncedSearchTerm])
+  // Handle search - reset to page 1 when searching
+  React.useEffect(() => {
+    if (debouncedSearchTerm !== searchTerm) return // Only trigger when debounced term is ready
+    setCurrentPage(1) // Reset to page 1 for new search
+    fetchPromoters(1, debouncedSearchTerm)
+  }, [debouncedSearchTerm, fetchPromoters])
+
+  // Remove the filteredPromoters useMemo since we're using server-side pagination
+  // const filteredPromoters = promoters // No client-side filtering needed
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN', {
@@ -327,7 +411,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         State: formData.State,
         City: formData.City,
         SendMailFlag: 1,
-        CreatedBy: user?.Username || "Admin",
+        CreatedBy: 1,
         createduser_id: user?.user_id || "",
       }
 
@@ -352,14 +436,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       const result = await response.json()
 
-      if (response.ok && !result.error) {
-        toast({
+      if (response.ok && !result.error) {        toast({
           title: "Success",
           description: "Promoter created successfully",
         })
         setShowCreateDialog(false)
         resetForm()
-        await fetchPromoters()
+        await fetchPromoters(currentPage, debouncedSearchTerm)
       } else {
         throw new Error(result.message || "Failed to create promoter")
       }
@@ -428,14 +511,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       const result = await response.json()
 
-      if (response.ok && !result.error) {
-        toast({
+      if (response.ok && !result.error) {        toast({
           title: "Success",
           description: "Promoter updated successfully",
         })
         setShowEditDialog(false)
         resetForm()
-        await fetchPromoters()
+        await fetchPromoters(currentPage, debouncedSearchTerm)
       } else {
         throw new Error(result.message || "Failed to update promoter")
       }
@@ -477,14 +559,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       const result = await response.json()
 
-      if (response.ok && !result.error) {
-        toast({
+      if (response.ok && !result.error) {        toast({
           title: "Success",
           description: `Promoter ${statusAction}d successfully`,
         })
         setShowStatusDialog(false)
         resetForm()
-        await fetchPromoters()
+        await fetchPromoters(currentPage, debouncedSearchTerm)
       } else {
         throw new Error(result.message || `Failed to ${statusAction} promoter`)
       }
@@ -498,19 +579,18 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       setSubmitting(false)
     }
   }
-
   const openCreateDialog = () => {
     resetForm()
     setShowCreateDialog(true)
   }
-  const openEditDialog = (promoter: Promoter) => {
+    const openEditDialog = (promoter: Promoter) => {
     setSelectedPromoter(promoter)
     setFormData({
       FullName: promoter.FullName,
       Username: promoter.Username,
-      Email: promoter.Email,
+      Email: promoter.Email || "",  // Handle null values
       Password: "",
-      Phone1: promoter.Phone1,
+      Phone1: promoter.Phone1 || "",  // Handle null values
       Country: promoter.Country,
       CountryIsoCode: promoter.CountryIsoCode || "",
       State: promoter.State,
@@ -518,14 +598,21 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       City: promoter.City,
       CityIsoCode: promoter.CityIsoCode || "",
     })
+    
+    // Set address selector state for editing
+    setStateIsoCode(promoter.StateIsoCode || "")
+    setStateName(promoter.State || "")
+    setCityIsoCode(promoter.CityIsoCode || "")
+    setCityName(promoter.City || "")
+    
     setShowEditDialog(true)
   }
-
   const openStatusDialog = (promoter: Promoter, action: 'enable' | 'disable') => {
     setSelectedPromoter(promoter)
     setStatusAction(action)
     setShowStatusDialog(true)
   }
+  
   const resetForm = () => {
     setFormData({
       FullName: "",
@@ -541,6 +628,12 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       CityIsoCode: "",
     })
     setSelectedPromoter(null)
+    
+    // Reset address selector state
+    setStateIsoCode("")
+    setStateName("")
+    setCityIsoCode("")
+    setCityName("")
   }
 
   return (
@@ -585,10 +678,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       <Card>
         <CardHeader>
           <CardTitle>
-            Promoters Management
-            {!loading && (
+            Promoters Management            {!loading && (
               <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({filteredPromoters.length} total)
+                ({totalPromoters} total, page {currentPage} of {totalPages})
               </span>
             )}
           </CardTitle>
@@ -602,7 +694,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               <Loader2 className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading promoters...</span>
             </div>
-          ) : filteredPromoters.length === 0 ? (
+          ) : promoters.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground">
                 {searchTerm ? 'No promoters found matching your search' : 'No promoters found'}
@@ -623,20 +715,18 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredPromoters.map((promoter) => (
+                {promoters.map((promoter: Promoter) => (
                   <TableRow key={promoter._id}>
                     <TableCell className="font-medium">
                       {promoter.FullName}
-                    </TableCell>
-                    <TableCell>{promoter.Username}</TableCell>
-                    <TableCell>{promoter.Email}</TableCell>
-                    <TableCell>{promoter.Phone1}</TableCell>
+                    </TableCell>                    <TableCell>{promoter.Username}</TableCell>
+                    <TableCell>{promoter.Email || 'N/A'}</TableCell>
+                    <TableCell>{promoter.Phone1 || 'N/A'}</TableCell>
                     <TableCell>
                       {[promoter.City, promoter.State, promoter.Country].filter(Boolean).join(", ")}
                     </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[promoter.Status as keyof typeof statusColors]}>
-                        {statusLabels[promoter.Status as keyof typeof statusLabels] || 'Unknown'}
+                    <TableCell>                      <Badge className={statusColors[promoter.status as keyof typeof statusColors]}>
+                        {statusLabels[promoter.status as keyof typeof statusLabels] || 'Unknown'}
                       </Badge>
                     </TableCell>
                     <TableCell>{formatDate(promoter.createdAt)}</TableCell>
@@ -656,7 +746,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        {promoter.Status === 1 ? (
+                        {promoter.status === 1 ? (
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -676,9 +766,61 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
+                ))}              </TableBody>
             </Table>
+          )}
+          
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <Pagination className="mt-6">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (currentPage > 1) handlePageChange(currentPage - 1)
+                    }}
+                    className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+                
+                {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                  const pageNum = i + 1
+                  return (
+                    <PaginationItem key={pageNum}>
+                      <PaginationLink
+                        href="#"
+                        isActive={currentPage === pageNum}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handlePageChange(pageNum)
+                        }}
+                      >
+                        {pageNum}
+                      </PaginationLink>
+                    </PaginationItem>
+                  )
+                })}
+                
+                {totalPages > 5 && (
+                  <PaginationItem>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                )}
+                
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (currentPage < totalPages) handlePageChange(currentPage + 1)
+                    }}
+                    className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
           )}
         </CardContent>
       </Card>
@@ -698,10 +840,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           <div className="flex justify-end gap-2 pt-4">
             <Button variant="outline" onClick={() => setShowErrorDialog(false)}>
               Close
-            </Button>
-            <Button onClick={() => {
+            </Button>            <Button onClick={() => {
               setShowErrorDialog(false)
-              fetchPromoters()
+              fetchPromoters(currentPage, debouncedSearchTerm)
             }}>
               Retry
             </Button>
@@ -728,14 +869,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 <div>
                   <Label className="text-sm font-medium">Username</Label>
                   <p className="text-sm text-muted-foreground">{selectedPromoter.Username}</p>
-                </div>
-                <div>
+                </div>                <div>
                   <Label className="text-sm font-medium">Email</Label>
-                  <p className="text-sm text-muted-foreground">{selectedPromoter.Email}</p>
+                  <p className="text-sm text-muted-foreground">{selectedPromoter.Email || 'N/A'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Phone</Label>
-                  <p className="text-sm text-muted-foreground">{selectedPromoter.Phone1}</p>
+                  <p className="text-sm text-muted-foreground">{selectedPromoter.Phone1 || 'N/A'}</p>
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Country</Label>
@@ -748,11 +888,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 <div>
                   <Label className="text-sm font-medium">City</Label>
                   <p className="text-sm text-muted-foreground">{selectedPromoter.City}</p>
-                </div>
-                <div>
+                </div>                <div>
                   <Label className="text-sm font-medium">Status</Label>
-                  <Badge className={statusColors[selectedPromoter.Status as keyof typeof statusColors]}>
-                    {statusLabels[selectedPromoter.Status as keyof typeof statusLabels]}
+                  <Badge className={statusColors[selectedPromoter.status as keyof typeof statusColors]}>
+                    {statusLabels[selectedPromoter.status as keyof typeof statusLabels]}
                   </Badge>
                 </div>
                 <div>
@@ -761,7 +900,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Last Updated</Label>
-                  <p className="text-sm text-muted-foreground">{formatDate(selectedPromoter.updatedAt)}</p>
+                  <p className="text-sm text-muted-foreground">{selectedPromoter.updatedAt ? formatDate(selectedPromoter.updatedAt) : 'N/A'}</p>
                 </div>
               </div>
             </div>
@@ -836,52 +975,18 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               />
               {formData.Phone1 && formData.Phone1.length !== 10 && (
                 <p className="text-sm text-red-500">Phone number must be exactly 10 digits</p>
-              )}
-            </div><div className="grid gap-2">
-              <Label htmlFor="country">Country</Label>
-              <Input
-                id="country"
-                value={formData.Country}
-                onChange={(e) => setFormData(prev => ({ ...prev, Country: e.target.value }))}
-                placeholder="Enter country"
-              />
-            </div>
+              )}            </div>
+              {/* Address Selector Component */}
             <div className="grid gap-2">
-              <Label htmlFor="countryIsoCode">Country ISO Code *</Label>
-              <Select 
-                value={formData.CountryIsoCode} 
-                onValueChange={(value) => setFormData(prev => ({ ...prev, CountryIsoCode: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select country code" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="IN">India (IN)</SelectItem>
-                  <SelectItem value="US">United States (US)</SelectItem>
-                  <SelectItem value="GB">United Kingdom (GB)</SelectItem>
-                  <SelectItem value="AU">Australia (AU)</SelectItem>
-                  <SelectItem value="CA">Canada (CA)</SelectItem>
-                  <SelectItem value="DE">Germany (DE)</SelectItem>
-                  <SelectItem value="FR">France (FR)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="state">State</Label>
-              <Input
-                id="state"
-                value={formData.State}
-                onChange={(e) => setFormData(prev => ({ ...prev, State: e.target.value }))}
-                placeholder="Enter state"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="city">City</Label>
-              <Input
-                id="city"
-                value={formData.City}
-                onChange={(e) => setFormData(prev => ({ ...prev, City: e.target.value }))}
-                placeholder="Enter city"
+              <AddAddress
+                stateIsoCode={stateIsoCode}
+                setStateIsoCode={setStateIsoCode}
+                stateName={stateName}
+                setStateName={setStateName}
+                cityIsoCode={cityIsoCode}
+                setCityIsoCode={setCityIsoCode}
+                cityName={cityName}
+                setCityName={setCityName}
               />
             </div>
           </div>
@@ -896,7 +1001,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               Cancel
             </Button>            <Button 
               onClick={handleCreatePromoter}
-              disabled={submitting || !formData.FullName || !formData.Username || !formData.Email || !formData.Password || !formData.Phone1 || !formData.CountryIsoCode}
+              disabled={submitting || !formData.FullName || !formData.Username || !formData.Email || !formData.Password || !formData.Phone1 || !stateIsoCode || !cityIsoCode}
             >
               {submitting ? (
                 <>
@@ -966,6 +1071,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 <p className="text-sm text-red-500">Phone number must be exactly 10 digits</p>
               )}
             </div>
+              {/* Address Selector Component */}
+            <div className="grid gap-2">
+              <AddAddress
+                stateIsoCode={stateIsoCode}
+                setStateIsoCode={setStateIsoCode}
+                stateName={stateName}
+                setStateName={setStateName}
+                cityIsoCode={cityIsoCode}
+                setCityIsoCode={setCityIsoCode}
+                cityName={cityName}
+                setCityName={setCityName}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button 
@@ -976,10 +1094,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               }}
             >
               Cancel
-            </Button>
-            <Button 
+            </Button>            <Button 
               onClick={handleEditPromoter}
-              disabled={submitting || !formData.FullName || !formData.Email || !formData.Phone1}
+              disabled={submitting || !formData.FullName || !formData.Email || !formData.Phone1 || !stateIsoCode || !cityIsoCode}
             >
               {submitting ? (
                 <>
@@ -1012,10 +1129,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               <div className="flex items-center gap-4 p-4 border rounded-lg">
                 <div>
                   <p className="font-medium">{selectedPromoter.FullName}</p>
-                  <p className="text-sm text-muted-foreground">{selectedPromoter.Email}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Current status: <Badge className={statusColors[selectedPromoter.Status as keyof typeof statusColors]}>
-                      {statusLabels[selectedPromoter.Status as keyof typeof statusLabels]}
+                  <p className="text-sm text-muted-foreground">{selectedPromoter.Email || 'N/A'}</p>                  <p className="text-sm text-muted-foreground">
+                    Current status: <Badge className={statusColors[selectedPromoter.status as keyof typeof statusColors]}>
+                      {statusLabels[selectedPromoter.status as keyof typeof statusLabels]}
                     </Badge>
                   </p>
                 </div>
