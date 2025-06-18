@@ -72,6 +72,7 @@ interface Artist {
   Email?: string
   PhoneNo?: string
   Description?: string
+  Priority?: number
   Images?: ArtistImage[]
   createdAt: string
   status?: number
@@ -120,13 +121,13 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [deleteArtistId, setDeleteArtistId] = React.useState<string | null>(null)
   const [selectedArtist, setSelectedArtist] = React.useState<Artist | null>(null)
-
   // Form state
   const [formData, setFormData] = React.useState({
     name: "",
     email: "",
     phoneNo: "",
     description: "",
+    priority: 0,
   })
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
@@ -134,7 +135,6 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   const [selectedImage, setSelectedImage] = React.useState<File | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string>("")
   const [uploadingImage, setUploadingImage] = React.useState(false)
-
   // Validation function
   const validateForm = () => {
     const errors: Record<string, string> = {}
@@ -149,6 +149,10 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
     
     if (formData.phoneNo && !/^\d{10,}$/.test(formData.phoneNo.replace(/\D/g, ''))) {
       errors.phoneNo = "Please enter a valid phone number"
+    }
+
+    if (formData.priority < 0 || formData.priority > 10) {
+      errors.priority = "Priority must be between 0 and 10"
     }
 
     setFormErrors(errors)
@@ -266,8 +270,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       if (formData.phoneNo) formDataToSend.append("PhoneNo", formData.phoneNo)
       if (formData.description) formDataToSend.append("Description", formData.description)
       
-      // Add priority if needed (you can adjust this based on requirements)
-      formDataToSend.append("Priority", "1")
+      // Add priority from form data
+      formDataToSend.append("Priority", formData.priority.toString())
 
       // Add image if selected
       if (selectedImage) {
@@ -326,13 +330,13 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
+        },        body: JSON.stringify({
           artist_id: selectedArtist._id,
           Name: formData.name,
           Email: formData.email,
           PhoneNo: formData.phoneNo,
           Description: formData.description,
+          Priority: formData.priority,
         }),
       })
 
@@ -514,20 +518,19 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       reader.readAsDataURL(file)
     }
   }
-
   const resetForm = () => {
     setFormData({
       name: "",
       email: "",
       phoneNo: "",
       description: "",
+      priority: 0,
     })
     setFormErrors({})
     setSelectedImage(null)
     setImagePreview("")
     setSelectedArtist(null)
   }
-
   const openEditDialog = (artist: Artist) => {
     setSelectedArtist(artist)
     setFormData({
@@ -535,6 +538,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       email: artist.Email || "",
       phoneNo: artist.PhoneNo || "",
       description: artist.Description || "",
+      priority: artist.Priority || 0,
     })
     setIsEditDialogOpen(true)
   }
@@ -640,7 +644,23 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                 {formErrors.phoneNo && (
                   <p className="text-sm text-red-600">{formErrors.phoneNo}</p>
                 )}
-              </div>              <div className="space-y-2">
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority (0-10)</Label>
+                <Input
+                  id="priority"
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={formData.priority}
+                  onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                  placeholder="Enter priority (0-10)"
+                />
+                {formErrors.priority && (
+                  <p className="text-sm text-red-600">{formErrors.priority}</p>
+                )}
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
@@ -757,11 +777,11 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
+              <Table>                <TableHeader>
                   <TableRow>
                     <TableHead>Artist</TableHead>
                     <TableHead>Contact</TableHead>
+                    <TableHead>Priority</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Images</TableHead>
                     <TableHead>Created</TableHead>
@@ -814,9 +834,13 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                             <div className="flex items-center text-sm text-muted-foreground">
                               <Phone className="mr-1 h-3 w-3" />
                               {artist.PhoneNo}
-                            </div>
-                          )}
+                            </div>                          )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="font-mono">
+                          {artist.Priority || 0}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="max-w-xs">
@@ -978,9 +1002,23 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                     value={formData.phoneNo}
                     onChange={(e) => setFormData({ ...formData, phoneNo: e.target.value })}
                     placeholder="Enter phone number"
-                  />
-                  {formErrors.phoneNo && (
+                  />                  {formErrors.phoneNo && (
                     <p className="text-sm text-red-600">{formErrors.phoneNo}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editPriority">Priority (0-10)</Label>
+                  <Input
+                    id="editPriority"
+                    type="number"
+                    min="0"
+                    max="10"
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: parseInt(e.target.value) || 0 })}
+                    placeholder="Enter priority (0-10)"
+                  />
+                  {formErrors.priority && (
+                    <p className="text-sm text-red-600">{formErrors.priority}</p>
                   )}
                 </div>
                 <div className="space-y-2">

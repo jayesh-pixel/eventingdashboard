@@ -634,7 +634,6 @@ export default function EventsPage({ params }: EventsPageProps) {
   React.useEffect(() => {
     getAllEventData()
   }, [])
-
   // Filter events based on tab
   const filteredEvents = React.useMemo(() => {
     if (activeTab === "all") return allEventsData
@@ -648,13 +647,16 @@ export default function EventsPage({ params }: EventsPageProps) {
           return eventStatus === "Draft"
         case "review":
           return eventStatus === "To Be Reviewed"
+        case "self":
+          
+          return event.organizerId === user?.user_id || event.promoterId === user?.user_id
         case "rejected":
           return eventStatus === "Rejected"
         default:
           return true
       }
     })
-  }, [allEventsData, activeTab])
+  }, [allEventsData, activeTab, user?.user_id])
 
   const totalPages = Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)
   const currentEvents = filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -773,6 +775,190 @@ export default function EventsPage({ params }: EventsPageProps) {
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
     window.open(`/${role}/events/${eventId}/booking-tickets`, '_blank')
+  }
+  // Function to render tab-specific content with table
+  const renderTabContent = () => {
+    return (
+      <Card className="border-0 shadow-lg bg-gradient-to-br from-card/95 to-card/90 backdrop-blur-sm">
+        <CardHeader className="pb-4 border-b border-border/50">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg font-semibold">
+                {activeTab === "all" && "All Events"}
+                {activeTab === "published" && "Published Events"}
+                {activeTab === "draft" && "Draft Events"}
+                {activeTab === "review" && "Events To Be Reviewed"}
+                {activeTab === "self" && "My Events"}
+                {activeTab === "rejected" && "Rejected Events"}
+              </CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">
+                {currentEvents.length} event{currentEvents.length !== 1 ? 's' : ''} found
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-border/50">
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Event Name</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Start Date</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Time</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Organizer</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Promoter</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Venue</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">City</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Status</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {currentEvents.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="text-center py-16">
+                      <div className="space-y-6">
+                        <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
+                          <AlertCircle className="h-10 w-10 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-3">
+                          <h3 className="text-xl font-semibold text-muted-foreground">No events found</h3>
+                          <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                            {activeTab === "all" && "No events available in the system."}
+                            {activeTab === "published" && "No published events found."}
+                            {activeTab === "draft" && "No draft events found."}
+                            {activeTab === "review" && "No events pending review."}
+                            {activeTab === "self" && "No events created by you."}
+                            {activeTab === "rejected" && "No rejected events found."}
+                          </p>
+                        </div>
+                        <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Refresh Events
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  currentEvents.map((event) => (
+                    <TableRow key={event._id} className="hover:bg-muted/50 transition-colors">
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={event.eventImage || "/placeholder.svg"}
+                            alt={event.eventName}
+                            className="w-10 h-10 rounded-lg object-cover"
+                          />
+                          <div>
+                            <div className="font-semibold text-sm">{event.eventName}</div>
+                            <div className="text-xs text-muted-foreground">{event.eventType}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatDateForDisplay(event.eventStartDate)}</TableCell>
+                      <TableCell>{formatTime(event.eventStartDate)}</TableCell>
+                      <TableCell>{event.categoryName}</TableCell>
+                      <TableCell>{event.organizerName}</TableCell>
+                      <TableCell>{event.promoterName || "N/A"}</TableCell>
+                      <TableCell>
+                        <Badge variant={event.eventVisibility ? "default" : "secondary"}>
+                          {event.eventVisibility ? "Public" : "Private"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{event.venueName}</TableCell>
+                      <TableCell>{event.city}</TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
+                          {normalizeEventStatus(event.eventStatus)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {(role as UserRole) !== "promoter" && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <span className="sr-only">Open menu</span>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <BarChart3 className="mr-2 h-4 w-4" />
+                                View Analytics
+                              </DropdownMenuItem>
+                              {(canAddEvent) && (
+                                <DropdownMenuItem>View & Add Tickets</DropdownMenuItem>
+                              )}
+                              {(role as UserRole) === "superadmin" && (
+                                <DropdownMenuItem className="text-red-600">Disable</DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="p-4 border-t border-border/50">
+              <Pagination>
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPage > 1) handlePageChange(currentPage - 1)
+                      }}
+                      className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                  {[...Array(Math.min(totalPages, 5))].map((_, i) => {
+                    const pageNum = i + 1
+                    return (
+                      <PaginationItem key={pageNum}>
+                        <PaginationLink
+                          href="#"
+                          isActive={currentPage === pageNum}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handlePageChange(pageNum)
+                          }}
+                        >
+                          {pageNum}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  })}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        if (currentPage < totalPages) handlePageChange(currentPage + 1)
+                      }}
+                      className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    )
   }
 
   if (loading) {
@@ -943,16 +1129,15 @@ export default function EventsPage({ params }: EventsPageProps) {
         </CardContent>
       </Card>      {/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
-                  {(role as UserRole) !== "promoter" && (
-
-          <TabsTrigger 
-            value="all" 
-            className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
-          >
-            All ({allEventsData.length})
-          </TabsTrigger>
-                  )}
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="all" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              All ({allEventsData.length})
+            </TabsTrigger>
+          )}
           {(role as UserRole) !== "promoter" && (
             <TabsTrigger 
               value="published" 
@@ -961,9 +1146,42 @@ export default function EventsPage({ params }: EventsPageProps) {
               Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
             </TabsTrigger>
           )}
-        </TabsList>
-
-        <TabsContent value={activeTab} className="mt-4 sm:mt-6">
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="draft" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              Draft ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Draft").length})
+            </TabsTrigger>
+          )}
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="review" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              To Be Reviewed ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "To Be Reviewed").length})
+            </TabsTrigger>
+          )}
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="self" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              Self ({allEventsData.filter((e) => e.organizerId === user?.user_id || e.promoterId === user?.user_id).length})
+            </TabsTrigger>
+          )}
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="rejected" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              Rejected ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Rejected").length})
+            </TabsTrigger>
+          )}
+        </TabsList>        <TabsContent value={activeTab} className="mt-4 sm:mt-6">
+          {/* Tab-specific content for admin/superadmin roles */}
+          {(role as UserRole) !== "promoter" && renderTabContent()}
+          
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
@@ -1167,20 +1385,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             </div>          ) : (
             // Enhanced Table View (for all roles or when table view is selected)
             <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-lg sm:text-xl">
-                  {activeTab === "all"
-                    ? "All Events"
-                    : activeTab === "published"
-                      ? "Published Events"
-                      : activeTab === "draft"
-                        ? "Draft Events"
-                        : activeTab === "review"
-                          ? "Events Under Review"
-                          : "Rejected Events"}
-                </CardTitle>
-                <CardDescription className="text-sm sm:text-base">{filteredEvents.length} event(s) found</CardDescription>
-              </CardHeader>
+              
               <CardContent className="p-0">
                 {/* Mobile Card View (hidden on desktop) */}
                 <div className="block lg:hidden p-4 space-y-4">
@@ -1284,182 +1489,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                       </Card>
                     ))
                   )}
-                </div>
-
-                {/* Desktop Table View (hidden on mobile) */}
-                <div className="hidden lg:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-border/50">
-                        <TableHead className="text-sm">Event Name</TableHead>
-                        <TableHead className="text-sm">Start Date</TableHead>
-                        <TableHead className="text-sm">Organizer</TableHead>
-                        <TableHead className="text-sm">Venue</TableHead>
-                        <TableHead className="text-sm">City</TableHead>
-                        {(role as UserRole) === "promoter" && (
-                          <>
-                            <TableHead className="text-sm">Category</TableHead>
-                            <TableHead className="text-sm">Phone</TableHead>
-                          </>
-                        )}
-                        <TableHead className="text-sm">Status</TableHead>
-                        <TableHead className="text-sm">
-                          <span className="sr-only">Actions</span>
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {currentEvents.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={(role as UserRole) === "promoter" ? 9 : 7} className="text-center py-12">
-                            <div className="space-y-4">
-                              <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
-                                <AlertCircle className="h-8 w-8 text-muted-foreground" />
-                              </div>
-                              <div className="space-y-2">
-                                <p className="text-base font-medium text-muted-foreground">No events found</p>
-                                <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
-                              </div>
-                              <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
-                                <RefreshCw className="h-4 w-4 mr-2" />
-                                Refresh Events
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        currentEvents.map((event) => (
-                          <TableRow key={event._id} className="hover:bg-muted/30 transition-colors border-border/50">                            <TableCell className="font-medium text-sm max-w-[200px] truncate">{event.eventName}</TableCell>
-                            <TableCell className="text-sm">
-                              {event.eventStartDate ? formatDate(event.eventStartDate) : "N/A"}
-                            </TableCell>
-                            <TableCell className="text-sm max-w-[150px] truncate">{event.organizerName || "N/A"}</TableCell>
-                            <TableCell className="text-sm max-w-[150px] truncate">{event.venueName || "N/A"}</TableCell>
-                            <TableCell className="text-sm">{event.city || "N/A"}</TableCell>
-                            {(role as UserRole) === "promoter" && (
-                              <>
-                                <TableCell className="text-sm">
-                                  {event.categoryName ? (
-                                    <Badge variant="outline" className="text-xs">
-                                      {event.categoryName}
-                                    </Badge>
-                                  ) : "N/A"}
-                                </TableCell>
-                                <TableCell className="text-sm">{event.bookingPhoneNumber || "N/A"}</TableCell>
-                              </>
-                            )}
-                            <TableCell>
-                              <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="text-xs">
-                                {normalizeEventStatus(event.eventStatus)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {(role as UserRole) === "promoter" ? (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button aria-haspopup="true" size="icon" variant="ghost">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                      <span className="sr-only">Toggle menu</span>
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                    <DropdownMenuItem 
-                                      onClick={() => handleCheckReport(event._id)}
-                                    >
-                                      <BarChart3 className="mr-2 h-4 w-4" />
-                                      Check Report
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem 
-                                      onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
-                                    >
-                                      <DollarSign className="mr-2 h-4 w-4" />
-                                      Book Ticket
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => copyPromoterLink(event.promoterLink)}>
-                                      <Share2 className="mr-2 h-4 w-4" />
-                                      Copy Promoter Link
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem>
-                                      <Eye className="mr-2 h-4 w-4" />
-                                      View Details
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              ) : (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button aria-haspopup="true" size="icon" variant="ghost">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                      <span className="sr-only">Toggle menu</span>
-                                    </Button>
-                                  </DropdownMenuTrigger>                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                    <DropdownMenuItem>View & Edit</DropdownMenuItem>
-                                    <DropdownMenuItem>Booking</DropdownMenuItem>
-                                    {(canAddEvent) && (
-                                      <DropdownMenuItem>View & Add Tickets</DropdownMenuItem>
-                                    )}
-                                    {(role as UserRole) === "superadmin" && (
-                                      <DropdownMenuItem className="text-red-600">Disable</DropdownMenuItem>
-                                    )}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="p-4 border-t border-border/50">
-                    <Pagination>
-                      <PaginationContent>
-                        <PaginationItem>
-                          <PaginationPrevious
-                            href="#"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              if (currentPage > 1) handlePageChange(currentPage - 1)
-                            }}
-                            className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                          />
-                        </PaginationItem>
-                        {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                          const pageNum = i + 1
-                          return (
-                            <PaginationItem key={pageNum}>
-                              <PaginationLink
-                                href="#"
-                                isActive={currentPage === pageNum}
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  handlePageChange(pageNum)
-                                }}
-                              >
-                                {pageNum}
-                              </PaginationLink>
-                            </PaginationItem>
-                          )
-                        })}
-                        <PaginationItem>
-                          <PaginationNext
-                            href="#"
-                            onClick={(e) => {
-                              e.preventDefault()
-                              if (currentPage < totalPages) handlePageChange(currentPage + 1)
-                            }}
-                            className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                          />
-                        </PaginationItem>
-                      </PaginationContent>
-                    </Pagination>
-                  </div>
-                )}
+                </div>                
+              
               </CardContent>
             </Card>
           )}        </TabsContent>
