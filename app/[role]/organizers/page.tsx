@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -36,6 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import AddAddress from "@/components/add-address"
 import type { UserRole } from "@/lib/navigation"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
@@ -165,6 +166,13 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const [totalSalesData, setTotalSalesData] = React.useState<TotalSalesDataResponse['data'] | null>(null)
   const [salesLoading, setSalesLoading] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
+  
+  // Address selector state
+  const [stateIsoCode, setStateIsoCode] = React.useState("")
+  const [stateName, setStateName] = React.useState("")
+  const [cityIsoCode, setCityIsoCode] = React.useState("")
+  const [cityName, setCityName] = React.useState("")
+
   // Form data state for organizer creation
   const [formData, setFormData] = React.useState({
     // Basic Info
@@ -194,7 +202,19 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   // Form validation errors
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({})
 
-  
+  // Sync address selector with form data
+  React.useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      State: stateName,
+      StateIsoCode: stateIsoCode,
+      City: cityName,
+      CityIsoCode: cityIsoCode,
+      Country: "India", // Always India for this component
+      CountryIsoCode: "IN"
+    }))
+  }, [stateIsoCode, stateName, cityIsoCode, cityName])
+
   // Form validation
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
@@ -534,44 +554,47 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       showPassword: false,
       
       // Notifications
-      sendEmailNotification: false,
-    })
+      sendEmailNotification: false,    })
     setEditingOrganizer(null)
     setFormErrors({})
+    
+    // Reset address selector state
+    setStateIsoCode("")
+    setStateName("")
+    setCityIsoCode("")
+    setCityName("")
   }
-  const handleFormSubmit = async () => {
-    // Validate final step
-  
 
-    if (!formData.FullName || !formData.Email) {
-      toast({ title: "Error", description: "Name and Email are required.", variant: "destructive" })
+  const handleFormSubmit = async () => {
+    // Validate the form
+    if (!validateForm()) {
       return
     }
+    
     setLoading(true)
     
     try {
       const authToken = localStorage.getItem("authToken")
       if (!user || !authToken) {
         throw new Error("Authentication required")
-      }
-
-      // Prepare the payload based on the current API structure
+      }      // Prepare the payload based on the original form structure and API requirements
       const payload = {
-        OwnerType: formData.OwnerType,
+        OwnerType: formData.OwnerType === "ownClub" ? 1 : 2, // 1 for Club, 2 for EventCompany
         CompanyName: formData.CompanyName,
         FullName: formData.FullName,
-        Phone1: formData.Phone1,
         Username: formData.Username,
-        Email: formData.Email,
-        Password: editingOrganizer ? undefined : formData.password, // Only include password for new organizers
+        Email: formData.Email || "",
+        Phone1: formData.Phone1 || "",
+        Password: editingOrganizer ? undefined : formData.password,
         Country: formData.Country,
         CountryIsoCode: formData.CountryIsoCode,
         State: formData.State,
         StateIsoCode: formData.StateIsoCode,
         City: formData.City,
         CityIsoCode: formData.CityIsoCode,
-        // Add additional fields that might be supported by the API
-      
+        SendMailFlag: formData.sendEmailNotification ? 2: 1,
+        createduser_id: user?.user_id || "",
+            CreatedBy: 1,
       }
 
       // Remove undefined fields
@@ -583,14 +606,27 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
       let response
       if (editingOrganizer) {
-        // TODO: Implement update API call when endpoint is available
-        response = await fetch(`/api/organizers/${editingOrganizer._id}`, {
-          method: "PUT",
+        // Use the updateProfile endpoint which only supports limited fields
+        const updatePayload = {
+          user_id: editingOrganizer._id,
+          FullName: formData.FullName,
+          Email: formData.Email || "",
+          Phone1: formData.Phone1 || "",
+        }
+
+        // Create FormData for multipart/form-data as required by the API
+        const formDataPayload = new FormData()
+        Object.entries(updatePayload).forEach(([key, value]) => {
+          if (value) formDataPayload.append(key, value)
+        })
+
+        response = await fetch(organizerEndpoint.UPDATE_ORGANIZER_PROFILE, {
+          method: "POST",
           headers: {
-            "Content-Type": "application/json",
             Authorization: `Bearer ${authToken}`,
+            // Don't set Content-Type for FormData - browser will set it with boundary
           },
-          body: JSON.stringify(payload),
+          body: formDataPayload,
         })
       } else {
         // TODO: Replace with actual create organizer endpoint
@@ -661,17 +697,64 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       showPassword: false,
       
       // Notifications
-      sendEmailNotification: false,
-    })
+      sendEmailNotification: false,    })
+    
+    // Set address selector state
+    setStateName(organizer.State || "")
+    setStateIsoCode(organizer.StateIsoCode || "")
+    setCityName(organizer.City || "")
+    setCityIsoCode(organizer.CityIsoCode || "")
+    
     setFormErrors({})
     setIsFormOpen(true)
   }
-
   const handleDisable = async (organizerId: string) => {
-    setLoading(true)
     try {
-      // TODO: Implement actual API call for updating organizer status
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      setLoading(true)
+      
+      const authToken = localStorage.getItem("authToken")
+      if (!user || !authToken) {
+        throw new Error("Authentication required")
+      }
+
+      // Find the organizer to determine current status
+      const organizer = organizers.find(org => org._id === organizerId)
+      if (!organizer) {
+        throw new Error("Organizer not found")
+      }
+
+      // Determine which endpoint to use based on current status
+      const isCurrentlyActive = organizer.status === 1
+      const endpoint = isCurrentlyActive 
+        ? organizerEndpoint.DISABLE_ORGANIZER_URL 
+        : organizerEndpoint.ENABLE_ORGANIZER_URL
+      
+      const action = isCurrentlyActive ? "disabled" : "enabled"
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          organizer_id: organizerId
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.error) {
+        throw new Error(result.message || `Failed to ${action.slice(0, -1)} organizer`)
+      }
+      
+      toast({ 
+        title: "Success", 
+        description: `Organizer ${action} successfully.` 
+      })
       
       // Refresh the current page
       if (debouncedSearchTerm) {
@@ -679,31 +762,64 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       } else {
         fetchOrganizers(currentPage)
       }
-      
-      toast({ title: "Success", description: "Organizer status updated." })
     } catch (error) {
       console.error("Error updating organizer status:", error)
       toast({ 
         title: "Error", 
-        description: "Failed to update organizer status.", 
-        variant: "destructive" 
+        description: error instanceof Error ? error.message : "Failed to update organizer status. Please try again.",        variant: "destructive" 
       })
     } finally {
       setLoading(false)
     }
   }
-
   const handleResetPassword = async (organizerId: string) => {
-    setLoading(true)
     try {
-      // TODO: Implement actual API call for password reset
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      toast({ title: "Success", description: `Password reset link sent to organizer.` })
+      setLoading(true)
+      
+      const authToken = localStorage.getItem("authToken")
+      if (!user || !authToken) {
+        throw new Error("Authentication required")
+      }
+
+      // Find the organizer to get their email
+      const organizer = organizers.find(org => org._id === organizerId)
+      if (!organizer) {
+        throw new Error("Organizer not found")
+      }
+
+      if (!organizer.Email) {
+        throw new Error("Organizer email not found. Cannot send password reset link.")
+      }
+
+      const response = await fetch(organizerEndpoint.ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          Email: organizer.Email
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.error) {
+        throw new Error(result.message || "Failed to send password reset link")
+      }
+      
+      toast({ 
+        title: "Success", 
+        description: `Password reset link sent to ${organizer.Email}` 
+      })
     } catch (error) {
       console.error("Error resetting password:", error)
       toast({ 
         title: "Error", 
-        description: "Failed to send password reset link.", 
+        description: error instanceof Error ? error.message : "Failed to send password reset link. Please try again.", 
         variant: "destructive" 
       })
     } finally {
@@ -722,9 +838,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       default:
         return { text: "Unknown", variant: "destructive" as const }
     }
-  }
-
-  // Fetch sales data for an organizer
+  }  // Fetch sales data for an organizer
   const fetchSalesData = async (organizerId: string) => {
     try {
       setSalesLoading(true)
@@ -918,13 +1032,19 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEdit(org)}>
-                              <Eye className="mr-2 h-4 w-4" /> View & Edit
-                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => openSalesDialog(org)}>
+                              <Eye className="mr-2 h-4 w-4" /> View & Edit                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => openSalesDialog(org)}>
                               <DollarSign className="mr-2 h-4 w-4" /> Sales
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
-                              {org.status === 0 ? "Enable" : "Disable"} Organizer
-                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => handleResetPassword(org._id)}>
+                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
+                              {org.status === 0 ? (
+                                <>
+                                  <UserCheck className="mr-2 h-4 w-4" /> Enable Organizer
+                                </>
+                              ) : (
+                                <>
+                                  <UserX className="mr-2 h-4 w-4" /> Disable Organizer
+                                </>
+                              )}
+                            </DropdownMenuItem><DropdownMenuItem onClick={() => handleResetPassword(org._id)}>
                               <KeyRound className="mr-2 h-4 w-4" /> Reset Password
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -986,20 +1106,27 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           <DialogHeader>
             <DialogTitle>
               {editingOrganizer ? "Edit Organizer" : "Create New Organizer"}
-            </DialogTitle>
-            <DialogDescription>
+            </DialogTitle>            <DialogDescription>
               {editingOrganizer 
-                ? "Update organizer information" 
+                ? "Update organizer information. Note: Only Full Name, Email, and Phone can be updated due to API limitations." 
                 : "Fill in the required information to create a new organizer account"
               }
             </DialogDescription>
-          </DialogHeader>
+          </DialogHeader>          <div className="space-y-6 py-4">
+            {/* Information note for editing */}
+            {editingOrganizer && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Note:</strong> Only Full Name, Email, and Phone Number can be updated. 
+                  Other fields like Owner Type, Company Name, Username, and Address cannot be modified due to API limitations.
+                </AlertDescription>
+              </Alert>
+            )}
 
-          <div className="space-y-6 py-4">
             {/* Owner Type Selection */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Owner Type *</Label>
-              <div className="flex gap-6">
+              <Label className="text-sm font-medium">Owner Type *</Label>              <div className="flex gap-6">
                 <div className="flex items-center">
                   <input
                     type="radio"
@@ -1008,9 +1135,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     value="ownClub"
                     checked={formData.OwnerType === "ownClub"}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    disabled={!!editingOrganizer}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
                   />
-                  <label htmlFor="ownClub" className="ml-2 text-sm font-medium text-gray-900">
+                  <label htmlFor="ownClub" className={`ml-2 text-sm font-medium ${editingOrganizer ? 'text-gray-500' : 'text-gray-900'}`}>
                     Own club
                   </label>
                 </div>
@@ -1022,9 +1150,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     value="eventCompany"
                     checked={formData.OwnerType === "eventCompany"}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
+                    disabled={!!editingOrganizer}
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
                   />
-                  <label htmlFor="eventCompany" className="ml-2 text-sm font-medium text-gray-900">
+                  <label htmlFor="eventCompany" className={`ml-2 text-sm font-medium ${editingOrganizer ? 'text-gray-500' : 'text-gray-900'}`}>
                     Event company name
                   </label>
                 </div>
@@ -1037,12 +1166,13 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Conditional Company/Club Name Fields */}
             {formData.OwnerType === "ownClub" && (
               <div className="space-y-2">
-                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name *</Label>
-                <Input
+                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name *</Label>                <Input
                   id="clubName"
                   value={formData.CompanyName}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter your club name"
+                  disabled={!!editingOrganizer}
+                  className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
                 />
                 {formErrors.CompanyName && (
                   <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
@@ -1052,12 +1182,13 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {formData.OwnerType === "eventCompany" && (
               <div className="space-y-2">
-                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name *</Label>
-                <Input
+                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name *</Label>                <Input
                   id="companyName"
                   value={formData.CompanyName}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter event company name"
+                  disabled={!!editingOrganizer}
+                  className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
                 />
                 {formErrors.CompanyName && (
                   <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
@@ -1081,12 +1212,13 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="organizerusername" className="text-sm font-medium">Username *</Label>
-              <Input
+              <Label htmlFor="organizerusername" className="text-sm font-medium">Username *</Label>              <Input
                 id="organizerusername"
                 value={formData.Username}
                 onChange={(e) => setFormData({ ...formData, Username: e.target.value })}
                 placeholder="Enter organizer username"
+                disabled={!!editingOrganizer}
+                className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
               />
               {formErrors.Username && (
                 <div className="text-red-600 text-sm">{formErrors.Username}</div>
@@ -1122,61 +1254,22 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <div className="text-red-600 text-sm">{formErrors.Phone1}</div>
                 )}
               </div>
-            </div>
-
-            {/* Address Information */}
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Address Information</Label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="country" className="text-sm">Country</Label>
-                  <Input
-                    id="country"
-                    value="India"
-                    disabled
-                    className="bg-gray-50"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="state" className="text-sm">State</Label>
-                  <Select 
-                    value={formData.State} 
-                    onValueChange={(value) => setFormData({ 
-                      ...formData, 
-                      State: value, 
-                      StateIsoCode: value.toLowerCase().replace(/\s+/g, '') 
-                    })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select state" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Maharashtra">Maharashtra</SelectItem>
-                      <SelectItem value="Karnataka">Karnataka</SelectItem>
-                      <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
-                      <SelectItem value="Gujarat">Gujarat</SelectItem>
-                      <SelectItem value="Rajasthan">Rajasthan</SelectItem>
-                      <SelectItem value="Uttar Pradesh">Uttar Pradesh</SelectItem>
-                      <SelectItem value="West Bengal">West Bengal</SelectItem>
-                      <SelectItem value="Delhi">Delhi</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="city" className="text-sm">City</Label>
-                  <Input
-                    id="city"
-                    value={formData.City}
-                    onChange={(e) => setFormData({ 
-                      ...formData, 
-                      City: e.target.value,
-                      CityIsoCode: e.target.value.toLowerCase().replace(/\s+/g, '')
-                    })}
-                    placeholder="Enter city"
-                  />
-                </div>
+            </div>            {/* Address Information */}
+            {!editingOrganizer && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Address Information</Label>
+                <AddAddress
+                  stateIsoCode={stateIsoCode}
+                  setStateIsoCode={setStateIsoCode}
+                  stateName={stateName}
+                  setStateName={setStateName}
+                  cityIsoCode={cityIsoCode}
+                  setCityIsoCode={setCityIsoCode}
+                  cityName={cityName}
+                  setCityName={setCityName}
+                />
               </div>
-            </div>
+            )}
 
             {/* Password */}
             {!editingOrganizer && (
@@ -1257,15 +1350,14 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>{/* Sales Data Dialog */}
+      </Dialog>      {/* Sales Data Dialog */}
       <Dialog open={isSalesDialogOpen} onOpenChange={setIsSalesDialogOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="flex-shrink-0">
             <DialogTitle>Sales Data: {selectedOrganizerForSales?.FullName}</DialogTitle>
             <DialogDescription>View sales data and events for this organizer.</DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            {salesLoading ? (
+          <div className="flex-1 overflow-y-auto py-4">{salesLoading ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-8 w-8 animate-spin" />
                 <span className="ml-2">Loading sales data...</span>
@@ -1295,9 +1387,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                       </div>
                     </div>
                   </div>
-                )}
-
-                {/* Events Table */}
+                )}                {/* Events Table */}
                 <div>
                   <h3 className="text-lg font-medium mb-4">Events</h3>
                   {!salesData || salesData.length === 0 ? (
@@ -1307,38 +1397,39 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                       </div>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Event Name</TableHead>
-                          <TableHead>Start Date</TableHead>
-                          <TableHead>Online Sales</TableHead>
-                          <TableHead>Promoter Sales</TableHead>
-                          <TableHead>Total Sales</TableHead>
-                          <TableHead>Convenience Fee</TableHead>
-                          <TableHead>Pending Amount</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {salesData.map((event) => (
-                          <TableRow key={event.event_id}>
-                            <TableCell className="font-medium">{event.EventName}</TableCell>
-                            <TableCell>{event.EventStartDate}</TableCell>
-                            <TableCell>₹{event.totalOnlineSales.toLocaleString()}</TableCell>
-                            <TableCell>₹{event.totalPromoterSales.toLocaleString()}</TableCell>
-                            <TableCell className="font-semibold">₹{event.totalSales.toLocaleString()}</TableCell>
-                            <TableCell>₹{event.totalConvenienceFeeAmount.toLocaleString()}</TableCell>
-                            <TableCell className="text-red-600 font-semibold">₹{event.PendingAmount.toLocaleString()}</TableCell>
+                    <div className="max-h-96 overflow-y-auto border rounded-md">
+                      <Table>
+                        <TableHeader className="sticky top-0 bg-background z-10">
+                          <TableRow>
+                            <TableHead>Event Name</TableHead>
+                            <TableHead>Start Date</TableHead>
+                            <TableHead>Online Sales</TableHead>
+                            <TableHead>Promoter Sales</TableHead>
+                            <TableHead>Total Sales</TableHead>
+                            <TableHead>Convenience Fee</TableHead>
+                            <TableHead>Pending Amount</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {salesData.map((event) => (
+                            <TableRow key={event.event_id}>
+                              <TableCell className="font-medium">{event.EventName}</TableCell>
+                              <TableCell>{event.EventStartDate}</TableCell>
+                              <TableCell>₹{event.totalOnlineSales.toLocaleString()}</TableCell>
+                              <TableCell>₹{event.totalPromoterSales.toLocaleString()}</TableCell>
+                              <TableCell className="font-semibold">₹{event.totalSales.toLocaleString()}</TableCell>
+                              <TableCell>₹{event.totalConvenienceFeeAmount.toLocaleString()}</TableCell>
+                              <TableCell className="text-red-600 font-semibold">₹{event.PendingAmount.toLocaleString()}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   )}
                 </div>
               </div>
-            )}
-          </div>
-          <DialogFooter>
+            )}          </div>
+          <DialogFooter className="flex-shrink-0">
             <Button variant="outline" onClick={() => setIsSalesDialogOpen(false)}>
               Close
             </Button>

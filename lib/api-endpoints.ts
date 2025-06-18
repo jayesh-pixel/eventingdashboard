@@ -111,11 +111,12 @@ export const organizerEndpoint = {
   GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",
-  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
+    BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
   ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",
   ORGANIZER_TOTAL_SALES_DATA_URL: BASE_URL + "/organizer/totalSalesData",
+  ENABLE_ORGANIZER_URL: BASE_URL + "/organizer/enable",
+  DISABLE_ORGANIZER_URL: BASE_URL + "/organizer/disable",
 }
 
 // Promoter API Endpoint
