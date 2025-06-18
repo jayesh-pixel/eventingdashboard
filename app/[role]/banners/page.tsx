@@ -394,12 +394,15 @@ export default function BannersPage({ params }: BannersPageProps) {
           <p className="text-muted-foreground">Manage homepage banner slider images</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchBanners} disabled={loading}>
+          {/* <Button variant="outline" onClick={fetchBanners} disabled={loading}>
             <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
-          </Button>          <Button onClick={openCreateDialog}>
+          </Button>      */}
+               <Button onClick={openCreateDialog}
+                             className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+>
             <Plus className="mr-2 h-4 w-4" />
-            Add Banner
+            Add 
           </Button>
         </div>
       </div>

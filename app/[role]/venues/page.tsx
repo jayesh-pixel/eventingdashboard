@@ -534,8 +534,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         <h1 className="text-2xl font-semibold">Venues Management</h1>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Venue
+            <Button onClick={resetForm}
+                          className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add 
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">

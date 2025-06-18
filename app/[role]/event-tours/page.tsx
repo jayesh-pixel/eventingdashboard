@@ -518,9 +518,10 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         <h1 className="text-2xl font-semibold">Event Tours Management</h1>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Tour
-            </Button>
+            <Button onClick={resetForm}
+                          className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>

@@ -142,9 +142,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     categoryImage: null as File | null,
     categoryPriority: 1,
   })
-
   // API function to fetch categories
-  const fetchCategories = async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+  const fetchCategories = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
       setLoading(true)
       setApiError(null)
@@ -188,11 +187,10 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         throw new Error(data.message || "Failed to fetch categories")
       }
 
-      // Set the data from API
+      // Set the data from API - DO NOT update currentPage here to avoid infinite loop
       setCategories(data.data.CategoryData || [])
       setTotalPages(data.data.totalPages || 1)
       setTotalCategories(data.data.totalCategories || 0)
-      setCurrentPage(data.data.currentPage || 1)
       setUseMockData(false)
 
       toast({
@@ -217,12 +215,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     } finally {
       setLoading(false)
     }
-  }
-
+  }, [user, toast])
   // Initial data fetch
   React.useEffect(() => {
     fetchCategories(currentPage)
-  }, [currentPage])
+  }, [currentPage, fetchCategories])
 
   // Helper function to get category image
   const getCategoryImage = (category: Category): string => {
@@ -525,8 +522,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         <h1 className="text-2xl font-semibold">Categories Management</h1>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
+            <Button
+              onClick={resetForm}
+              className="px-4 py-2 text-sm rounded-full md:px-6 md:py-2 md:text-base"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" /> Add 
             </Button>
           </DialogTrigger>
           <DialogContent>
