@@ -240,193 +240,122 @@ export const TicketType = {
   BulkTicket: 4,
 } as const
 
-// Promocode Types
-export interface Promocode {
-  _id: string
-  CanBeUsed: string
-  PromoCodeName: string
-  TermsCondition: string
-  PromocodeType: number
-  Value: number
-  MinCheckoutAmount: number
-  ExpiryDate: string
-  OneTimeUseFlag: number
-  PromocodeValidFor: number
-  FilterationDateTime: string
-  createdAt: string
-  status: number
-  Events: Array<{
-    event_id: string
-    _id: string
-  }>
-  CustomerIds: any[]
-  __v: number
-}
-
-export interface PromocodesApiResponse {
-  error: boolean
-  message: string
-  data: {
-    totalPages: number
-    currentPage: number
-    totalPromocodes: number
-    PromocodeData: Promocode[]
-  }
-}
-
-// Promocode Type Constants
-export const PromocodeType = {
-  FixedAmount: 1,
-  Percentage: 2,
-} as const
-
-// Promocode Status Constants
-export const PromocodeStatus = {
-  Inactive: 0,
-  Active: 1,
-  Disabled: 2,
-} as const
-
-// Customer Status Constants
-export const CustomerStatus = {
+// Ticket Status Constants
+export const TicketStatus = {
   Active: 1,
   Inactive: 0,
+  Draft: 2,
+  SoldOut: 3,
 } as const
 
-// Registration Type Constants
-export const RegistrationType = {
-  Website: 1,
-  Mobile: 2,
-} as const
-
-// Event Type Constants
-export const EventType = {
-  Booking: 1,
-  Registration: 2,
-  WhatsApp: 3,
-} as const
-
-// Banner Types
-export interface Banner {
+// Normal Ticket Interface
+export interface NormalTicket {
   _id: string
-  DesktopbannerImage: string
-  MobilebannerImage: string
-  Event_id: string
-  FilterationDateTime: string
-  createdAt: string
-  status: number
-  __v: number
-}
-
-export interface BannersApiResponse {
-  error: boolean
-  message: string
-  data: Banner[]
-}
-
-// Banner Status Constants
-export const BannerStatus = {
-  Inactive: 0,
-  Active: 1,
-} as const
-
-// Scanner User Types
-export interface ScannerUser {
-  _id: string
-  Username: string
-  Password: string
-  UserType: number
-  Events: Array<{
-    event_id: string
-    _id: string
-  }>
-  Organizers: Array<{
-    organizer_id: string
-    _id: string
-  }>
-  FilterationDateTime: string
-  createdAt: string
+  event_id: string
+  EventDateTime_id: string
+  TicketName: string
+  TicketType: number
+  TicketPrice: number
+  TicketDescription?: string
+  TicketQuantity: number
+  SoldTickets?: number
+  RemainingTickets?: number
+  TicketStatus: number
+  TicketVisibility: number
+  TicketSaleStartDate: string
+  TicketSaleEndDate: string
+  MinTicketPerTransaction?: number
+  MaxTicketPerTransaction?: number
+  TicketTermsCondition?: string
+  ConvenienceFeeApplicable?: number
   CreatedBy: string
-  createduser_id: string
-  status: number
-  __v: number
-}
-
-export interface ScannerUsersApiResponse {
-  error: boolean
-  message: string
-  data: ScannerUser[]
-}
-
-// Scanner User Type Constants
-export const ScannerUserType = {
-  Event: 1,     // Event-specific scanner
-  Organizer: 2, // Organizer-specific scanner
-} as const
-
-// Scanner User Status Constants
-export const ScannerUserStatus = {
-  Inactive: 0,
-  Active: 1,
-  Disabled: 2,
-} as const
-
-// Lead Types
-export interface Lead {
-  _id: string
-  FullName: string
-  Email: string
-  Position: string
-  City: string
-  PhoneNumber: string
-  CompanyName: string
-  FilterationDateTime: string
+  UpdatedBy?: string
   createdAt: string
-  status: number
-  __v: number
-}
-
-export interface LeadsApiResponse {
-  error: boolean
-  message: string
-  data: {
-    totalPages: number
-    currentPage: number
-    totalLeads: number
-    WebsideLeadsData: Lead[]
-  }
-}
-
-// Lead Status Constants
-export const LeadStatus = {
-  Inactive: 0,
-  Active: 1,
-  Contacted: 2,
-} as const
-
-export interface EventTour {
-  _id: string
-  Name: string
-  Description?: string
-  Images?: EventTourImage[]
-  createdAt: string
-  updatedAt?: string
-  status?: number
-  // Additional fields that might come from API response
-  artistId?: string
-  artistName?: string
-  totalEvents?: number
-  startDate?: string
-  endDate?: string
-  cities?: string[]
-  tourName?: string // For backward compatibility
-  tourDescription?: string // For backward compatibility
-  FilterationDateTime?: string
+  updatedAt: string
   __v?: number
 }
 
-export interface EventTourImage {
+// Bulk Ticket Interface
+export interface BulkTicket {
   _id: string
-  image_path: string
+  event_id: string
+  EventDateTime_id: string
+  BulkTicketName: string
+  BulkTicketType: number
+  BulkTicketPrice: number
+  BulkTicketDescription?: string
+  BulkTicketQuantity: number
+  SoldBulkTickets?: number
+  RemainingBulkTickets?: number
+  BulkTicketStatus: number
+  BulkTicketVisibility: number
+  BulkTicketSaleStartDate: string
+  BulkTicketSaleEndDate: string
+  MinBulkTicketPerTransaction?: number
+  MaxBulkTicketPerTransaction?: number
+  BulkTicketTermsCondition?: string
+  ConvenienceFeeApplicable?: number
+  PromoterCommissionRate?: number
+  PromoterCommissionType?: number
+  CreatedBy: string
+  UpdatedBy?: string
   createdAt: string
+  updatedAt: string
+  __v?: number
+}
+
+// Ticket API Response Types
+export interface TicketsApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages?: number
+    currentPage?: number
+    totalTickets?: number
+    tickets: NormalTicket[]
+  }
+}
+
+export interface BulkTicketsApiResponse {
+  error: boolean
+  message: string
+  data: {
+    totalPages?: number
+    currentPage?: number
+    totalBulkTickets?: number
+    bulkTickets: BulkTicket[]
+  }
+}
+
+// Ticket Form Data
+export interface TicketFormData {
+  TicketName: string
+  TicketType: number
+  TicketPrice: number
+  TicketDescription?: string
+  TicketQuantity: number
+  TicketSaleStartDate: string
+  TicketSaleEndDate: string
+  MinTicketPerTransaction?: number
+  MaxTicketPerTransaction?: number
+  TicketTermsCondition?: string
+  ConvenienceFeeApplicable?: number
+  TicketVisibility: number
+}
+
+export interface BulkTicketFormData {
+  BulkTicketName: string
+  BulkTicketType: number
+  BulkTicketPrice: number
+  BulkTicketDescription?: string
+  BulkTicketQuantity: number
+  BulkTicketSaleStartDate: string
+  BulkTicketSaleEndDate: string
+  MinBulkTicketPerTransaction?: number
+  MaxBulkTicketPerTransaction?: number
+  BulkTicketTermsCondition?: string
+  ConvenienceFeeApplicable?: number
+  BulkTicketVisibility: number
+  PromoterCommissionRate?: number
+  PromoterCommissionType?: number
 }

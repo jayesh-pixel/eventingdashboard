@@ -35,6 +35,7 @@ import {
   Phone,
   X,
   ArrowLeft,
+  CheckCircle,
 } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import {
@@ -49,7 +50,7 @@ import { eventEndPoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { mockEvents } from "@/lib/mock-data"
-import { getNumericAdminRole, getStringEventStatus } from "@/lib/api-constants"
+import { getNumericAdminRole, getStringEventStatus, EventStatus } from "@/lib/api-constants"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getValidToken } from "@/lib/token-utils"
@@ -677,6 +678,69 @@ export default function EventsPage({ params }: EventsPageProps) {
     const eventType = format === 1 ? 'tour' : 'regular'
     router.push(`/${role}/events/create?type=${eventType}`)
   }
+  // Handle enable/disable event status
+  const handleToggleEventStatus = async (eventId: string, action: "enable" | "disable") => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        toast({
+          title: "Error",
+          description: "Authentication required. Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }      // Determine the correct endpoint based on action
+      const endpoint = action === "enable" 
+        ? eventEndPoint.ENABLE_EVENT
+        : eventEndPoint.DISABLE_EVENT
+
+      const statusName = action === "enable" ? "enabled" : "disabled"
+
+      // API payload - only event_id is needed according to swagger
+      const payload = {
+        event_id: eventId,
+      }
+
+      // Make the API call
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || `Failed to ${action} event`)
+      }
+
+      const data = await response.json()
+      
+      toast({
+        title: "Success",
+        description: data.message || `Event has been ${statusName} successfully.`,
+      })
+
+      // Refresh the events data to get the updated status from the server
+      getAllEventData()
+
+    } catch (error) {
+      console.error("Error toggling event status:", error)
+      toast({
+        title: "Error",
+        description: `Failed to ${action} the event. Please try again.`,
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle view and edit event
+  const handleViewEditEvent = (eventId: string) => {
+    // Navigate to event edit page
+    router.push(`/${role}/events/edit/${eventId}`)
+  }
 
   const getStatusBadgeVariant = (status: string | number) => {
     const normalizedStatus = normalizeEventStatus(status)
@@ -756,10 +820,9 @@ export default function EventsPage({ params }: EventsPageProps) {
     // Navigate to reports page to check bookings for this event
     window.open(`/${role}/events/${eventId}/report`, '_blank')
   }
-
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    window.open(`/${role}/events/${eventId}/booking-tickets`, '_blank')
+    window.open(`/${role}/events/${eventId}/booking`, '_blank')
   }
   // Function to render tab-specific content with table
   const renderTabContent = () => {
@@ -878,22 +941,48 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 <span className="sr-only">Open menu</span>
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                              <DropdownMenuItem>
+                            </DropdownMenuTrigger>                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>                              <DropdownMenuItem 
+                                onClick={() => handleViewEditEvent(event._id)}
+                                className="hover:bg-accent cursor-pointer"
+                              >
                                 <Eye className="mr-2 h-4 w-4" />
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem>
+                                View & Edit
+                              </DropdownMenuItem>                              <DropdownMenuItem>
                                 <BarChart3 className="mr-2 h-4 w-4" />
                                 View Analytics
                               </DropdownMenuItem>
                               {(canAddEvent) && (
-                                <DropdownMenuItem>View & Add Tickets</DropdownMenuItem>
-                              )}
-                              {(role as UserRole) === "superadmin" && (
-                                <DropdownMenuItem className="text-red-600">Disable</DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
+                                  className="hover:bg-accent cursor-pointer"
+                                >
+                                  <DollarSign className="mr-2 h-4 w-4" />
+                                  View & Add Tickets
+                                </DropdownMenuItem>
+                              )}                              <DropdownMenuItem 
+                                onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                                className="hover:bg-accent cursor-pointer"
+                              >
+                                <DollarSign className="mr-2 h-4 w-4" />
+                                Booking
+                              </DropdownMenuItem>
+                              {normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "Completed" ? (
+                                <DropdownMenuItem 
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleToggleEventStatus(event._id, "disable")}
+                                >
+                                  <X className="mr-2 h-4 w-4" />
+                                  Disable Event
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem 
+                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                  onClick={() => handleToggleEventStatus(event._id, "enable")}
+                                >
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Enable Event
+                                </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -1180,7 +1269,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 overflow-visible">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
               {currentEvents.length === 0 ? (                
                 <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
@@ -1196,9 +1285,9 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh Events
-                    </Button>
-                  </div>
-                </div>              ) : (
+                    </Button>                  </div>
+                </div>
+              ) : (
                 currentEvents.map((event) => (
                   <PromoterEventCard
                     key={event._id}
@@ -1213,7 +1302,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   />
                 ))
               )}
-            </div>          ) : (
+            </div>) : (
             // Enhanced Table View (for all roles or when table view is selected)
             <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
               
@@ -1307,11 +1396,50 @@ export default function EventsPage({ params }: EventsPageProps) {
                                     <MoreHorizontal className="h-4 w-4" />
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                                </DropdownMenuTrigger>                                <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem>Edit</DropdownMenuItem>
-                                  <DropdownMenuItem>Delete</DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleViewEditEvent(event._id)}
+                                    className="hover:bg-accent cursor-pointer"
+                                  >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View & Edit
+                                  </DropdownMenuItem>                                  <DropdownMenuItem>
+                                    <BarChart3 className="mr-2 h-4 w-4" />
+                                    View Analytics
+                                  </DropdownMenuItem>                                  {(canAddEvent) && (
+                                    <DropdownMenuItem 
+                                      onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
+                                      className="hover:bg-accent cursor-pointer"
+                                    >
+                                      <DollarSign className="mr-2 h-4 w-4" />
+                                      View & Add Tickets
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem 
+                                    onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
+                                    className="hover:bg-accent cursor-pointer"
+                                  >
+                                    <DollarSign className="mr-2 h-4 w-4" />
+                                    Booking
+                                  </DropdownMenuItem>
+                                  {normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "Completed" ? (
+                                    <DropdownMenuItem 
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                      onClick={() => handleToggleEventStatus(event._id, "disable")}
+                                    >
+                                      <X className="mr-2 h-4 w-4" />
+                                      Disable Event
+                                    </DropdownMenuItem>
+                                  ) : (
+                                    <DropdownMenuItem 
+                                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                      onClick={() => handleToggleEventStatus(event._id, "enable")}
+                                    >
+                                      <CheckCircle className="mr-2 h-4 w-4" />
+                                      Enable Event
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             )}

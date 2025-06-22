@@ -133,32 +133,8 @@ export const promoterEndpoint = {
   EVENT_REPORT_BY_DATE_AND_SEARCH: BASE_URL + "/events/getEventsByNameandDateTime",
 }
 
-// Event API Endpoints
-export const eventEndPoint = {
-  CREATE_EVENT_BY_ADMIN: BASE_URL + "/events/superAdmin/create",
-  GET_ALL_EVENTS_DATA_BY_ADMIN: BASE_URL + "/events/getAll",
-  GET_ALL_EVENTS_PAGINATED: BASE_URL + "/events/getAllPaginated",
-  GET_EVENTDATA_BY_ID: BASE_URL + "/events/getbyId",
-  UPDATE_EVENT_CAROUSEL_IMAGE: BASE_URL + "/events/upload/carouselimg",
-  DELETE_EVENT_CAROUSEL_IMAGE: BASE_URL + "/events/delete/carouselimg",
-  UPDATE_EVENT_GALLERY_IMAGE: BASE_URL + "/events/upload/galleryimg",
-  DELETE_EVENT_GALLERY_IMAGE: BASE_URL + "/events/delete/galleryimg",
-  UPDATE_EVENT_DATE_AND_TIME: BASE_URL + "/events/update/DateTime",
-  CREATE_NEW_EVENT_DATE_AND_TIME: BASE_URL + "/events/add/DateTime",
-  EVENT_DELETE_DATE_AND_TIME: BASE_URL + "/events/delete/DateTime",
-  EDIT_EVENT_FAQ_: BASE_URL + "/events/update/Faq",
-  DELETE_EVENT_FAQ: BASE_URL + "/events/delete/Faq",
-  CREATE_NEW_FAQ_FOR_EDIT_EVENT: BASE_URL + "/events/add/Faq",
-  UPDATE_EVENT_DATA: BASE_URL + "/events/superAdmin/update",
-  ADD_PROMOTER_IN_EVENT: BASE_URL + "/events/addpromoter",
-  GET_ALL_PUBLISHED_EVENTS_DATA: BASE_URL + "/events/getPublishEvents",
-  GET_ALL_DRAFT_EVENTS_DATA: BASE_URL + "/events/getDraftEvents",
-  GET_ALL_TBREVIVE_EVENTS_DATA: BASE_URL + "/events/getReviewEvents",
-  GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
-  GET_ALL_REJECTED_EVENTS_DATA: BASE_URL + "/events/getRejectedEvents",
-}
 
-// Promoter Panel Endpoints
+
 export const promoterEndPointPannel = {
   LOGIN_PROMOTER_URL: BASE_URL + "/promoter/login",
   GET_ALL_EVENTS_DATA_BY_PROMOTER: BASE_URL + "/events/getAllEventsForPromotersDashboard",
@@ -183,6 +159,59 @@ export const promoterEndPointPannel = {
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING: BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilter",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING:
     BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportByPromoterId",
+}
+// Event API Endpoints
+export const eventEndPoint = {
+  CREATE_EVENT_BY_ADMIN: BASE_URL + "/events/superAdmin/create",
+  GET_ALL_EVENTS_DATA_BY_ADMIN: BASE_URL + "/events/getAll",
+  GET_ALL_EVENTS_PAGINATED: BASE_URL + "/events/getAllPaginated",
+  GET_EVENTDATA_BY_ID: BASE_URL + "/events/getbyId",
+  UPDATE_EVENT_CAROUSEL_IMAGE: BASE_URL + "/events/upload/carouselimg",
+  DELETE_EVENT_CAROUSEL_IMAGE: BASE_URL + "/events/delete/carouselimg",
+  UPDATE_EVENT_GALLERY_IMAGE: BASE_URL + "/events/upload/galleryimg",
+  DELETE_EVENT_GALLERY_IMAGE: BASE_URL + "/events/delete/galleryimg",
+  UPDATE_EVENT_DATE_AND_TIME: BASE_URL + "/events/update/DateTime",
+  CREATE_NEW_EVENT_DATE_AND_TIME: BASE_URL + "/events/add/DateTime",
+  EVENT_DELETE_DATE_AND_TIME: BASE_URL + "/events/delete/DateTime",
+  EDIT_EVENT_FAQ_: BASE_URL + "/events/update/Faq",
+  DELETE_EVENT_FAQ: BASE_URL + "/events/delete/Faq",
+  CREATE_NEW_FAQ_FOR_EDIT_EVENT: BASE_URL + "/events/add/Faq",
+  UPDATE_EVENT_DATA: BASE_URL + "/events/superAdmin/update",
+  ADD_PROMOTER_IN_EVENT: BASE_URL + "/events/addpromoter",
+  GET_ALL_PUBLISHED_EVENTS_DATA: BASE_URL + "/events/getPublishEvents",
+  GET_ALL_DRAFT_EVENTS_DATA: BASE_URL + "/events/getDraftEvents",
+  GET_ALL_TBREVIVE_EVENTS_DATA: BASE_URL + "/events/getReviewEvents",  GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
+  GET_ALL_REJECTED_EVENTS_DATA: BASE_URL + "/events/getRejectedEvents",
+  ENABLE_EVENT: BASE_URL + "/events/enableEvent",
+  DISABLE_EVENT: BASE_URL + "/events/disableEvent",
+}
+
+// Ticket Management API Endpoints
+export const ticketEndPoint = {
+  // Normal Tickets
+  CREATE_NORMAL_TICKET: BASE_URL + "/eventstickets/create",
+  GET_ALL_TICKETS_BY_EVENT: BASE_URL + "/eventstickets/getTicketsByEventId",
+  GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getbyId",
+  UPDATE_TICKET: BASE_URL + "/eventstickets/update",
+  DELETE_TICKET: BASE_URL + "/eventstickets/delete",
+  ENABLE_TICKET: BASE_URL + "/eventstickets/enable",
+  DISABLE_TICKET: BASE_URL + "/eventstickets/disable",
+  GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData",
+  
+  // Bulk Tickets
+  CREATE_BULK_TICKET: BASE_URL + "/eventsbulktickets/create",
+  GET_ALL_BULK_TICKETS_BY_EVENT: BASE_URL + "/eventsbulktickets/getBulkTicketsByEventId",
+  GET_BULK_TICKET_BY_ID: BASE_URL + "/eventsbulktickets/getbyId",
+  UPDATE_BULK_TICKET: BASE_URL + "/eventsbulktickets/update",
+  DELETE_BULK_TICKET: BASE_URL + "/eventsbulktickets/delete",
+  ENABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/enable",
+  DISABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/disable",
+  GET_BULK_TICKETS_PAGINATED: BASE_URL + "/eventsbulktickets/getallpaginatedData",
+  
+  // Common ticket operations
+  GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
+  SEARCH_TICKETS: BASE_URL + "/eventstickets/searchTickets",
+  SEARCH_BULK_TICKETS: BASE_URL + "/eventsbulktickets/searchBulkTickets",
 }
 
 // Customer API

@@ -53,8 +53,11 @@ import {
 
 interface CreateEventProps {
   eventSelectionFlag: number | null
-  setEventCreationModal: (value: boolean) => void
+  setEventCreationModal: ((value: boolean) => void) | (() => void)
   role: UserRole
+  editMode?: boolean
+  existingEventData?: any
+  eventId?: string
 }
 
 interface SelectOption {
@@ -218,7 +221,10 @@ const eventValidationSchema = Yup.object().shape({
 export default function CreateEvent({ 
   eventSelectionFlag, 
   setEventCreationModal,
-  role 
+  role,
+  editMode = false,
+  existingEventData = null,
+  eventId
 }: CreateEventProps) {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -280,36 +286,74 @@ export default function CreateEvent({
     return new Date().toISOString().split('T')[0]
   }, [])
 
-  // Initial form values
-  const initialValues: EventFormValues = {
-    eventname: "",
-    eventDescription: "",
-    eventTermsandConditions: "",
-    eventVideoUrl: "",
-    eventVisibility: "",
-    eventType: "",
-    bookingphonenumber: "",
-    whatsappnumber: "",
-    locationType: "",
-    venue_id: "",
-    onlineEventUrl: "",
-    stateIsoCode: "",
-    stateName: "",
-    cityIsoCode: "",
-    cityName: "",
-    organizers: [],
-    categories: [],
-    artists: [],
-    genres: [],
-    languages: [],
-    eventTour_id: "",
-    ageRestriction: "",
-    isFeatured: false,
-    feeunit: ConvinienceFeeUnit.Percentage,
-    feevalue: 0,
-    events: [],
-    faqs: []
+  // Initial form values  // Helper function to get initial values for the form
+  const getInitialValues = (): EventFormValues => {
+    if (editMode && existingEventData) {
+      // Pre-populate form with existing event data
+      return {
+        eventname: existingEventData.EventName || existingEventData.eventName || "",
+        eventDescription: existingEventData.EventDescription || existingEventData.eventDescription || "",
+        eventTermsandConditions: existingEventData.EventTermsCondition || existingEventData.eventTermsCondition || "",
+        eventVideoUrl: existingEventData.EventVideoUrl || existingEventData.eventVideoUrl || "",
+        eventVisibility: existingEventData.EventVisibility ? existingEventData.EventVisibility.toString() : "1",
+        eventType: existingEventData.EventType ? existingEventData.EventType.toString() : "1",
+        bookingphonenumber: existingEventData.BookingPhoneNumber || existingEventData.bookingPhoneNumber || "",
+        whatsappnumber: existingEventData.WhatsappNumber || existingEventData.whatsappNumber || "",
+        locationType: existingEventData.OnlineEventFlag === 1 ? "online" : "venue",
+        venue_id: existingEventData.venue_id || existingEventData.VenueId || "",
+        onlineEventUrl: existingEventData.Online_Event_Link || existingEventData.onlineEventLink || "",
+        stateIsoCode: existingEventData.StateIsoCode || existingEventData.stateIsoCode || "",
+        stateName: existingEventData.StateName || existingEventData.stateName || "",
+        cityIsoCode: existingEventData.CityIsoCode || existingEventData.cityIsoCode || "",
+        cityName: existingEventData.CityName || existingEventData.cityName || "",
+        organizers: existingEventData.EventOrganizers || existingEventData.eventOrganizers || [],
+        categories: existingEventData.EventCategories || existingEventData.eventCategories || [],
+        artists: existingEventData.EventArtist || existingEventData.eventArtists || [],
+        genres: existingEventData.EventGenre || existingEventData.eventGenres || [],
+        languages: existingEventData.EventLanguages || existingEventData.eventLanguages || [],
+        eventTour_id: existingEventData.EventTour_id || existingEventData.eventTour_id || "",
+        ageRestriction: existingEventData.AgeRestriction || existingEventData.ageRestriction || "",
+        isFeatured: existingEventData.FeaturedEventFlag === 1 || existingEventData.featuredEventFlag === 1 || false,
+        feeunit: existingEventData.ConvinienceFeeUnit || existingEventData.convinienceFeeUnit || ConvinienceFeeUnit.Percentage,
+        feevalue: existingEventData.ConvinienceFeeValue || existingEventData.convinienceFeeValue || 0,
+        events: existingEventData.arrangedEventDateTime || existingEventData.events || [],
+        faqs: existingEventData.EventFAQs || existingEventData.eventFAQs || []
+      }
+    }
+    
+    // Default values for create mode
+    return {
+      eventname: "",
+      eventDescription: "",
+      eventTermsandConditions: "",
+      eventVideoUrl: "",
+      eventVisibility: "",
+      eventType: "",
+      bookingphonenumber: "",
+      whatsappnumber: "",
+      locationType: "",
+      venue_id: "",
+      onlineEventUrl: "",
+      stateIsoCode: "",
+      stateName: "",
+      cityIsoCode: "",
+      cityName: "",
+      organizers: [],
+      categories: [],
+      artists: [],
+      genres: [],
+      languages: [],
+      eventTour_id: "",
+      ageRestriction: "",
+      isFeatured: false,
+      feeunit: ConvinienceFeeUnit.Percentage,
+      feevalue: 0,
+      events: [],
+      faqs: []
+    }
   }
+
+  const initialValues: EventFormValues = getInitialValues()
   // API utility function
   const getApiEndpoint = (endpoint: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -776,10 +820,9 @@ export default function CreateEvent({
       setFieldValue(fieldName, filteredOptions || [])
     } else {
       setFieldValue(fieldName, selectedOptions || [])
-    }
-  }
+    }  }
 
-  // Form submission
+  // Form submission handler
   const handleSubmit = async (values: EventFormValues, eventStatus: number) => {
     try {
       // Additional validation for tour events
@@ -792,8 +835,8 @@ export default function CreateEvent({
         return
       }
 
-      // Validate images
-      if (carouselImages.length === 0) {
+      // Validate images (less strict for edit mode)
+      if (!editMode && carouselImages.length === 0) {
         toast({
           title: "Validation Error",
           description: "Please upload at least one carousel image",
@@ -804,83 +847,92 @@ export default function CreateEvent({
 
       // Create FormData for submission
       const submitData = new FormData()
-        // Add carousel images
-      carouselImages.forEach((image) => {
-        submitData.append("CarouselImages", image)
-      })
+      
+      // Add event ID for edit mode
+      if (editMode && eventId) {
+        submitData.append("event_id", eventId)
+      }
+      
+      // Add carousel images (only if new ones are uploaded)
+      if (carouselImages.length > 0) {
+        carouselImages.forEach((image) => {
+          submitData.append("carouselImages", image)
+        })
+      }
 
       // Add gallery images if any
       if (galleryImages.length > 0) {
         galleryImages.forEach((image) => {
-          submitData.append("GalleryImages", image)
+          submitData.append("galleryImages", image)
         })
       }
 
       // Add venue layout image if applicable
       if (venueLayoutImage && values.locationType === "venue") {
-        submitData.append("VenueLayoutImage", venueLayoutImage)
-      }// Add form data using the exact field names required by the API
-      submitData.append("EventName", values.eventname)
-      submitData.append("EventDescription", values.eventDescription)
-      submitData.append("EventTermsCondition", values.eventTermsandConditions)
-      submitData.append("EventVisibility", values.eventVisibility)
-      submitData.append("EventType", values.eventType)
-      submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
-      submitData.append("ConvinienceFeeUnit", values.feeunit.toString())
-      submitData.append("ConvinienceFeeValue", values.feevalue.toString())
-      submitData.append("BestSuitedFor", values.ageRestriction)
-      submitData.append("Status", eventStatus === EventStatus.Draft ? "2" : "3")
-      submitData.append("TourEvent", (eventSelectionFlag || 0).toString())      // Add conditional fields
+        submitData.append("venueLayoutImage", venueLayoutImage)
+      }
+
+      // Add form data using the exact field names required by the API
+      submitData.append("eventname", values.eventname)
+      submitData.append("eventDescription", values.eventDescription)
+      submitData.append("eventTermsandConditions", values.eventTermsandConditions)
+      submitData.append("eventVisibility", values.eventVisibility)
+      submitData.append("eventType", values.eventType)
+      submitData.append("locationType", values.locationType)
+      submitData.append("isFeatured", values.isFeatured ? "1" : "0")
+      submitData.append("feeunit", values.feeunit.toString())
+      submitData.append("feevalue", values.feevalue.toString())
+      submitData.append("ageRestriction", values.ageRestriction)
+      submitData.append("status", eventStatus === EventStatus.Draft ? "draft" : "published")
+
+      // Add conditional fields
       if (values.eventVideoUrl) {
-        submitData.append("EventVideoUrl", values.eventVideoUrl)
+        submitData.append("eventVideoUrl", values.eventVideoUrl)
       }
 
       if (values.eventType === "1" && values.bookingphonenumber) {
-        submitData.append("BookingPhoneNumber", values.bookingphonenumber)
+        submitData.append("bookingphonenumber", values.bookingphonenumber)
       }
 
       if (values.eventType === "3" && values.whatsappnumber) {
-        submitData.append("WhatsappNumber", values.whatsappnumber)
+        submitData.append("whatsappnumber", values.whatsappnumber)
       }
 
-      // Add location-specific data and flags
+      // Add location-specific data
       if (values.locationType === "venue") {
         submitData.append("venue_id", values.venue_id)
-        submitData.append("VenueEventFlag", "1")
-        submitData.append("OnlineEventFlag", "0")
-        submitData.append("VenueToBeAnnounced", "0")
       } else if (values.locationType === "online") {
-        submitData.append("OnlineEventUrl", values.onlineEventUrl)
-        submitData.append("VenueEventFlag", "0")
-        submitData.append("OnlineEventFlag", "1")
-        submitData.append("VenueToBeAnnounced", "0")
+        submitData.append("onlineEventUrl", values.onlineEventUrl)
       } else if (values.locationType === "tba") {
-        submitData.append("StateIsoCode", values.stateIsoCode)
-        submitData.append("StateName", values.stateName)
-        submitData.append("CityIsoCode", values.cityIsoCode)
-        submitData.append("CityName", values.cityName)
-        submitData.append("VenueEventFlag", "0")
-        submitData.append("OnlineEventFlag", "0")
-        submitData.append("VenueToBeAnnounced", "1")
+        submitData.append("stateIsoCode", values.stateIsoCode)
+        submitData.append("stateName", values.stateName)
+        submitData.append("cityIsoCode", values.cityIsoCode)
+        submitData.append("cityName", values.cityName)
       }
 
-      // Add relationship arrays in the correct format
-      submitData.append("EventOrganizers", JSON.stringify(values.organizers.map(o => ({ organizer_id: o.value }))))
-      submitData.append("EventCategories", JSON.stringify(values.categories.map(c => ({ category_id: c.value }))))
-      submitData.append("EventArtist", JSON.stringify(values.artists.map(a => ({ artist_id: a.value }))))
-      submitData.append("EventGenre", JSON.stringify(values.genres.map(g => ({ genre_id: g.value }))))
-      submitData.append("EventLanguages", JSON.stringify(values.languages.map(l => l.value)))      // Add tour ID if applicable
+      // Add relationship arrays
+      submitData.append("organizers", JSON.stringify(values.organizers.map(o => o.value)))
+      submitData.append("categories", JSON.stringify(values.categories.map(c => c.value)))
+      submitData.append("artists", JSON.stringify(values.artists.map(a => a.value)))
+      submitData.append("genres", JSON.stringify(values.genres.map(g => g.value)))
+      submitData.append("languages", JSON.stringify(values.languages.map(l => l.value)))
+
+      // Add tour ID if applicable
       if (eventSelectionFlag === 1 && values.eventTour_id) {
-        submitData.append("EventTour_id", values.eventTour_id)
+        submitData.append("eventTour_id", values.eventTour_id)
       }
 
-      // Add events and FAQs in the correct format
-      submitData.append("EventDateTime", JSON.stringify(values.events))
-      submitData.append("EventFAQs", JSON.stringify(values.faqs))      // Add administrative fields
-      submitData.append("CreatedBy", "1")
+      // Add events and FAQs
+      submitData.append("events", JSON.stringify(values.events))
+      submitData.append("faqs", JSON.stringify(values.faqs))
+
+      // Add administrative fields
       if (user) {
-        submitData.append("createduser_id", user.user_id)
-      }// Submit to API
+        submitData.append("createdBy", user.AdminRole || role)
+        submitData.append("createdUserId", user.user_id)
+      }
+
+      // Submit to API
       const authToken = getValidToken()
       if (!authToken) {
         toast({
@@ -891,9 +943,14 @@ export default function CreateEvent({
         return
       }
 
-      // Use the correct endpoint based on role
-      const eventEndpoint = role === "superadmin" ? "/events/superAdmin/create" : "/events/organizer/create"
-      const response = await fetch(getApiEndpoint(eventEndpoint), {
+      // Use the correct endpoint based on mode and role
+      let eventEndpoint: string
+      if (editMode) {
+        eventEndpoint = role === "superadmin" ? "/events/superAdmin/update" : "/events/organizer/update"
+      } else {
+        eventEndpoint = role === "superadmin" ? "/events/superAdmin/create" : "/events/organizer/create"
+      }
+        const response = await fetch(getApiEndpoint(eventEndpoint), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -905,24 +962,30 @@ export default function CreateEvent({
         const data = await response.json()
         toast({
           title: "Success",
-          description: data.message || "Event created successfully",
+          description: data.message || (editMode ? "Event updated successfully" : "Event created successfully"),
         })
         setTimeout(() => {
-          setEventCreationModal(false)
+          if (editMode) {
+            // For edit mode, call the function directly (no parameters)
+            (setEventCreationModal as () => void)()
+          } else {
+            // For create mode, call with false parameter
+            (setEventCreationModal as (value: boolean) => void)(false)
+          }
         }, 2000)
       } else {
         const errorData = await response.json()
         toast({
           title: "Error",
-          description: errorData.message || "Failed to create event",
+          description: errorData.message || (editMode ? "Failed to update event" : "Failed to create event"),
           variant: "destructive"
         })
       }
     } catch (error) {
-      console.error("Error creating event:", error)
+      console.error(`Error ${editMode ? 'updating' : 'creating'} event:`, error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create event",
+        description: error instanceof Error ? error.message : (editMode ? "Failed to update event" : "Failed to create event"),
         variant: "destructive"
       })
     }
@@ -932,12 +995,17 @@ export default function CreateEvent({
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Page Header */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">
-            {eventSelectionFlag === 1 ? 'Create Tour Event' : 'Create Event'}
+        <CardHeader>          <CardTitle className="text-2xl">
+            {editMode 
+              ? (eventSelectionFlag === 1 ? 'Edit Tour Event' : 'Edit Event')
+              : (eventSelectionFlag === 1 ? 'Create Tour Event' : 'Create Event')
+            }
           </CardTitle>
           <p className="text-muted-foreground">
-            Fill in the details below to create your {eventSelectionFlag === 1 ? 'tour ' : ''}event. 
+            {editMode 
+              ? `Update the details below to modify your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
+              : `Fill in the details below to create your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
+            }
             Fields marked with * are required.
           </p>
         </CardHeader>

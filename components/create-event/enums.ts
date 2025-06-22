@@ -13,10 +13,12 @@ export const EventType = {
 
 // Event Status Enum
 export const EventStatus = {
+  
   Draft: 1,
-  Published: 2,
-  ToBeReviewed: 3,
-  Rejected: 4,
+  InReview: 2,
+  Published: 3,
+  ReviewRejected: 4,
+  Completed: 5,
 } as const
 
 // Convenience Fee Unit Enum
