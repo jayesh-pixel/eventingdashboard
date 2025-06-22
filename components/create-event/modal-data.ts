@@ -1,4 +1,9 @@
 // Create options for different dropdowns
+export const createVenueOption = {
+  value: "CREATE_NEW_VENUE",
+  label: "+ Create New Venue"
+}
+
 export const createOrganizerOption = {
   value: "CREATE_NEW",
   label: "+ Create New Organizer"
