@@ -35,37 +35,31 @@ export default function PromoterEventCard({
   getStatusBadgeVariant,
   normalizeEventStatus,
 }: PromoterEventCardProps) {
-  return (
-    <Card
+  return (    <Card
       key={event._id}
-      className="group overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
-      style={{ maxWidth: 410, minWidth: 340, width: "100%" }}
+      className="group overflow-hidden hover:shadow-md transition-all duration-200 border bg-card cursor-pointer h-fit"
+      style={{ maxWidth: 380, minWidth: 320, width: "100%" }}
     >
       {/* Enhanced Image Section with Overlay Effects */}
-      <div className="relative overflow-hidden">
-        <div className="aspect-[16/10] overflow-hidden">
+      <div className="relative overflow-hidden">    
+            <div className="aspect-[16/10] overflow-hidden">
           <img
             src={event.eventImage || "/placeholder.svg"}
             alt={event.eventName}
-            className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110 group-hover:brightness-110"
+            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-102"
           />
-        </div>
-        
-        {/* Gradient overlays */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-70 transition-opacity duration-300" />
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-transparent to-secondary/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />                      
+        </div>        {/* Gradient overlays */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-40 group-hover:opacity-50 transition-opacity duration-200" />
         
         {/* Status Badge with enhanced styling */}
         <div className="absolute top-4 right-4">
-          <Badge 
+          {/* <Badge 
             variant={getStatusBadgeVariant(event.eventStatus)} 
             className="shadow-lg backdrop-blur-md bg-background/90 border-background/20 text-xs font-medium px-3 py-1"
           >
             {normalizeEventStatus(event.eventStatus)}
-          </Badge>
-        </div>
-
-        {/* Featured Badge with enhanced styling */}
+          </Badge> */}
+        </div>        {/* Featured Badge with enhanced styling */}
         {event.featuredEvent && (
           <div className="absolute top-4 left-4">
             <div className="flex items-center gap-1.5 bg-gradient-to-r from-yellow-500/90 to-orange-500/90 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg backdrop-blur-sm">
@@ -74,54 +68,16 @@ export default function PromoterEventCard({
             </div>
           </div>
         )}
-
-        {/* Quick Action Overlay with improved positioning */}
-        <div className="absolute bottom-4 left-4 right-4 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0">
-          <div className="flex gap-2">
-            <Button 
-              size="sm" 
-              className="flex-1 bg-white/95 hover:bg-white text-black border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200" 
-              onClick={(e) => {
-                e.stopPropagation()
-                onCheckReport(event._id)
-              }}
-            >
-              <BarChart3 className="h-3 w-3 mr-1.5" />
-              Analytics
-            </Button>
-            <Button 
-              size="sm" 
-              className="flex-1 bg-primary/95 hover:bg-primary text-primary-foreground border-0 shadow-lg text-xs font-medium backdrop-blur-sm hover:shadow-xl transition-all duration-200"
-              onClick={(e) => {
-                e.stopPropagation()
-                onBookTicket(event._id, event.arrangedEventDateTime)
-              }}
-            >
-              <DollarSign className="h-3 w-3 mr-1.5" />
-              Book Now
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Enhanced Content Section */}
-      <div className="p-5 space-y-4 overflow-visible">
-        {/* Header with improved typography */}
+      </div>{/* Simplified Content Section - Essential Details Only */}
+      <div className="p-5 space-y-4">
+        {/* Event Title */}
         <div className="space-y-2">
           <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
             {event.eventName}
           </h3>
-          <div 
-            className="text-sm text-muted-foreground line-clamp-3 leading-relaxed"
-            dangerouslySetInnerHTML={{ 
-              __html: stripHtmlTags(event.eventDescription).length > 100 
-                ? stripHtmlTags(event.eventDescription).substring(0, 100) + '...' 
-                : stripHtmlTags(event.eventDescription)
-            }}
-          />
         </div>
 
-        {/* Event Details Grid with enhanced styling */}
+        {/* Essential Event Details - Date, Time, Location */}
         <div className="space-y-3">
           {/* Date & Time */}
           <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
@@ -135,63 +91,17 @@ export default function PromoterEventCard({
             </div>
           </div>
 
-          {/* Location */}
+          {/* Location - City Only */}
           <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
             <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-            <div className="flex-1">
-              <span className="font-medium block truncate">
-                {event.venueName}
-              </span>
-              <span className="text-muted-foreground text-xs">
-                {event.city}
-              </span>
-            </div>
+            <span className="font-medium">{event.city}</span>
           </div>
-
-          {/* Organizer */}
-          <div className="flex items-center gap-3 text-sm text-foreground bg-gradient-to-r from-muted/40 to-muted/20 rounded-lg p-3 border border-border/30">
-            <Users className="h-4 w-4 text-primary flex-shrink-0" />
-            <span className="font-medium truncate">{event.organizerName}</span>
-          </div>
-        </div>
-
-        {/* Enhanced badges and info sections */}
-        <div className="space-y-3">
-          {/* Category */}
-          {event.categoryName && (
-            <div className="flex items-center justify-center">
-              <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30 font-medium px-3 py-1">
-                🎯 {event.categoryName}
-              </Badge>
-            </div>
-          )}
-
-          {/* Additional Info sections with improved styling */}
-          {event.bestSuitedFor && (
-            <div className="p-3 bg-gradient-to-r from-blue-50/80 to-blue-100/80 dark:from-blue-950/30 dark:to-blue-900/30 rounded-lg border border-blue-200/50 dark:border-blue-800/50">
-              <div className="text-sm font-medium text-blue-800 dark:text-blue-200 text-center">
-                👥 Best suited for age {event.bestSuitedFor}+
-              </div>
-            </div>
-          )}
-
-          {/* Contact Info */}
-          {event.bookingPhoneNumber && (
-            <div className="p-3 bg-gradient-to-r from-green-50/80 to-green-100/80 dark:from-green-950/30 dark:to-green-900/30 rounded-lg border border-green-200/50 dark:border-green-800/50">
-              <div className="flex items-center justify-center gap-2 text-sm">
-                <Phone className="h-4 w-4 text-green-600 dark:text-green-400" />
-                <span className="font-medium text-green-800 dark:text-green-200">{event.bookingPhoneNumber}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Desktop Action Buttons with improved styling */}
-        <div className="flex gap-3 pt-2 overflow-visible">
+        </div>        {/* Desktop Action Buttons with improved styling */}
+        <div className="flex gap-2 pt-2">
           <Button 
             size="sm" 
             variant="outline"
-            className="flex-1 text-sm border-border/50 hover:border-primary/50 hover:bg-primary/5 transition-all duration-200 font-medium" 
+            className="flex-1 text-sm hover:bg-primary/5 transition-colors duration-200" 
             onClick={(e) => {
               e.stopPropagation()
               onCheckReport(event._id)
@@ -202,8 +112,7 @@ export default function PromoterEventCard({
           </Button>
           <Button 
             size="sm" 
-            className="flex-1 text-sm bg-gradient-to-r from-primary to-primary/90 hover:from-primary/95 hover:to-primary/85 shadow-lg hover:shadow-xl transition-all duration-200 font-medium"
-            style={{ minWidth: 0, whiteSpace: "nowrap" }}
+            className="flex-1 text-sm bg-primary hover:bg-primary/90 transition-colors duration-200"
             onClick={(e) => {
               e.stopPropagation()
               onBookTicket(event._id, event.arrangedEventDateTime)

@@ -1180,7 +1180,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           
           {(role as UserRole) === "promoter" && viewMode === "cards" ? (
             // Enhanced Card View for Promoters
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 overflow-visible">
               {currentEvents.length === 0 ? (                
                 <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
