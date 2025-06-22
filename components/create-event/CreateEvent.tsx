@@ -804,83 +804,83 @@ export default function CreateEvent({
 
       // Create FormData for submission
       const submitData = new FormData()
-      
-      // Add carousel images
+        // Add carousel images
       carouselImages.forEach((image) => {
-        submitData.append("carouselImages", image)
+        submitData.append("CarouselImages", image)
       })
 
       // Add gallery images if any
       if (galleryImages.length > 0) {
         galleryImages.forEach((image) => {
-          submitData.append("galleryImages", image)
+          submitData.append("GalleryImages", image)
         })
       }
 
       // Add venue layout image if applicable
       if (venueLayoutImage && values.locationType === "venue") {
-        submitData.append("venueLayoutImage", venueLayoutImage)
-      }
-
-      // Add form data using the exact field names required by the API
-      submitData.append("eventname", values.eventname)
-      submitData.append("eventDescription", values.eventDescription)
-      submitData.append("eventTermsandConditions", values.eventTermsandConditions)
-      submitData.append("eventVisibility", values.eventVisibility)
-      submitData.append("eventType", values.eventType)
-      submitData.append("locationType", values.locationType)
-      submitData.append("isFeatured", values.isFeatured ? "1" : "0")
-      submitData.append("feeunit", values.feeunit.toString())
-      submitData.append("feevalue", values.feevalue.toString())
-      submitData.append("ageRestriction", values.ageRestriction)
-      submitData.append("status", eventStatus === EventStatus.Draft ? "draft" : "published")
-
-      // Add conditional fields
+        submitData.append("VenueLayoutImage", venueLayoutImage)
+      }// Add form data using the exact field names required by the API
+      submitData.append("EventName", values.eventname)
+      submitData.append("EventDescription", values.eventDescription)
+      submitData.append("EventTermsCondition", values.eventTermsandConditions)
+      submitData.append("EventVisibility", values.eventVisibility)
+      submitData.append("EventType", values.eventType)
+      submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
+      submitData.append("ConvinienceFeeUnit", values.feeunit.toString())
+      submitData.append("ConvinienceFeeValue", values.feevalue.toString())
+      submitData.append("BestSuitedFor", values.ageRestriction)
+      submitData.append("Status", eventStatus === EventStatus.Draft ? "2" : "3")
+      submitData.append("TourEvent", (eventSelectionFlag || 0).toString())      // Add conditional fields
       if (values.eventVideoUrl) {
-        submitData.append("eventVideoUrl", values.eventVideoUrl)
+        submitData.append("EventVideoUrl", values.eventVideoUrl)
       }
 
       if (values.eventType === "1" && values.bookingphonenumber) {
-        submitData.append("bookingphonenumber", values.bookingphonenumber)
+        submitData.append("BookingPhoneNumber", values.bookingphonenumber)
       }
 
       if (values.eventType === "3" && values.whatsappnumber) {
-        submitData.append("whatsappnumber", values.whatsappnumber)
+        submitData.append("WhatsappNumber", values.whatsappnumber)
       }
 
-      // Add location-specific data
+      // Add location-specific data and flags
       if (values.locationType === "venue") {
         submitData.append("venue_id", values.venue_id)
+        submitData.append("VenueEventFlag", "1")
+        submitData.append("OnlineEventFlag", "0")
+        submitData.append("VenueToBeAnnounced", "0")
       } else if (values.locationType === "online") {
-        submitData.append("onlineEventUrl", values.onlineEventUrl)
+        submitData.append("OnlineEventUrl", values.onlineEventUrl)
+        submitData.append("VenueEventFlag", "0")
+        submitData.append("OnlineEventFlag", "1")
+        submitData.append("VenueToBeAnnounced", "0")
       } else if (values.locationType === "tba") {
-        submitData.append("stateIsoCode", values.stateIsoCode)
-        submitData.append("stateName", values.stateName)
-        submitData.append("cityIsoCode", values.cityIsoCode)
-        submitData.append("cityName", values.cityName)
+        submitData.append("StateIsoCode", values.stateIsoCode)
+        submitData.append("StateName", values.stateName)
+        submitData.append("CityIsoCode", values.cityIsoCode)
+        submitData.append("CityName", values.cityName)
+        submitData.append("VenueEventFlag", "0")
+        submitData.append("OnlineEventFlag", "0")
+        submitData.append("VenueToBeAnnounced", "1")
       }
 
-      // Add relationship arrays
-      submitData.append("organizers", JSON.stringify(values.organizers.map(o => o.value)))
-      submitData.append("categories", JSON.stringify(values.categories.map(c => c.value)))
-      submitData.append("artists", JSON.stringify(values.artists.map(a => a.value)))
-      submitData.append("genres", JSON.stringify(values.genres.map(g => g.value)))
-      submitData.append("languages", JSON.stringify(values.languages.map(l => l.value)))
-
-      // Add tour ID if applicable
+      // Add relationship arrays in the correct format
+      submitData.append("EventOrganizers", JSON.stringify(values.organizers.map(o => ({ organizer_id: o.value }))))
+      submitData.append("EventCategories", JSON.stringify(values.categories.map(c => ({ category_id: c.value }))))
+      submitData.append("EventArtist", JSON.stringify(values.artists.map(a => ({ artist_id: a.value }))))
+      submitData.append("EventGenre", JSON.stringify(values.genres.map(g => ({ genre_id: g.value }))))
+      submitData.append("EventLanguages", JSON.stringify(values.languages.map(l => l.value)))      // Add tour ID if applicable
       if (eventSelectionFlag === 1 && values.eventTour_id) {
-        submitData.append("eventTour_id", values.eventTour_id)
+        submitData.append("EventTour_id", values.eventTour_id)
       }
 
-      // Add events and FAQs
-      submitData.append("events", JSON.stringify(values.events))
-      submitData.append("faqs", JSON.stringify(values.faqs))
-
-      // Add administrative fields
+      // Add events and FAQs in the correct format
+      submitData.append("EventDateTime", JSON.stringify(values.events))
+      submitData.append("EventFAQs", JSON.stringify(values.faqs))      // Add administrative fields
+      submitData.append("CreatedBy", "1")
       if (user) {
-        submitData.append("createdBy", user.AdminRole || role)
-        submitData.append("createdUserId", user.user_id)
-      }      // Submit to API
+        submitData.append("createduser_id", user.user_id)
+      }// Submit to API
       const authToken = getValidToken()
       if (!authToken) {
         toast({
