@@ -49,6 +49,97 @@ import {
   AlertCircle 
 } from "lucide-react"
 
+// Custom styles for react-select to support dark mode
+const getSelectStyles = () => {
+  // Get CSS custom properties at runtime to support theme switching
+  const getThemeColor = (property: string) => {
+    if (typeof window !== 'undefined') {
+      return getComputedStyle(document.documentElement).getPropertyValue(property).trim()
+    }
+    return ''
+  }
+
+  return {
+    control: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: `hsl(${getThemeColor('--card')})`,
+      borderColor: `hsl(${getThemeColor('--border')})`,
+      color: `hsl(${getThemeColor('--foreground')})`,
+      '&:hover': {
+        borderColor: `hsl(${getThemeColor('--ring')})`,
+      },
+      boxShadow: state.isFocused ? `0 0 0 2px hsl(${getThemeColor('--ring')})` : 'none',
+      minHeight: '40px',
+    }),
+    menu: (provided: any) => ({
+      ...provided,
+      backgroundColor: `hsl(${getThemeColor('--popover')})`,
+      border: `1px solid hsl(${getThemeColor('--border')})`,
+      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    }),
+    option: (provided: any, state: any) => ({
+      ...provided,
+      backgroundColor: state.isSelected 
+        ? `hsl(${getThemeColor('--primary')})` 
+        : state.isFocused 
+        ? `hsl(${getThemeColor('--accent')})` 
+        : 'transparent',
+      color: state.isSelected 
+        ? `hsl(${getThemeColor('--primary-foreground')})` 
+        : `hsl(${getThemeColor('--popover-foreground')})`,
+      '&:hover': {
+        backgroundColor: `hsl(${getThemeColor('--accent')})`,
+        color: `hsl(${getThemeColor('--accent-foreground')})`,
+      },
+    }),
+    singleValue: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--foreground')})`,
+    }),
+    multiValue: (provided: any) => ({
+      ...provided,
+      backgroundColor: `hsl(${getThemeColor('--secondary')})`,
+      color: `hsl(${getThemeColor('--secondary-foreground')})`,
+    }),
+    multiValueLabel: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--secondary-foreground')})`,
+    }),
+    multiValueRemove: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--secondary-foreground')})`,
+      '&:hover': {
+        backgroundColor: `hsl(${getThemeColor('--destructive')})`,
+        color: `hsl(${getThemeColor('--destructive-foreground')})`,
+      },
+    }),
+    placeholder: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--muted-foreground')})`,
+    }),
+    input: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--foreground')})`,
+    }),
+    indicatorSeparator: (provided: any) => ({
+      ...provided,
+      backgroundColor: `hsl(${getThemeColor('--border')})`,
+    }),
+    dropdownIndicator: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--muted-foreground')})`,
+    }),
+    clearIndicator: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--muted-foreground')})`,
+    }),
+    loadingIndicator: (provided: any) => ({
+      ...provided,
+      color: `hsl(${getThemeColor('--muted-foreground')})`,
+    }),
+  }
+}
+
 // Remove the old ReactQuill import as we're using the wrapper
 
 interface CreateEventProps {
@@ -991,6 +1082,97 @@ export default function CreateEvent({
     }
   }
   
+  // Custom styles for react-select to support dark mode
+  const getSelectStyles = () => {
+    // Get CSS custom properties at runtime to support theme switching
+    const getThemeColor = (property: string) => {
+      if (typeof window !== 'undefined') {
+        return getComputedStyle(document.documentElement).getPropertyValue(property).trim()
+      }
+      return ''
+    }
+
+    return {
+      control: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: `hsl(${getThemeColor('--card')})`,
+        borderColor: `hsl(${getThemeColor('--border')})`,
+        color: `hsl(${getThemeColor('--foreground')})`,
+        '&:hover': {
+          borderColor: `hsl(${getThemeColor('--ring')})`,
+        },
+        boxShadow: state.isFocused ? `0 0 0 2px hsl(${getThemeColor('--ring')})` : 'none',
+        minHeight: '40px',
+      }),
+      menu: (provided: any) => ({
+        ...provided,
+        backgroundColor: `hsl(${getThemeColor('--popover')})`,
+        border: `1px solid hsl(${getThemeColor('--border')})`,
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+      }),
+      option: (provided: any, state: any) => ({
+        ...provided,
+        backgroundColor: state.isSelected 
+          ? `hsl(${getThemeColor('--primary')})` 
+          : state.isFocused 
+          ? `hsl(${getThemeColor('--accent')})` 
+          : 'transparent',
+        color: state.isSelected 
+          ? `hsl(${getThemeColor('--primary-foreground')})` 
+          : `hsl(${getThemeColor('--popover-foreground')})`,
+        '&:hover': {
+          backgroundColor: `hsl(${getThemeColor('--accent')})`,
+          color: `hsl(${getThemeColor('--accent-foreground')})`,
+        },
+      }),
+      singleValue: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--foreground')})`,
+      }),
+      multiValue: (provided: any) => ({
+        ...provided,
+        backgroundColor: `hsl(${getThemeColor('--secondary')})`,
+        color: `hsl(${getThemeColor('--secondary-foreground')})`,
+      }),
+      multiValueLabel: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--secondary-foreground')})`,
+      }),
+      multiValueRemove: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--secondary-foreground')})`,
+        '&:hover': {
+          backgroundColor: `hsl(${getThemeColor('--destructive')})`,
+          color: `hsl(${getThemeColor('--destructive-foreground')})`,
+        },
+      }),
+      placeholder: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--muted-foreground')})`,
+      }),
+      input: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--foreground')})`,
+      }),
+      indicatorSeparator: (provided: any) => ({
+        ...provided,
+        backgroundColor: `hsl(${getThemeColor('--border')})`,
+      }),
+      dropdownIndicator: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--muted-foreground')})`,
+      }),
+      clearIndicator: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--muted-foreground')})`,
+      }),
+      loadingIndicator: (provided: any) => ({
+        ...provided,
+        color: `hsl(${getThemeColor('--muted-foreground')})`,
+      }),
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Page Header */}
@@ -1113,6 +1295,7 @@ export default function CreateEvent({
                         isLoading={loadingOrganizers}
                         className="basic-multi-select"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />{touched.organizers && errors.organizers && (
                         <p className="text-sm text-red-600">{String(errors.organizers)}</p>
                       )}
@@ -1136,6 +1319,7 @@ export default function CreateEvent({
                         isLoading={loadingCategories}
                         className="basic-multi-select"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />{touched.categories && errors.categories && (
                         <p className="text-sm text-red-600">{String(errors.categories)}</p>
                       )}
@@ -1159,6 +1343,7 @@ export default function CreateEvent({
                         isLoading={loadingArtists}
                         className="basic-multi-select"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />                      {touched.artists && errors.artists && (
                         <p className="text-sm text-red-600">{String(errors.artists)}</p>
                       )}
@@ -1182,6 +1367,7 @@ export default function CreateEvent({
                         isLoading={loadingGenres}
                         className="basic-multi-select"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />{touched.genres && errors.genres && (
                         <p className="text-sm text-red-600">{String(errors.genres)}</p>
                       )}
@@ -1205,6 +1391,7 @@ export default function CreateEvent({
                         placeholder="Select languages..."
                         className="basic-multi-select"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />                      {touched.languages && errors.languages && (
                         <p className="text-sm text-red-600">{String(errors.languages)}</p>
                       )}
@@ -1363,6 +1550,7 @@ export default function CreateEvent({
                               isLoading={loadingVenues}
                               className="basic-single"
                               classNamePrefix="select"
+                              styles={getSelectStyles()}
                             />
                             {touched.venue_id && errors.venue_id && (
                               <p className="text-sm text-red-600">{errors.venue_id}</p>
@@ -1442,6 +1630,7 @@ export default function CreateEvent({
                                 isLoading={loadingStates}
                                 className="basic-single"
                                 classNamePrefix="select"
+                                styles={getSelectStyles()}
                               />
                               {touched.stateIsoCode && errors.stateIsoCode && (
                                 <p className="text-sm text-red-600">{errors.stateIsoCode}</p>
@@ -1462,6 +1651,7 @@ export default function CreateEvent({
                                 isDisabled={!values.stateIsoCode}
                                 className="basic-single"
                                 classNamePrefix="select"
+                                styles={getSelectStyles()}
                               />
                               {touched.cityIsoCode && errors.cityIsoCode && (
                                 <p className="text-sm text-red-600">{errors.cityIsoCode}</p>
@@ -1482,6 +1672,7 @@ export default function CreateEvent({
                         placeholder="Select age group..."
                         className="basic-single"
                         classNamePrefix="select"
+                        styles={getSelectStyles()}
                       />
                       {touched.ageRestriction && errors.ageRestriction && (
                         <p className="text-sm text-red-600">{errors.ageRestriction}</p>
@@ -1620,6 +1811,7 @@ export default function CreateEvent({
                           isLoading={loadingEventTours}
                           className="basic-single"
                           classNamePrefix="select"
+                          styles={getSelectStyles()}
                         />
                         {eventSelectionFlag === 1 && touched.eventTour_id && errors.eventTour_id && (
                           <p className="text-sm text-red-600">{errors.eventTour_id}</p>
@@ -1920,6 +2112,7 @@ export default function CreateEvent({
                       formikSetFieldValue("venue_id", newVenue.value)
                     }
                     
+                   
                     toast({
                       title: "Success",
                       description: "Venue created successfully",

@@ -948,10 +948,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                               >
                                 <Eye className="mr-2 h-4 w-4" />
                                 View & Edit
-                              </DropdownMenuItem>                              <DropdownMenuItem>
-                                <BarChart3 className="mr-2 h-4 w-4" />
-                                View Analytics
-                              </DropdownMenuItem>
+                              </DropdownMenuItem>      
+                              
                               {(canAddEvent) && (
                                 <DropdownMenuItem 
                                   onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
@@ -1404,10 +1402,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   >
                                     <Eye className="mr-2 h-4 w-4" />
                                     View & Edit
-                                  </DropdownMenuItem>                                  <DropdownMenuItem>
-                                    <BarChart3 className="mr-2 h-4 w-4" />
-                                    View Analytics
-                                  </DropdownMenuItem>                                  {(canAddEvent) && (
+                                  </DropdownMenuItem> 
+                                                                               {(canAddEvent) && (
                                     <DropdownMenuItem 
                                       onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
                                       className="hover:bg-accent cursor-pointer"
@@ -1469,9 +1465,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             >
               <div>
                 <div className="font-semibold">Standard Event</div>
-                <div className="text-sm text-muted-foreground">
-                  Create an independent standalone event (TourEvent: 0)
-                </div>
+                
               </div>
             </Button>
             <Button
@@ -1481,9 +1475,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             >
               <div>
                 <div className="font-semibold">Event Tour</div>
-                <div className="text-sm text-muted-foreground">
-                  Create an event for a tour/campaign series (TourEvent: 1, includes EventTour_id)
-                </div>
+             
               </div>
             </Button>
           </div>

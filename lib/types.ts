@@ -1,6 +1,7 @@
 export interface Event {
   _id: string
   eventName: string
+  EventName?: string // API might return this property name
   eventDescription: string
   eventStatus: number | string // Can be numeric (from API) or string (for display)
   eventType: "Single-Day" | "Multi-Day"

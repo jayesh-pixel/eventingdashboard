@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Select,
   SelectContent,
@@ -60,8 +61,28 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericRole } from "@/lib/role-mapping"
-import { ticketEndPoint } from "@/lib/api-endpoints"
+import { eventEndPoint, ticketEndPoint } from "@/lib/api-endpoints"
+import { promoterEndpoint } from "@/lib/api-endpoints"
 import { NormalTicket, BulkTicket, Event } from "@/lib/types"
+
+// Extended interfaces to handle both old and new API response structures
+interface ExtendedNormalTicket extends NormalTicket {
+  // New field names from backend response
+  Name?: string
+  EventTicketType?: number
+  Price?: number
+  Description?: string
+  Quantity?: number
+  // Availability status fields - based on actual API response
+  EventTicketStatus?: number        // 1 = Sold Out, 0 = Available (THIS IS THE CORRECT FIELD)
+  EventTicketAvailability?: number  // Different field, unclear usage
+  AvailabilityStatus?: string
+  IsSoldOut?: boolean
+}
+
+interface ExtendedBulkTicket extends BulkTicket {
+  // Add any new bulk ticket fields if needed
+}
 
 interface EventDateTime {
   _id: string
@@ -73,6 +94,14 @@ interface EventDateTime {
   createdAt: string
 }
 
+interface Promoter {
+  _id: string
+  FullName: string
+  Email: string
+  Phone1: string
+  Status: string
+}
+
 // Form data types
 interface CreateNormalTicketForm {
   TicketName: string
@@ -81,6 +110,7 @@ interface CreateNormalTicketForm {
   EventDateTime_id: string
   TicketPrice: number
   MaxQuantity: number
+  BookingMaxLimit: number
   TicketStatus: number
   VisibilityLevel: number
 }
@@ -103,23 +133,29 @@ export default function TicketsPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
-
+  
   // Loading states
   const [loading, setLoading] = React.useState(false)
-  const [normalTickets, setNormalTickets] = React.useState<NormalTicket[]>([])
-  const [bulkTickets, setBulkTickets] = React.useState<BulkTicket[]>([])
+  const [eventLoading, setEventLoading] = React.useState(true)
+  const [normalTickets, setNormalTickets] = React.useState<ExtendedNormalTicket[]>([])
+  const [bulkTickets, setBulkTickets] = React.useState<ExtendedBulkTicket[]>([])
   const [eventData, setEventData] = React.useState<Event | null>(null)
   const [eventDateTimes, setEventDateTimes] = React.useState<EventDateTime[]>([])
-
+  const [promoters, setPromoters] = React.useState<Promoter[]>([])
+  const [ticketLoadingStates, setTicketLoadingStates] = React.useState<{[key: string]: boolean}>({})
+  
   // Tab and filter states
   const [activeTab, setActiveTab] = React.useState("normal")
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<string>("all")
+  const [availabilityFilter, setAvailabilityFilter] = React.useState<string>("all")
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = React.useState(false)
   const [showEditModal, setShowEditModal] = React.useState(false)
-  const [selectedTicket, setSelectedTicket] = React.useState<NormalTicket | BulkTicket | null>(null)
+  const [showPromoterModal, setShowPromoterModal] = React.useState(false)
+  const [selectedTicket, setSelectedTicket] = React.useState<ExtendedNormalTicket | ExtendedBulkTicket | null>(null)
+  const [selectedPromoters, setSelectedPromoters] = React.useState<string[]>([])
+  const [promoterSearchTerm, setPromoterSearchTerm] = React.useState("")
 
   // Form states - separate for normal and bulk tickets
   const [normalFormData, setNormalFormData] = React.useState<CreateNormalTicketForm>({
@@ -129,6 +165,7 @@ export default function TicketsPage() {
     EventDateTime_id: "",
     TicketPrice: 0,
     MaxQuantity: 0,
+    BookingMaxLimit: 0,
     TicketStatus: 1,
     VisibilityLevel: 1
   })
@@ -162,7 +199,6 @@ export default function TicketsPage() {
       currency: "INR",
     }).format(amount)
   }
-
   const getTicketTypeName = (type: number) => {
     switch (type) {
       case 1: return "Single Day"
@@ -172,58 +208,202 @@ export default function TicketsPage() {
       default: return "Unknown"
     }
   }
-
-  const getStatusBadge = (status: number) => {
-    return status === 1 ? (
-      <Badge variant="default">Active</Badge>
-    ) : (
-      <Badge variant="secondary">Inactive</Badge>
-    )
-  }
-
+  
   // API Functions
-  const fetchTickets = async () => {
+  const fetchPromoters = async () => {
     try {
-      setLoading(true)
       const authToken = getValidToken()
-      if (!user || !authToken) return      // Fetch normal tickets
-      const normalTicketsResponse = await fetch(ticketEndPoint.GET_ALL_TICKETS_BY_EVENT, {
+      if (!user || !authToken) return
+
+      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (!data.error) {
+          setPromoters(data.data || [])
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching promoters:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load promoters",
+        variant: "destructive",
+      })
+    }
+  }
+  const fetchEventDateTimes = async () => {
+    try {
+      setEventLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.error("No user or auth token available")
+        setEventLoading(false)
+        return
+      }
+
+      console.log("Fetching event details for eventId:", eventId)
+      console.log("User:", user)
+      console.log("Role:", role)      // Using the event endpoint to get event details which includes date/times
+      const payload = {
+        event_id: eventId,
+        AdminRole: getNumericRole(role),
+        user_id: user.user_id,
+      }
+
+      console.log("API Payload:", JSON.stringify(payload, null, 2))
+
+      const response = await fetch(eventEndPoint.GET_EVENTDATA_BY_ID, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({
-          event_id: eventId,
-          AdminRole: getNumericRole(role),
-          user_id: user.user_id,
-        }),
+        body: JSON.stringify(payload),
       })
+
+      console.log("API Response status:", response.status)
+      console.log("API Response ok:", response.ok)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("API Response data:", JSON.stringify(data, null, 2))
+        
+        if (!data.error && data.data) {
+          console.log("Event data received:", data.data)
+          
+          // Set event data for display
+          setEventData(data.data)
+          
+          // Set event date times and auto-populate forms
+          if (data.data.EventDateTime && data.data.EventDateTime.length > 0) {
+            console.log("Event date times found:", data.data.EventDateTime)
+            setEventDateTimes(data.data.EventDateTime)
+            const firstDateTime = data.data.EventDateTime[0]
+            
+            console.log("First date time:", firstDateTime)
+            console.log("Auto-populating forms with EventDateTime_id:", firstDateTime._id)
+            
+            // Auto-populate both forms with the first event date/time
+            setNormalFormData(prev => ({ 
+              ...prev, 
+              EventDateTime_id: firstDateTime._id 
+            }))
+            setBulkFormData(prev => ({ 
+              ...prev, 
+              EventDateTime_id: firstDateTime._id 
+            }))
+          } else {
+            console.warn("No EventDateTime found in event data")
+          }
+        } else {
+          console.error("API returned error or no data:", data)
+        }
+      } else {
+        const errorText = await response.text()
+        console.error("API call failed:", response.status, errorText)
+        toast({
+          title: "Error",
+          description: "Failed to load event details",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching event date times:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load event details",
+        variant: "destructive",
+      })    } finally {
+      setEventLoading(false)
+    }
+  }
+
+  const fetchTickets = async () => {
+    try {
+      setLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      console.log("Fetching tickets for eventId:", eventId)
+      
+      const payload = {
+        event_id: eventId,
+        AdminRole: getNumericRole(role),
+        user_id: user.user_id,
+      }
+
+      console.log("Tickets API Payload:", JSON.stringify(payload, null, 2))      // Fetch normal tickets using the new endpoint
+      const normalTicketsResponse = await fetch(ticketEndPoint.GET_ALL_EVENT_TICKETS, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      console.log("Normal tickets response status:", normalTicketsResponse.status)
 
       if (normalTicketsResponse.ok) {
         const normalData = await normalTicketsResponse.json()
-        if (!normalData.error) {
-          setNormalTickets(normalData.data || [])
+        console.log("Normal tickets response data:", JSON.stringify(normalData, null, 2))
+          if (!normalData.error) {
+          // Check if the response has the new structure with EventTicketsData
+          if (normalData.data && normalData.data.EventTicketsData) {            console.log("Using new response structure - EventTicketsData")
+            console.log("EventTicketsData length:", normalData.data.EventTicketsData.length)
+            if (normalData.data.EventTicketsData.length > 0) {
+              console.log("First ticket sample:", JSON.stringify(normalData.data.EventTicketsData[0], null, 2))
+              console.log("First ticket availability (EventTicketStatus):", normalData.data.EventTicketsData[0].EventTicketStatus)
+              console.log("First ticket availability (EventTicketAvailability):", normalData.data.EventTicketsData[0].EventTicketAvailability)
+            }
+            setNormalTickets(normalData.data.EventTicketsData || [])
+          } else {
+            console.log("Using old response structure - direct data")
+            console.log("Direct data length:", normalData.data?.length || 0)
+            if (normalData.data && normalData.data.length > 0) {
+              console.log("First ticket sample:", JSON.stringify(normalData.data[0], null, 2))
+            }
+            setNormalTickets(normalData.data || [])
+          }
+        } else {
+          console.error("Normal tickets API returned error:", normalData)
         }
-      }      // Fetch bulk tickets
+      } else {
+        const errorText = await normalTicketsResponse.text()
+        console.error("Normal tickets API call failed:", normalTicketsResponse.status, errorText)
+      }
+
+      // Fetch bulk tickets
       const bulkTicketsResponse = await fetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({
-          event_id: eventId,
-          AdminRole: getNumericRole(role),
-          user_id: user.user_id,
-        }),
+        body: JSON.stringify(payload),
       })
+
+      console.log("Bulk tickets response status:", bulkTicketsResponse.status)
 
       if (bulkTicketsResponse.ok) {
         const bulkData = await bulkTicketsResponse.json()
+        console.log("Bulk tickets response data:", JSON.stringify(bulkData, null, 2))
+        
         if (!bulkData.error) {
+          // For now, assuming bulk tickets follow similar structure
           setBulkTickets(bulkData.data || [])
+        } else {
+          console.error("Bulk tickets API returned error:", bulkData)
         }
+      } else {
+        const errorText = await bulkTicketsResponse.text()
+        console.error("Bulk tickets API call failed:", bulkTicketsResponse.status, errorText)
       }
     } catch (error) {
       console.error("Error fetching tickets:", error)
@@ -317,23 +497,170 @@ export default function TicketsPage() {
       setLoading(false)
     }
   }
+  const handleToggleAvailability = async (ticketId: string, currentIsSoldOut: boolean) => {
+    try {
+      console.log(`Toggling availability for ticket ${ticketId}, currently soldOut: ${currentIsSoldOut}`)
+      console.log("Current ticket state before toggle:", normalTickets.find(t => t._id === ticketId))
+      
+      // Set individual ticket loading state
+      setTicketLoadingStates(prev => ({ ...prev, [ticketId]: true }))      // Optimistic update - update the UI immediately
+      const optimisticUpdate = (tickets: any[]) => 
+        tickets.map(ticket => {
+          if (ticket._id === ticketId) {
+            return {
+              ...ticket,
+              EventTicketStatus: currentIsSoldOut ? 0 : 1, // 0 = Available, 1 = Sold Out
+              EventTicketAvailability: currentIsSoldOut ? 0 : 1, // Keep both for compatibility
+              IsSoldOut: !currentIsSoldOut,
+              AvailabilityStatus: currentIsSoldOut ? "Available" : "SoldOut"
+            }
+          }
+          return ticket
+        })
+      
+      // Apply optimistic update
+      setNormalTickets(prev => optimisticUpdate(prev))
+      
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      // Determine which endpoint to use based on current status
+      const endpoint = currentIsSoldOut 
+        ? ticketEndPoint.UPDATE_AVAILABILITY_TO_AVAILABLE
+        : ticketEndPoint.UPDATE_AVAILABILITY_TO_SOLD_OUT
+
+      console.log(`Using endpoint: ${endpoint}`)
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          eventTicket_id: ticketId
+        }),
+      })
+
+      console.log(`Toggle availability response status: ${response.status}`)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Toggle availability response data:", JSON.stringify(data, null, 2))
+        
+        if (!data.error) {
+          toast({
+            title: "Success",
+            description: currentIsSoldOut 
+              ? "Ticket availability updated to Available" 
+              : "Ticket availability updated to Sold Out",
+          })
+          
+          // Refresh the tickets list to get the actual server state
+          console.log("Refreshing tickets after successful toggle...")
+          await fetchTickets()
+        } else {
+          console.error("API returned error:", data)
+          // Revert optimistic update on error
+          setNormalTickets(prev => optimisticUpdate(prev))
+          throw new Error(data.message || "Failed to update availability")
+        }
+      } else {
+        const errorText = await response.text()
+        console.error("Toggle availability API call failed:", response.status, errorText)
+        // Revert optimistic update on error
+        setNormalTickets(prev => optimisticUpdate(prev))
+        throw new Error("Failed to update availability")
+      }
+    } catch (error) {
+      console.error("Error toggling ticket availability:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update ticket availability",
+        variant: "destructive",
+      })
+    } finally {
+      // Clear individual ticket loading state
+      setTicketLoadingStates(prev => ({ ...prev, [ticketId]: false }))
+    }
+  }
 
   const handleCreateTicket = async () => {
     try {
       setLoading(true)
       const authToken = getValidToken()
       if (!user || !authToken) return
+
+      // Validate promoter selection if visibility is set to "Promoters"
+      if (activeTab === "normal" && normalFormData.VisibilityLevel === 3 && selectedPromoters.length === 0) {
+        toast({
+          title: "Validation Error",
+          description: "Please select at least one promoter for promoter-only tickets",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+      
+      // Validate event date/time selection for normal tickets
+      if (activeTab === "normal" && !normalFormData.EventDateTime_id) {
+        toast({
+          title: "Validation Error",
+          description: "Event date & time is required. Please wait for event data to load.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+      
+      // Validate event date/time selection for bulk tickets
+      if (activeTab === "bulk" && !bulkFormData.EventDateTime_id) {
+        toast({
+          title: "Validation Error", 
+          description: "Event date & time is required. Please wait for event data to load.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
       
       const endpoint = activeTab === "normal" 
         ? ticketEndPoint.CREATE_NORMAL_TICKET 
         : ticketEndPoint.CREATE_BULK_TICKET
+
+      let payload: any = {
+        Event_id: eventId,
+      }
       
-      const formData = activeTab === "normal" ? normalFormData : bulkFormData
-        const payload = {
-        event_id: eventId,
-        AdminRole: getNumericRole(role),
-        user_id: user.user_id,
-        ...formData
+      if (activeTab === "normal") {
+        payload = {
+          ...payload,
+          Name: normalFormData.TicketName,
+          EventTicketType: normalFormData.TicketType.toString(),
+          Description: normalFormData.TicketDescription,
+          EventDateTimeIds: [{ eventDateTime_id: normalFormData.EventDateTime_id }],
+          Price: normalFormData.TicketPrice,
+          Quantity: normalFormData.MaxQuantity,
+          BookingMaxLimit: normalFormData.BookingMaxLimit,
+          EventTicketVisibility: normalFormData.VisibilityLevel.toString()
+        }
+        
+        // Include selected promoters if visibility is set to "Promoters"
+        if (normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0) {
+          payload.PromoterIds = selectedPromoters
+        }
+      } else {
+        payload = {
+          ...payload,
+          Name: bulkFormData.BulkTicketName,
+          Type: bulkFormData.BulkTicketType,
+          Description: bulkFormData.BulkTicketDescription,
+          EventDateTime_id: bulkFormData.EventDateTime_id,
+          Price: bulkFormData.BulkTicketPrice,
+          MinQuantity: bulkFormData.BulkMinQuantity,
+          MaxQuantity: bulkFormData.BulkMaxQuantity,
+          Status: bulkFormData.BulkTicketStatus
+        }
       }
 
       const response = await fetch(endpoint, {
@@ -351,14 +678,16 @@ export default function TicketsPage() {
           description: "Ticket created successfully",
         })
         setShowCreateModal(false)
+        setSelectedPromoters([]) // Reset selected promoters
         if (activeTab === "normal") {
           setNormalFormData({
             TicketName: "",
             TicketType: 1,
             TicketDescription: "",
-            EventDateTime_id: "",
+            EventDateTime_id: eventDateTimes.length > 0 ? eventDateTimes[0]._id : "",
             TicketPrice: 0,
             MaxQuantity: 0,
+            BookingMaxLimit: 0,
             TicketStatus: 1,
             VisibilityLevel: 1
           })
@@ -367,7 +696,7 @@ export default function TicketsPage() {
             BulkTicketName: "",
             BulkTicketType: 4,
             BulkTicketDescription: "",
-            EventDateTime_id: "",
+            EventDateTime_id: eventDateTimes.length > 0 ? eventDateTimes[0]._id : "",
             BulkTicketPrice: 0,
             BulkMinQuantity: 0,
             BulkMaxQuantity: 0,
@@ -436,32 +765,85 @@ export default function TicketsPage() {
     }
   }
 
+  // ...existing code...
+
   // Effects
   React.useEffect(() => {
     fetchTickets()
+    fetchPromoters()
+    fetchEventDateTimes()
   }, [eventId, user])
 
   const handleOpenCreateModal = () => {
+    // Auto-populate form with event data when opening modal
+    if (eventDateTimes.length > 0) {
+      const firstDateTime = eventDateTimes[0]
+      setNormalFormData(prev => ({ 
+        ...prev, 
+        EventDateTime_id: firstDateTime._id 
+      }))
+      setBulkFormData(prev => ({ 
+        ...prev, 
+        EventDateTime_id: firstDateTime._id 
+      }))
+    }
     setShowCreateModal(true)
   }
+  const handleVisibilityChange = (value: string) => {
+    setNormalFormData(prev => ({ ...prev, VisibilityLevel: parseInt(value) }))
+    
+    // Open promoter selection modal if "Promoters" is selected
+    if (value === "3") {
+      setPromoterSearchTerm("") // Clear search term
+      setShowPromoterModal(true)
+    }
+  }
 
-  const handleOpenEditModal = (ticket: NormalTicket | BulkTicket) => {
+  const handlePromoterSelection = (promoterId: string) => {
+    setSelectedPromoters(prev => 
+      prev.includes(promoterId) 
+        ? prev.filter(id => id !== promoterId)
+        : [...prev, promoterId]
+    )
+  }
+
+  const handlePromoterModalSave = () => {
+    setShowPromoterModal(false)
+    // You can add logic here to save the selected promoters to the form data
+  }
+  const handleOpenEditModal = (ticket: ExtendedNormalTicket | ExtendedBulkTicket) => {
     setSelectedTicket(ticket)
     setEditFormData(ticket)
     setShowEditModal(true)
-  }
+  }  // Filter promoters based on search
+  const filteredPromoters = promoters.filter(promoter =>
+    promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
+    promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
+    promoter.Phone1.includes(promoterSearchTerm)
+  )
 
-  // Filter tickets based on search and status
   const filteredNormalTickets = normalTickets.filter(ticket => {
-    const matchesSearch = ticket.TicketName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || ticket.TicketStatus.toString() === statusFilter
-    return matchesSearch && matchesStatus
+    const extendedTicket = ticket as ExtendedNormalTicket
+    const ticketName = extendedTicket.Name || ticket.TicketName || ''
+    
+    // Check availability based on the actual API response structure
+    // EventTicketStatus: 1 = Sold Out, 0 = Available
+    const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                     extendedTicket.IsSoldOut || 
+                     extendedTicket.AvailabilityStatus === "SoldOut" || 
+                     extendedTicket.AvailabilityStatus === "sold_out"
+    
+    const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesAvailability = availabilityFilter === "all" || 
+                               (availabilityFilter === "available" && !isSoldOut) ||
+                               (availabilityFilter === "soldout" && isSoldOut)
+    
+    return matchesSearch && matchesAvailability
   })
-
   const filteredBulkTickets = bulkTickets.filter(ticket => {
-    const matchesSearch = ticket.BulkTicketName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || ticket.BulkTicketStatus.toString() === statusFilter
-    return matchesSearch && matchesStatus
+    const ticketName = ticket.BulkTicketName || ''
+    const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
+    return matchesSearch
   })
 
   return (
@@ -502,15 +884,22 @@ export default function TicketsPage() {
             onClick={() => router.back()}
           >
             <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
+          </Button>          <div>
             <h1 className="text-2xl font-bold tracking-tight">Event Tickets</h1>
             <p className="text-muted-foreground">
-              Manage event tickets and configure pricing
+              {eventLoading ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading event details...
+                </span>
+              ) : eventData ? (
+                `${eventData.eventName || eventData.EventName || 'Event'} - Manage event tickets and configure pricing`
+              ) : (
+                "Manage event tickets and configure pricing"
+              )}
             </p>
           </div>
-        </div>
-        <Button onClick={handleOpenCreateModal}>
+        </div>        <Button onClick={handleOpenCreateModal} disabled={eventLoading || eventDateTimes.length === 0}>
           <Plus className="mr-2 h-4 w-4" />
           Add Ticket
         </Button>
@@ -520,8 +909,7 @@ export default function TicketsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent>
+        </CardHeader>        <CardContent>
           <div className="flex gap-4">
             <div className="flex-1">
               <Label htmlFor="search">Search</Label>
@@ -537,15 +925,14 @@ export default function TicketsPage() {
               </div>
             </div>
             <div className="min-w-[200px]">
-              <Label htmlFor="status">Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Label htmlFor="availability">Availability</Label>
+              <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="1">Active</SelectItem>
-                  <SelectItem value="0">Inactive</SelectItem>
+                  <SelectValue placeholder="Filter by availability" />
+                </SelectTrigger>                <SelectContent>
+                  <SelectItem value="all">All Availability</SelectItem>
+                  <SelectItem value="available" className="text-green-600">Available</SelectItem>
+                  <SelectItem value="soldout" className="text-red-600">Sold Out</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -577,14 +964,13 @@ export default function TicketsPage() {
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
+                <Table>                  <TableHeader>
                     <TableRow>
                       <TableHead>Ticket Name</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Quantity</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Availability</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
@@ -602,57 +988,89 @@ export default function TicketsPage() {
                           No tickets found
                         </TableCell>
                       </TableRow>
-                    ) : (
-                      filteredNormalTickets.map((ticket) => (
-                        <TableRow key={ticket._id}>
-                          <TableCell className="font-medium">
-                            {ticket.TicketName}
-                          </TableCell>
-                          <TableCell>
-                            {getTicketTypeName(ticket.TicketType)}
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(ticket.TicketPrice)}
-                          </TableCell>
-                          <TableCell>
-                            {ticket.TicketQuantity || 0}
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(ticket.TicketStatus)}
-                          </TableCell>
-                          <TableCell>
-                            {formatDate(ticket.createdAt)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onClick={() => handleOpenEditModal(ticket)}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleToggleStatus(ticket._id, ticket.TicketStatus, true)}
-                                >
-                                  {ticket.TicketStatus === 1 ? "Disable" : "Enable"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => handleDeleteTicket(ticket._id, true)}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                    ) : (                      filteredNormalTickets.map((ticket) => {
+                        const extendedTicket = ticket as ExtendedNormalTicket
+                        return (
+                          <TableRow key={ticket._id}>
+                            <TableCell className="font-medium">
+                              {extendedTicket.Name || ticket.TicketName || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {getTicketTypeName(extendedTicket.EventTicketType || ticket.TicketType || 1)}
+                            </TableCell>
+                            <TableCell>
+                              {formatCurrency(extendedTicket.Price || ticket.TicketPrice || 0)}
+                            </TableCell>                            <TableCell>
+                              {extendedTicket.Quantity || ticket.TicketQuantity || 0}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    className="sr-only"                                    checked={(() => {
+                                      // EventTicketStatus: 1 = Sold Out, 0 = Available
+                                      const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                                      extendedTicket.IsSoldOut || 
+                                                      extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                      extendedTicket.AvailabilityStatus === "sold_out"
+                                      return !isSoldOut // Toggle is ON when available, OFF when sold out
+                                    })()}
+                                    onChange={() => {
+                                      const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                                      extendedTicket.IsSoldOut || 
+                                                      extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                      extendedTicket.AvailabilityStatus === "sold_out"
+                                      handleToggleAvailability(ticket._id, isSoldOut)
+                                    }}
+                                    disabled={ticketLoadingStates[ticket._id] || false}
+                                  />
+                                  <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                </label>                                <span className={`text-sm font-medium ${(() => {
+                                  const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                                  extendedTicket.IsSoldOut || 
+                                                  extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                  extendedTicket.AvailabilityStatus === "sold_out"
+                                  return isSoldOut ? "text-red-600" : "text-green-600"
+                                })()}`}>
+                                  {(() => {
+                                    const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                                    extendedTicket.IsSoldOut || 
+                                                    extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                    extendedTicket.AvailabilityStatus === "sold_out"
+                                    return isSoldOut ? "Sold Out" : "Available"
+                                  })()}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(ticket.createdAt)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    onClick={() => handleOpenEditModal(ticket)}
+                                  >
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteTicket(ticket._id, true)}
+                                  >
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -672,29 +1090,26 @@ export default function TicketsPage() {
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
+                <Table>                  <TableHeader>
                     <TableRow>
                       <TableHead>Ticket Name</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Min Qty</TableHead>
                       <TableHead>Max Qty</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {loading ? (
+                  <TableBody>                    {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredBulkTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           No bulk tickets found
                         </TableCell>
                       </TableRow>
@@ -712,12 +1127,8 @@ export default function TicketsPage() {
                           </TableCell>
                           <TableCell>
                             {ticket.MinBulkTicketPerTransaction || 0}
-                          </TableCell>
-                          <TableCell>
+                          </TableCell>                          <TableCell>
                             {ticket.MaxBulkTicketPerTransaction || 0}
-                          </TableCell>
-                          <TableCell>
-                            {getStatusBadge(ticket.BulkTicketStatus)}
                           </TableCell>
                           <TableCell>
                             {formatDate(ticket.createdAt)}
@@ -789,24 +1200,74 @@ export default function TicketsPage() {
                     value={normalFormData.TicketName}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                   />
+                </div>                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="ticketType">Event Type</Label>
+                    <Select
+                      value={normalFormData.TicketType.toString()}
+                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketType: parseInt(value) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Single Day</SelectItem>
+                        <SelectItem value="2">Multiple Day</SelectItem>
+                        <SelectItem value="3">Season Pass</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>                  <div className="space-y-2">
+                    <Label htmlFor="visibilityLevel">Visibility</Label>
+                    <Select
+                      value={normalFormData.VisibilityLevel.toString()}
+                      onValueChange={handleVisibilityChange}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">All</SelectItem>
+                        <SelectItem value="2">All Customers</SelectItem>
+                        <SelectItem value="3">Promoters</SelectItem>
+                      </SelectContent>
+                    </Select>                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
+                      <div className="text-sm text-muted-foreground space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span>{selectedPromoters.length} promoter(s) selected</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setPromoterSearchTerm("")
+                              setShowPromoterModal(true)
+                            }}
+                          >
+                            Edit Selection
+                          </Button>
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {selectedPromoters.map(promoterId => {
+                            const promoter = promoters.find(p => p._id === promoterId)
+                            return promoter ? (
+                              <Badge key={promoterId} variant="secondary" className="text-xs">
+                                {promoter.FullName}
+                              </Badge>
+                            ) : null
+                          })}
+                        </div>
+                      </div>                    )}                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="ticketType">Ticket Type</Label>
-                  <Select
-                    value={normalFormData.TicketType.toString()}
-                    onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketType: parseInt(value) }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Single Day</SelectItem>
-                      <SelectItem value="2">Multiple Day</SelectItem>
-                      <SelectItem value="3">Season Pass</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {/* Show selected event date/time info (read-only) */}
+                {eventDateTimes.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Event Date & Time</Label>
+                    <div className="p-3 bg-muted rounded-md text-sm">
+                      {new Date(eventDateTimes[0].date).toLocaleDateString()} - {eventDateTimes[0].start_time} to {eventDateTimes[0].end_time}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="ticketDescription">Description</Label>
@@ -815,9 +1276,7 @@ export default function TicketsPage() {
                     value={normalFormData.TicketDescription}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketDescription: e.target.value }))}
                   />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+                </div>                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="ticketPrice">Price (₹)</Label>
                     <Input
@@ -829,7 +1288,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="maxQuantity">Max Quantity</Label>
+                    <Label htmlFor="maxQuantity">Total Quantity</Label>
                     <Input
                       id="maxQuantity"
                       type="number"
@@ -837,40 +1296,15 @@ export default function TicketsPage() {
                       onChange={(e) => setNormalFormData(prev => ({ ...prev, MaxQuantity: parseInt(e.target.value) || 0 }))}
                     />
                   </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="ticketStatus">Status</Label>
-                    <Select
-                      value={normalFormData.TicketStatus.toString()}
-                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketStatus: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Active</SelectItem>
-                        <SelectItem value="0">Inactive</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="visibilityLevel">Visibility</Label>
-                    <Select
-                      value={normalFormData.VisibilityLevel.toString()}
-                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, VisibilityLevel: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Public</SelectItem>
-                        <SelectItem value="0">Private</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                    <Label htmlFor="bookingMaxLimit">Booking Max Limit</Label>
+                    <Input
+                      id="bookingMaxLimit"
+                      type="number"
+                      value={normalFormData.BookingMaxLimit}
+                      onChange={(e) => setNormalFormData(prev => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
+                    />                  </div>
                 </div>
               </div>
 
@@ -880,10 +1314,9 @@ export default function TicketsPage() {
                   onClick={() => setShowCreateModal(false)}
                 >
                   Cancel
-                </Button>
-                <Button
+                </Button>                <Button
                   onClick={handleCreateTicket}
-                  disabled={loading || !normalFormData.TicketName}
+                  disabled={loading || !normalFormData.TicketName || !normalFormData.EventDateTime_id}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Ticket
@@ -914,9 +1347,18 @@ export default function TicketsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="4">Bulk</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    </SelectContent>                  </Select>
                 </div>
+
+                {/* Show selected event date/time info (read-only) */}
+                {eventDateTimes.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Event Date & Time</Label>
+                    <div className="p-3 bg-muted rounded-md text-sm">
+                      {new Date(eventDateTimes[0].date).toLocaleDateString()} - {eventDateTimes[0].start_time} to {eventDateTimes[0].end_time}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="bulkTicketDescription">Description</Label>
@@ -982,10 +1424,9 @@ export default function TicketsPage() {
                   onClick={() => setShowCreateModal(false)}
                 >
                   Cancel
-                </Button>
-                <Button
+                </Button>                <Button
                   onClick={handleCreateTicket}
-                  disabled={loading || !bulkFormData.BulkTicketName}
+                  disabled={loading || !bulkFormData.BulkTicketName || !bulkFormData.EventDateTime_id}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Bulk Ticket
@@ -1121,8 +1562,81 @@ export default function TicketsPage() {
                   Update Ticket
                 </Button>
               </div>
+            </div>          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Promoter Selection Modal */}
+      <Dialog open={showPromoterModal} onOpenChange={setShowPromoterModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Select Promoters</DialogTitle>
+            <DialogDescription>
+              Choose promoters who can access this ticket
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search promoters..."
+                value={promoterSearchTerm}
+                onChange={(e) => setPromoterSearchTerm(e.target.value)}
+                className="pl-8"
+              />
             </div>
-          )}
+
+            {/* Promoters List */}
+            <div className="max-h-[400px] overflow-y-auto space-y-2">
+              {filteredPromoters.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  {promoterSearchTerm ? "No promoters found matching your search" : "No promoters found"}
+                </div>
+              ) : (
+                filteredPromoters.map((promoter) => (                  <div
+                    key={promoter._id}
+                    className="flex items-center space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50"
+                    onClick={() => handlePromoterSelection(promoter._id)}
+                  >
+                    <Checkbox
+                      checked={selectedPromoters.includes(promoter._id)}
+                      onCheckedChange={() => handlePromoterSelection(promoter._id)}
+                    />
+                    <div className="flex-1">
+                      <div className="font-medium">{promoter.FullName}</div>
+                      <div className="text-sm text-muted-foreground">{promoter.Email}</div>
+                      <div className="text-sm text-muted-foreground">{promoter.Phone1}</div>
+                    </div>
+                    <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>
+                      {promoter.Status}
+                    </Badge>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Selected Count */}
+            {selectedPromoters.length > 0 && (
+              <div className="text-sm font-medium">
+                {selectedPromoters.length} promoter(s) selected
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-2">            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPromoterModal(false)
+                // Don't reset selected promoters when canceling, keep the previous selection
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handlePromoterModalSave}>
+              Save Selection ({selectedPromoters.length})
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

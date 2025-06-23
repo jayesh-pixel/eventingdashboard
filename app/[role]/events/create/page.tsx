@@ -42,21 +42,19 @@ export default function CreateEventPage({ params }: CreateEventPageProps) {
     // Navigate back to events page after successful creation
     router.push(`/${role}/events`)
   }
-
   if (!role) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="text-center">
-          <div className="text-lg">Loading...</div>
+          <div className="text-lg text-foreground">Loading...</div>
         </div>
       </div>
     )
   }
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -69,12 +67,12 @@ export default function CreateEventPage({ params }: CreateEventPageProps) {
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Events</span>
               </Button>
-              <div className="h-6 w-px bg-gray-300" />
+              <div className="h-6 w-px bg-border" />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-xl font-semibold text-foreground">
                   Create New {eventSelectionFlag === 1 ? 'Tour' : ''} Event
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   {eventSelectionFlag === 1 
                     ? 'Create a new event as part of a tour or campaign series'
                     : 'Create a new standalone event'

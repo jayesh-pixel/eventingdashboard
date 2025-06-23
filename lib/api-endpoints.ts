@@ -191,11 +191,13 @@ export const ticketEndPoint = {
   // Normal Tickets
   CREATE_NORMAL_TICKET: BASE_URL + "/eventstickets/create",
   GET_ALL_TICKETS_BY_EVENT: BASE_URL + "/eventstickets/getTicketsByEventId",
-  GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getbyId",
-  UPDATE_TICKET: BASE_URL + "/eventstickets/update",
+  GET_ALL_EVENT_TICKETS: BASE_URL + "/eventstickets/getAllEventTickets",
+  GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getbyId",  UPDATE_TICKET: BASE_URL + "/eventstickets/update",
   DELETE_TICKET: BASE_URL + "/eventstickets/delete",
   ENABLE_TICKET: BASE_URL + "/eventstickets/enable",
   DISABLE_TICKET: BASE_URL + "/eventstickets/disable",
+  UPDATE_AVAILABILITY_TO_SOLD_OUT: BASE_URL + "/eventstickets/updateAvailabilityToSoldOut",
+  UPDATE_AVAILABILITY_TO_AVAILABLE: BASE_URL + "/eventstickets/updateAvailabilityToAvailable",
   GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData",
   
   // Bulk Tickets
