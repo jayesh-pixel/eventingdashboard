@@ -1990,6 +1990,9 @@ export default function CreateEvent({
                         <input
                           type="file"
                           accept="image/jpeg,image/png,image/jpg"
+
+
+
                           multiple
                           onChange={(e) => handleGalleryImageAdd(e.target.files)}
                           className="hidden"
@@ -2050,9 +2053,10 @@ export default function CreateEvent({
               </Button>
               <Button
                 type="button"
-                onClick={() => handleSubmit(values, EventStatus.Published)}
+                onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
               >
-                Publish Event              </Button>
+                {role === "organizer" ? "Send to Review" : "Publish Event"}
+              </Button>
             </div>
           </Form>
           )
