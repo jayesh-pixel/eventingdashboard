@@ -54,6 +54,7 @@ import {
   Plus,
   Search,
   Ticket,
+  X,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -65,6 +66,8 @@ import { eventEndPoint, ticketEndPoint } from "@/lib/api-endpoints"
 import { promoterEndpoint } from "@/lib/api-endpoints"
 import { NormalTicket, BulkTicket, Event } from "@/lib/types"
 
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
+
 // Extended interfaces to handle both old and new API response structures
 interface ExtendedNormalTicket extends NormalTicket {
   // New field names from backend response
@@ -74,14 +77,53 @@ interface ExtendedNormalTicket extends NormalTicket {
   Description?: string
   Quantity?: number
   // Availability status fields - based on actual API response
-  EventTicketStatus?: number        // 1 = Sold Out, 0 = Available (THIS IS THE CORRECT FIELD)
-  EventTicketAvailability?: number  // Different field, unclear usage
+  EventTicketAvailability?: number  // 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
+  EventTicketStatus?: number        // Different field, may be for internal status
   AvailabilityStatus?: string
   IsSoldOut?: boolean
 }
 
-interface ExtendedBulkTicket extends BulkTicket {
-  // Add any new bulk ticket fields if needed
+interface ExtendedBulkTicket {
+  // Original BulkTicket fields
+  _id?: string
+  event_id?: string
+  EventDateTime_id?: string
+  BulkTicketName?: string
+  BulkTicketType?: number
+  BulkTicketPrice?: number
+  BulkTicketDescription?: string
+  BulkTicketQuantity?: number
+  SoldBulkTickets?: number
+  RemainingBulkTickets?: number
+  BulkTicketStatus?: number
+  BulkTicketVisibility?: number
+  BulkTicketSaleStartDate?: string
+  BulkTicketSaleEndDate?: string
+  MinBulkTicketPerTransaction?: number
+  MaxBulkTicketPerTransaction?: number
+  BulkTicketTermsCondition?: string
+  ConvenienceFeeApplicable?: number
+  PromoterCommissionRate?: number
+  PromoterCommissionType?: number
+  createdAt?: string
+  updatedAt?: string
+
+  // New field names from bulk tickets API response
+  BatchId?: string
+  TicketName?: string
+  EventName?: string
+  CustomerName?: string
+  PhoneNumber?: number
+  PhoneNo?: string
+  EventStartDateTime?: string
+  Email?: string
+  Quantity?: number
+  CheckIn?: number
+  CheckedIn?: boolean
+  TotalAmount?: number
+  Price?: number
+  CreatedAt?: string
+  Status?: number
 }
 
 interface EventDateTime {
@@ -116,14 +158,13 @@ interface CreateNormalTicketForm {
 }
 
 interface CreateBulkTicketForm {
-  BulkTicketName: string
-  BulkTicketType: number
-  BulkTicketDescription: string
+  TicketName: string
+  CustomerName: string
+  PhoneNumber: string
+  Email: string
   EventDateTime_id: string
-  BulkTicketPrice: number
-  BulkMinQuantity: number
-  BulkMaxQuantity: number
-  BulkTicketStatus: number
+  TotalQuantity: number
+  TicketPrice: number
 }
 
 export default function TicketsPage() {
@@ -136,6 +177,7 @@ export default function TicketsPage() {
   
   // Loading states
   const [loading, setLoading] = React.useState(false)
+  const [bulkTicketCreating, setBulkTicketCreating] = React.useState(false)
   const [eventLoading, setEventLoading] = React.useState(true)
   const [normalTickets, setNormalTickets] = React.useState<ExtendedNormalTicket[]>([])
   const [bulkTickets, setBulkTickets] = React.useState<ExtendedBulkTicket[]>([])
@@ -171,14 +213,13 @@ export default function TicketsPage() {
   })
   
   const [bulkFormData, setBulkFormData] = React.useState<CreateBulkTicketForm>({
-    BulkTicketName: "",
-    BulkTicketType: 4,
-    BulkTicketDescription: "",
+    TicketName: "",
+    CustomerName: "",
+    PhoneNumber: "",
+    Email: "",
     EventDateTime_id: "",
-    BulkTicketPrice: 0,
-    BulkMinQuantity: 0,
-    BulkMaxQuantity: 0,
-    BulkTicketStatus: 1
+    TotalQuantity: 0,
+    TicketPrice: 0,
   })
   
   const [editFormData, setEditFormData] = React.useState<any>({})
@@ -380,13 +421,19 @@ export default function TicketsPage() {
       }
 
       // Fetch bulk tickets
+      const bulkTicketsPayload = {
+        event_id: eventId
+      }
+
+      console.log("Bulk tickets API Payload:", JSON.stringify(bulkTicketsPayload, null, 2))
+
       const bulkTicketsResponse = await fetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(bulkTicketsPayload),
       })
 
       console.log("Bulk tickets response status:", bulkTicketsResponse.status)
@@ -396,8 +443,18 @@ export default function TicketsPage() {
         console.log("Bulk tickets response data:", JSON.stringify(bulkData, null, 2))
         
         if (!bulkData.error) {
-          // For now, assuming bulk tickets follow similar structure
-          setBulkTickets(bulkData.data || [])
+          // Handle the correct response structure with EventBulkTicketsData
+          if (bulkData.data && bulkData.data.EventBulkTicketsData) {
+            console.log("Using bulk tickets structure - EventBulkTicketsData")
+            console.log("EventBulkTicketsData length:", bulkData.data.EventBulkTicketsData.length)
+            if (bulkData.data.EventBulkTicketsData.length > 0) {
+              console.log("First bulk ticket sample:", JSON.stringify(bulkData.data.EventBulkTicketsData[0], null, 2))
+            }
+            setBulkTickets(bulkData.data.EventBulkTicketsData || [])
+          } else {
+            console.log("Using old bulk tickets structure - direct data")
+            setBulkTickets(bulkData.data || [])
+          }
         } else {
           console.error("Bulk tickets API returned error:", bulkData)
         }
@@ -509,8 +566,8 @@ export default function TicketsPage() {
           if (ticket._id === ticketId) {
             return {
               ...ticket,
-              EventTicketStatus: currentIsSoldOut ? 0 : 1, // 0 = Available, 1 = Sold Out
-              EventTicketAvailability: currentIsSoldOut ? 0 : 1, // Keep both for compatibility
+              EventTicketAvailability: currentIsSoldOut ? 1 : 0, // 1 = Available, 0 = Sold Out (CORRECT FIELD)
+              EventTicketStatus: currentIsSoldOut ? 0 : 1, // Keep for backward compatibility
               IsSoldOut: !currentIsSoldOut,
               AvailabilityStatus: currentIsSoldOut ? "Available" : "SoldOut"
             }
@@ -587,7 +644,13 @@ export default function TicketsPage() {
 
   const handleCreateTicket = async () => {
     try {
-      setLoading(true)
+      // Set appropriate loading state
+      if (activeTab === "bulk") {
+        setBulkTicketCreating(true)
+      } else {
+        setLoading(true)
+      }
+      
       const authToken = getValidToken()
       if (!user || !authToken) return
 
@@ -620,7 +683,29 @@ export default function TicketsPage() {
           description: "Event date & time is required. Please wait for event data to load.",
           variant: "destructive",
         })
-        setLoading(false)
+        setBulkTicketCreating(false)
+        return
+      }
+      
+      // Validate bulk ticket quantity limit (maximum 20 tickets per booking)
+      if (activeTab === "bulk" && bulkFormData.TotalQuantity > 20) {
+        toast({
+          title: "Validation Error",
+          description: "Maximum 20 tickets can be booked in one transaction.",
+          variant: "destructive",
+        })
+        setBulkTicketCreating(false)
+        return
+      }
+      
+      // Validate minimum quantity for bulk tickets
+      if (activeTab === "bulk" && bulkFormData.TotalQuantity < 1) {
+        toast({
+          title: "Validation Error",
+          description: "At least 1 ticket must be selected.",
+          variant: "destructive",
+        })
+        setBulkTicketCreating(false)
         return
       }
       
@@ -651,15 +736,16 @@ export default function TicketsPage() {
         }
       } else {
         payload = {
-          ...payload,
-          Name: bulkFormData.BulkTicketName,
-          Type: bulkFormData.BulkTicketType,
-          Description: bulkFormData.BulkTicketDescription,
+          event_id: eventId,
+          TicketName: bulkFormData.TicketName,
+          CustomerName: bulkFormData.CustomerName,
+          PhoneNumber: bulkFormData.PhoneNumber,
+          Email: bulkFormData.Email,
           EventDateTime_id: bulkFormData.EventDateTime_id,
-          Price: bulkFormData.BulkTicketPrice,
-          MinQuantity: bulkFormData.BulkMinQuantity,
-          MaxQuantity: bulkFormData.BulkMaxQuantity,
-          Status: bulkFormData.BulkTicketStatus
+          Quantity: bulkFormData.TotalQuantity.toString(),
+          Price: bulkFormData.TicketPrice.toString(),
+          CreatedBy: 1,
+          createduser_id: user.user_id
         }
       }
 
@@ -673,10 +759,20 @@ export default function TicketsPage() {
       })
 
       if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Ticket created successfully",
-        })
+        const data = await response.json()
+        
+        if (activeTab === "bulk") {
+          // Special handling for bulk tickets with email confirmation
+          toast({
+            title: "Success",
+            description: data.message || "Bulk tickets created successfully! Tickets have been sent to the customer's email.",
+          })
+        } else {
+          toast({
+            title: "Success",
+            description: "Ticket created successfully",
+          })
+        }
         setShowCreateModal(false)
         setSelectedPromoters([]) // Reset selected promoters
         if (activeTab === "normal") {
@@ -693,14 +789,13 @@ export default function TicketsPage() {
           })
         } else {
           setBulkFormData({
-            BulkTicketName: "",
-            BulkTicketType: 4,
-            BulkTicketDescription: "",
+            TicketName: "",
+            CustomerName: "",
+            PhoneNumber: "",
+            Email: "",
             EventDateTime_id: eventDateTimes.length > 0 ? eventDateTimes[0]._id : "",
-            BulkTicketPrice: 0,
-            BulkMinQuantity: 0,
-            BulkMaxQuantity: 0,
-            BulkTicketStatus: 1
+            TotalQuantity: 0,
+            TicketPrice: 0
           })
         }
         fetchTickets()
@@ -713,7 +808,11 @@ export default function TicketsPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (activeTab === "bulk") {
+        setBulkTicketCreating(false)
+      } else {
+        setLoading(false)
+      }
     }
   }
 
@@ -765,7 +864,89 @@ export default function TicketsPage() {
     }
   }
 
-  // ...existing code...
+  // Helper functions for bulk ticket actions
+  const handleCancelBulkTicket = async (batchId: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      // Call the cancel bulk ticket API endpoint with correct payload
+      const response = await fetch(ticketEndPoint.CANCEL_BULK_TICKET, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          BulkTicketBatch_Id: batchId
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        toast({
+          title: "Success",
+          description: data.message || "Bulk ticket cancelled successfully",
+        })
+        fetchTickets() // Refresh the ticket list
+      } else {
+        throw new Error("Failed to cancel bulk ticket")
+      }
+    } catch (error) {
+      console.error("Error cancelling bulk ticket:", error)
+      toast({
+        title: "Error",
+        description: "Failed to cancel bulk ticket",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleDownloadBulkTicketReport = async (batchId: string, ticketName: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      // Call the correct download bulk ticket report API endpoint
+      const response = await fetch(`${BASE_URL}/eventbulktickets/exportBulkTicketBookingIds`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          BulkTicketBatch_Id: batchId
+        }),
+      })
+
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `bulk-ticket-report-${ticketName || 'report'}-${batchId}-${new Date().toISOString().split('T')[0]}.xlsx`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        
+        toast({
+          title: "Success",
+          description: "Excel report downloaded successfully",
+        })
+      } else {
+        throw new Error("Failed to download report")
+      }
+    } catch (error) {
+      console.error("Error downloading bulk ticket report:", error)
+      toast({
+        title: "Error",
+        description: "Failed to download report",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Effects
   React.useEffect(() => {
@@ -827,8 +1008,9 @@ export default function TicketsPage() {
     const ticketName = extendedTicket.Name || ticket.TicketName || ''
     
     // Check availability based on the actual API response structure
-    // EventTicketStatus: 1 = Sold Out, 0 = Available
-    const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+    // EventTicketAvailability: 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
+    const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
+                     extendedTicket.EventTicketStatus === 1 ||
                      extendedTicket.IsSoldOut || 
                      extendedTicket.AvailabilityStatus === "SoldOut" || 
                      extendedTicket.AvailabilityStatus === "sold_out"
@@ -841,7 +1023,8 @@ export default function TicketsPage() {
     return matchesSearch && matchesAvailability
   })
   const filteredBulkTickets = bulkTickets.filter(ticket => {
-    const ticketName = ticket.BulkTicketName || ''
+    const extendedTicket = ticket as ExtendedBulkTicket
+    const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || ''
     const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesSearch
   })
@@ -1009,15 +1192,17 @@ export default function TicketsPage() {
                                   <input
                                     type="checkbox"
                                     className="sr-only"                                    checked={(() => {
-                                      // EventTicketStatus: 1 = Sold Out, 0 = Available
-                                      const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                      // EventTicketAvailability: 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
+                                      const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
+                                                      extendedTicket.EventTicketStatus === 1 ||
                                                       extendedTicket.IsSoldOut || 
                                                       extendedTicket.AvailabilityStatus === "SoldOut" || 
                                                       extendedTicket.AvailabilityStatus === "sold_out"
                                       return !isSoldOut // Toggle is ON when available, OFF when sold out
                                     })()}
                                     onChange={() => {
-                                      const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                      const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
+                                                      extendedTicket.EventTicketStatus === 1 ||
                                                       extendedTicket.IsSoldOut || 
                                                       extendedTicket.AvailabilityStatus === "SoldOut" || 
                                                       extendedTicket.AvailabilityStatus === "sold_out"
@@ -1027,14 +1212,16 @@ export default function TicketsPage() {
                                   />
                                   <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                                 </label>                                <span className={`text-sm font-medium ${(() => {
-                                  const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                  const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
+                                                  extendedTicket.EventTicketStatus === 1 ||
                                                   extendedTicket.IsSoldOut || 
                                                   extendedTicket.AvailabilityStatus === "SoldOut" || 
                                                   extendedTicket.AvailabilityStatus === "sold_out"
                                   return isSoldOut ? "text-red-600" : "text-green-600"
                                 })()}`}>
                                   {(() => {
-                                    const isSoldOut = extendedTicket.EventTicketStatus === 1 ||
+                                    const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
+                                                    extendedTicket.EventTicketStatus === 1 ||
                                                     extendedTicket.IsSoldOut || 
                                                     extendedTicket.AvailabilityStatus === "SoldOut" || 
                                                     extendedTicket.AvailabilityStatus === "sold_out"
@@ -1092,77 +1279,118 @@ export default function TicketsPage() {
               <div className="rounded-md border">
                 <Table>                  <TableHeader>
                     <TableRow>
+                      <TableHead>Batch ID</TableHead>
+                      <TableHead>Event Name</TableHead>
+                      <TableHead>Event Time</TableHead>
                       <TableHead>Ticket Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Min Qty</TableHead>
-                      <TableHead>Max Qty</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                      <TableHead>Customer Name</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Phone No.</TableHead>
+                      <TableHead>Ticket Created</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Check In</TableHead>
+                      <TableHead>Ticket Price</TableHead>
+                      <TableHead>Total Amount</TableHead>
+                      <TableHead className="text-right">Action</TableHead>
                     </TableRow>
                   </TableHeader>
-                  <TableBody>                    {loading ? (
+                  <TableBody>
+                    {loading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredBulkTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           No bulk tickets found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredBulkTickets.map((ticket) => (
-                        <TableRow key={ticket._id}>
-                          <TableCell className="font-medium">
-                            {ticket.BulkTicketName}
-                          </TableCell>
-                          <TableCell>
-                            {getTicketTypeName(ticket.BulkTicketType)}
-                          </TableCell>
-                          <TableCell>
-                            {formatCurrency(ticket.BulkTicketPrice)}
-                          </TableCell>
-                          <TableCell>
-                            {ticket.MinBulkTicketPerTransaction || 0}
-                          </TableCell>                          <TableCell>
-                            {ticket.MaxBulkTicketPerTransaction || 0}
-                          </TableCell>
-                          <TableCell>
-                            {formatDate(ticket.createdAt)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem
-                                  onClick={() => handleOpenEditModal(ticket)}
-                                >
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => handleToggleStatus(ticket._id, ticket.BulkTicketStatus, false)}
-                                >
-                                  {ticket.BulkTicketStatus === 1 ? "Disable" : "Enable"}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive"
-                                  onClick={() => handleDeleteTicket(ticket._id, false)}
-                                >
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      filteredBulkTickets.map((ticket) => {
+                        const extendedTicket = ticket as ExtendedBulkTicket
+                        const ticketPrice = extendedTicket.Price || ticket.BulkTicketPrice || 0
+                        const quantity = extendedTicket.Quantity || ticket.MaxBulkTicketPerTransaction || 0
+                        const totalAmount = ticketPrice * quantity
+                        
+                        return (
+                          <TableRow key={ticket._id || ticket.BatchId}>
+                            <TableCell className="font-medium">
+                              {ticket.BatchId || ticket._id || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {eventData?.eventName || eventData?.EventName || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {eventDateTimes.length > 0 ? (
+                                `${new Date(eventDateTimes[0].date).toLocaleDateString()} ${eventDateTimes[0].start_time} - ${eventDateTimes[0].end_time}`
+                              ) : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {extendedTicket.TicketName || ticket.BulkTicketName || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {extendedTicket.CustomerName || ticket.CustomerName || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {extendedTicket.Email || ticket.Email || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {extendedTicket.PhoneNo || ticket.PhoneNo || 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {formatDate(extendedTicket.CreatedAt || ticket.createdAt || '')}
+                            </TableCell>
+                            <TableCell>
+                              {quantity}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={extendedTicket.CheckedIn || ticket.CheckedIn ? "default" : "secondary"}>
+                                {extendedTicket.CheckedIn || ticket.CheckedIn ? "Checked In" : "Pending"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {formatCurrency(ticketPrice)}
+                            </TableCell>
+                            <TableCell>
+                              {formatCurrency(totalAmount)}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const batchId = ticket.BatchId || ticket._id || ''
+                                      if (batchId) handleCancelBulkTicket(batchId)
+                                    }}
+                                    className="text-destructive"
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Cancel Ticket
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      const batchId = ticket.BatchId || ticket._id || ''
+                                      const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || ''
+                                      if (batchId) handleDownloadBulkTicketReport(batchId, ticketName)
+                                    }}
+                                  >
+                                    <Download className="mr-2 h-4 w-4" />
+                                    Download Report
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -1328,93 +1556,93 @@ export default function TicketsPage() {
             <TabsContent value="bulk" className="space-y-4">
               <div className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bulkTicketName">Bulk Ticket Name</Label>
+                  <Label htmlFor="bulkTicketName">Ticket Name*</Label>
                   <Input
                     id="bulkTicketName"
-                    value={bulkFormData.BulkTicketName}
-                    onChange={(e) => setBulkFormData(prev => ({ ...prev, BulkTicketName: e.target.value }))}
+                    value={bulkFormData.TicketName}
+                    onChange={(e) => setBulkFormData(prev => ({ ...prev, TicketName: e.target.value }))}
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="bulkTicketType">Ticket Type</Label>
+                  <Label htmlFor="customerName">Customer Name*</Label>
+                  <Input
+                    id="customerName"
+                    value={bulkFormData.CustomerName}
+                    onChange={(e) => setBulkFormData(prev => ({ ...prev, CustomerName: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="phoneNumber">Phone Number*</Label>
+                  <Input
+                    id="phoneNumber"
+                    type="tel"
+                    value={bulkFormData.PhoneNumber}
+                    onChange={(e) => setBulkFormData(prev => ({ ...prev, PhoneNumber: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email*</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={bulkFormData.Email}
+                    onChange={(e) => setBulkFormData(prev => ({ ...prev, Email: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="eventDateTime">Select Date*</Label>
                   <Select
-                    value={bulkFormData.BulkTicketType.toString()}
-                    onValueChange={(value) => setBulkFormData(prev => ({ ...prev, BulkTicketType: parseInt(value) }))}
+                    value={bulkFormData.EventDateTime_id}
+                    onValueChange={(value) => setBulkFormData(prev => ({ ...prev, EventDateTime_id: value }))}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Select event date & time" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="4">Bulk</SelectItem>
-                    </SelectContent>                  </Select>
+                      {eventDateTimes.map((dateTime) => (
+                        <SelectItem key={dateTime._id} value={dateTime._id}>
+                          {new Date(dateTime.date).toLocaleDateString()} - {dateTime.start_time} to {dateTime.end_time}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                {/* Show selected event date/time info (read-only) */}
-                {eventDateTimes.length > 0 && (
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Event Date & Time</Label>
-                    <div className="p-3 bg-muted rounded-md text-sm">
-                      {new Date(eventDateTimes[0].date).toLocaleDateString()} - {eventDateTimes[0].start_time} to {eventDateTimes[0].end_time}
-                    </div>
+                    <Label htmlFor="totalQuantity">Total Quantity* (Max: 20)</Label>
+                    <Input
+                      id="totalQuantity"
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={bulkFormData.TotalQuantity}
+                      onChange={(e) => setBulkFormData(prev => ({ ...prev, TotalQuantity: parseInt(e.target.value) || 0 }))}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">Maximum 20 tickets can be booked per transaction</p>
                   </div>
-                )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="bulkTicketDescription">Description</Label>
-                  <Textarea
-                    id="bulkTicketDescription"
-                    value={bulkFormData.BulkTicketDescription}
-                    onChange={(e) => setBulkFormData(prev => ({ ...prev, BulkTicketDescription: e.target.value }))}
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="bulkTicketPrice">Price (₹)</Label>
+                    <Label htmlFor="bulkTicketPrice">Ticket Price*</Label>
                     <Input
                       id="bulkTicketPrice"
                       type="number"
-                      value={bulkFormData.BulkTicketPrice}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, BulkTicketPrice: parseFloat(e.target.value) || 0 }))}
+                      min="0"
+                      step="0.01"
+                      value={bulkFormData.TicketPrice}
+                      onChange={(e) => setBulkFormData(prev => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0 }))}
+                      required
                     />
                   </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="bulkMinQuantity">Min Quantity</Label>
-                    <Input
-                      id="bulkMinQuantity"
-                      type="number"
-                      value={bulkFormData.BulkMinQuantity}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, BulkMinQuantity: parseInt(e.target.value) || 0 }))}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="bulkMaxQuantity">Max Quantity</Label>
-                    <Input
-                      id="bulkMaxQuantity"
-                      type="number"
-                      value={bulkFormData.BulkMaxQuantity}
-                      onChange={(e) => setBulkFormData(prev => ({ ...prev, BulkMaxQuantity: parseInt(e.target.value) || 0 }))}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="bulkTicketStatus">Status</Label>
-                  <Select
-                    value={bulkFormData.BulkTicketStatus.toString()}
-                    onValueChange={(value) => setBulkFormData(prev => ({ ...prev, BulkTicketStatus: parseInt(value) }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">Active</SelectItem>
-                      <SelectItem value="0">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
 
@@ -1422,16 +1650,25 @@ export default function TicketsPage() {
                 <Button
                   variant="outline"
                   onClick={() => setShowCreateModal(false)}
+                  disabled={bulkTicketCreating}
                 >
                   Cancel
-                </Button>                <Button
+                </Button>
+                <Button
                   onClick={handleCreateTicket}
-                  disabled={loading || !bulkFormData.BulkTicketName || !bulkFormData.EventDateTime_id}
+                  disabled={bulkTicketCreating || !bulkFormData.TicketName || !bulkFormData.CustomerName || !bulkFormData.PhoneNumber || !bulkFormData.Email || !bulkFormData.EventDateTime_id || !bulkFormData.TotalQuantity || bulkFormData.TotalQuantity < 1 || bulkFormData.TotalQuantity > 20 || !bulkFormData.TicketPrice}
                 >
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create Bulk Ticket
+                  {bulkTicketCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {bulkTicketCreating ? "Creating Bulk Ticket..." : "Create Bulk Ticket"}
                 </Button>
               </div>
+              
+              {bulkTicketCreating && (
+                <div className="text-sm text-muted-foreground text-center p-4 bg-blue-50 rounded-lg">
+                  <p>Creating bulk tickets and sending confirmation emails...</p>
+                  <p>This process may take a few moments. Please do not close this window.</p>
+                </div>
+              )}
             </TabsContent>
           </Tabs>
         </DialogContent>

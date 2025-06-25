@@ -201,13 +201,15 @@ export const ticketEndPoint = {
   GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData",
   
   // Bulk Tickets
-  CREATE_BULK_TICKET: BASE_URL + "/eventsbulktickets/create",
-  GET_ALL_BULK_TICKETS_BY_EVENT: BASE_URL + "/eventsbulktickets/getBulkTicketsByEventId",
+  CREATE_BULK_TICKET: BASE_URL + "/eventbulktickets/createBulkTicketForEvent",
+  GET_ALL_BULK_TICKETS_BY_EVENT: BASE_URL + "/eventbulktickets/getBulkTicketsOfEvent",
   GET_BULK_TICKET_BY_ID: BASE_URL + "/eventsbulktickets/getbyId",
   UPDATE_BULK_TICKET: BASE_URL + "/eventsbulktickets/update",
   DELETE_BULK_TICKET: BASE_URL + "/eventsbulktickets/delete",
   ENABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/enable",
   DISABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/disable",
+  CANCEL_BULK_TICKET: BASE_URL + "/eventbulktickets/cancelBukTicket",
+  DOWNLOAD_BULK_TICKET_REPORT: BASE_URL + "/eventbulktickets/downloadBulkTicketReport",
   GET_BULK_TICKETS_PAGINATED: BASE_URL + "/eventsbulktickets/getallpaginatedData",
   
   // Common ticket operations
