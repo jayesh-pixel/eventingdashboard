@@ -54,7 +54,7 @@ import { getNumericAdminRole, getStringEventStatus, EventStatus } from "@/lib/ap
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getValidToken } from "@/lib/token-utils"
-import PromoterEventCard from "@/components/promoter-event-card"
+import PromoterEventCard from "@/components/create-event/promotereventcard"
 import AddPromoterAndShow from "@/components/add-promoter-and-show"
 import {
   Dialog,
@@ -1264,9 +1264,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         </TabsList>        <TabsContent value={activeTab} className="mt-4 sm:mt-6">
           {/* Tab-specific content for admin/superadmin roles */}
           {(role as UserRole) !== "promoter" && renderTabContent()}
-          
-          {(role as UserRole) === "promoter" && viewMode === "cards" ? (
-            // Enhanced Card View for Promoters
+          {(role as UserRole) === "promoter" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
               {currentEvents.length === 0 ? (                
                 <div className="col-span-full text-center py-16">
@@ -1300,155 +1298,9 @@ export default function EventsPage({ params }: EventsPageProps) {
                   />
                 ))
               )}
-            </div>) : (
-            // Enhanced Table View (for all roles or when table view is selected)
-            <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
-              
-              <CardContent className="p-0">
-                {/* Mobile Card View (hidden on desktop) */}
-                <div className="block lg:hidden p-4 space-y-4">
-                  {currentEvents.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="space-y-4">
-                        <div className="w-16 h-16 mx-auto bg-muted/30 rounded-full flex items-center justify-center">
-                          <AlertCircle className="h-8 w-8 text-muted-foreground" />
-                        </div>
-                        <div className="space-y-2">
-                          <p className="text-base font-medium text-muted-foreground">No events found</p>
-                          <p className="text-sm text-muted-foreground">Try adjusting your search or filters</p>
-                        </div>
-                        <Button variant="outline" onClick={getAllEventData} disabled={loading} size="sm">
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Refresh Events
-                        </Button>
-                      </div>
-                    </div>
-                  ) : (
-                    currentEvents.map((event) => (
-                      <Card key={event._id} className="p-4 border border-border/50 hover:shadow-md transition-shadow">
-                        <div className="space-y-3">
-                          <div className="flex items-start justify-between">
-                            <h3 className="font-semibold text-sm line-clamp-2 flex-1 pr-2">{event.eventName}</h3>
-                            <Badge variant={getStatusBadgeVariant(event.eventStatus)} className="text-xs">
-                              {normalizeEventStatus(event.eventStatus)}
-                            </Badge>
-                          </div>
-                          
-                          <div className="grid grid-cols-1 gap-2 text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-3 w-3" />
-                              <span>{event.eventStartDate ? formatDate(event.eventStartDate) : "N/A"}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <MapPin className="h-3 w-3" />
-                              <span>{event.venueName || "N/A"}, {event.city || "N/A"}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Users className="h-3 w-3" />
-                              <span>{event.organizerName || "N/A"}</span>
-                            </div>
-                            {(role as UserRole) === "promoter" && (
-                              <>
-                                {event.categoryName && (
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="outline" className="text-xs">
-                                      {event.categoryName}
-                                    </Badge>
-                                  </div>
-                                )}
-                                {event.bookingPhoneNumber && (
-                                  <div className="flex items-center gap-2">
-                                    <Phone className="h-3 w-3" />
-                                    <span>{event.bookingPhoneNumber}</span>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-
-                          <div className="flex gap-2 pt-2">
-                            {(role as UserRole) === "promoter" ? (
-                              <>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  className="flex-1 text-xs" 
-                                  onClick={() => handleCheckReport(event._id)}
-                                >
-                                  <BarChart3 className="h-3 w-3 mr-1" />
-                                  Report
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  className="flex-1 text-xs"
-                                  onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
-                                >
-                                  <DollarSign className="h-3 w-3 mr-1" />
-                                  Book
-                                </Button>
-                              </>
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button aria-haspopup="true" size="icon" variant="ghost" className="ml-auto">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                    <span className="sr-only">Toggle menu</span>
-                                  </Button>
-                                </DropdownMenuTrigger>                                <DropdownMenuContent align="end">
-                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem 
-                                    onClick={() => handleViewEditEvent(event._id)}
-                                    className="hover:bg-accent cursor-pointer"
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View & Edit
-                                  </DropdownMenuItem> 
-                                                                               {(canAddEvent) && (
-                                    <DropdownMenuItem 
-                                      onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
-                                      className="hover:bg-accent cursor-pointer"
-                                    >
-                                      <DollarSign className="mr-2 h-4 w-4" />
-                                      View & Add Tickets
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem 
-                                    onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
-                                    className="hover:bg-accent cursor-pointer"
-                                  >
-                                    <DollarSign className="mr-2 h-4 w-4" />
-                                    Booking
-                                  </DropdownMenuItem>
-                                  {normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "Completed" ? (
-                                    <DropdownMenuItem 
-                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                      onClick={() => handleToggleEventStatus(event._id, "disable")}
-                                    >
-                                      <X className="mr-2 h-4 w-4" />
-                                      Disable Event
-                                    </DropdownMenuItem>
-                                  ) : (
-                                    <DropdownMenuItem 
-                                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                      onClick={() => handleToggleEventStatus(event._id, "enable")}
-                                    >
-                                      <CheckCircle className="mr-2 h-4 w-4" />
-                                      Enable Event
-                                    </DropdownMenuItem>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                        </div>
-                      </Card>
-                    ))
-                  )}
-                </div>                
-              
-              </CardContent>
-            </Card>
-          )}        </TabsContent>
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       {/* Event Format Selection Modal */}
