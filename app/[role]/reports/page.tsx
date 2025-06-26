@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Download, Search, Loader2, Filter, AlertCircle, Eye } from "lucide-react"
+import { Download, Search, Loader2, Filter, Eye } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -89,10 +89,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const [loading, setLoading] = React.useState(false)
   const [currentPage, setCurrentPage] = React.useState(1)
   
-  // Error popup state
-  const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
-  const [errorMessage, setErrorMessage] = React.useState<string>("")
-  
   // Transaction details modal state
   const [selectedTransaction, setSelectedTransaction] = React.useState<any>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false)
@@ -112,19 +108,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     }
   }, []) // Run only on mount
 
-  // Helper function to show error popup with enhanced error categorization
-  const showErrorPopup = (message: string, details?: string) => {
-    setErrorMessage(details ? `${message}\n\nDetails: ${details}` : message)
-    setIsErrorDialogOpen(true)
-    
-    // Also show toast for immediate feedback
-    toast({
-      title: "Error",
-      description: message,
-      variant: "destructive"
-    })
-  }
-
   // Helper function for success messages
   const showSuccessToast = (title: string, description: string) => {
     toast({
@@ -134,23 +117,15 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     })
   }
 
-  // Helper function for warning messages
-  const showWarningToast = (title: string, description: string) => {
-    toast({
-      title,
-      description,
-      variant: "destructive"
-    })
-  }
-
   // Check authentication status
   const checkAuthentication = (): boolean => {
     const authToken = localStorage.getItem("authToken")
     if (!user || !authToken) {
-      showErrorPopup(
-        "Authentication Required", 
-        "Please log in to access reports. Your session may have expired."
-      )
+      toast({
+        title: "Authentication Required", 
+        description: "Please log in to access reports. Your session may have expired.",
+        variant: "destructive"
+      })
       return false
     }
     return true
@@ -171,49 +146,66 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     // Specific error handling based on status codes
     switch (response.status) {
       case 401:
-        showErrorPopup(
-          "Authentication Failed", 
-          "Your session has expired. Please log in again."
-        )
+        toast({
+          title: "Authentication Failed", 
+          description: "Your session has expired. Please log in again.",
+          variant: "destructive"
+        })
         break
       case 403:
-        showErrorPopup(
-          "Access Denied", 
-          "You don't have permission to access this resource."
-        )
+        toast({
+          title: "Access Denied", 
+          description: "You don't have permission to access this resource.",
+          variant: "destructive"
+        })
         break
       case 404:
-        showErrorPopup(
-          "Resource Not Found", 
-          "The requested resource could not be found on the server."
-        )
+        toast({
+          title: "Resource Not Found", 
+          description: "The requested resource could not be found on the server.",
+          variant: "destructive"
+        })
         break
       case 429:
-        showErrorPopup(
-          "Too Many Requests", 
-          "Please wait a moment before trying again."
-        )
+        toast({
+          title: "Too Many Requests", 
+          description: "Please wait a moment before trying again.",
+          variant: "destructive"
+        })
         break
       case 500:
-        showErrorPopup(
-          "Server Error", 
-          "Internal server error. Please try again later or contact support."
-        )
+        toast({
+          title: "Server Error", 
+          description: "Internal server error. Please try again later or contact support.",
+          variant: "destructive"
+        })
         break
       default:
-        showErrorPopup(errorMessage, errorDetails)
+        toast({
+          title: errorMessage,
+          description: errorDetails,
+          variant: "destructive"
+        })
     }
   }
   // Search for events by name and date using API
   const handleSearchEvent = async () => {
     // Input validation
     if (!eventNameInput.trim()) {
-      showWarningToast("Missing Event Name", "Please enter an event name to search.")
+      toast({
+        title: "Missing Event Name",
+        description: "Please enter an event name to search.",
+        variant: "destructive"
+      })
       return
     }
     
     if (!dateInput.trim()) {
-      showWarningToast("Missing Event Date", "Please select an event date to search.")
+      toast({
+        title: "Missing Event Date",
+        description: "Please select an event date to search.",
+        variant: "destructive"
+      })
       return
     }
 
@@ -291,17 +283,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           console.log("No events found matching the criteria")
           setMatchedEvent(null)
           
-          showWarningToast(
-            "No Events Found", 
-            `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`
-          )
+          toast({
+            title: "No Events Found", 
+            description: `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`,
+            variant: "destructive"
+          })
           return
         } else {
           // This is an actual error
-          showErrorPopup(
-            "Search Failed", 
-            data.message || "The server returned an error while searching for events."
-          )
+          toast({
+            title: "Search Failed", 
+            description: data.message || "The server returned an error while searching for events.",
+            variant: "destructive"
+          })
           return
         }
       }
@@ -330,10 +324,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         eventsArray = data
       } else {
         console.warn("Unexpected response format:", data)
-        showErrorPopup(
-          "Invalid Response Format", 
-          "The server returned an unexpected response format. Please try again or contact support."
-        )
+        toast({
+          title: "Invalid Response Format", 
+          description: "The server returned an unexpected response format. Please try again or contact support.",
+          variant: "destructive"
+        })
         return
       }
 
@@ -370,32 +365,36 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         )
         
         if (eventsArray.length > 1) {
-          showWarningToast(
-            "Multiple Events Found", 
-            `Found ${eventsArray.length} matching events. Using the first one: "${normalizedEvent.EventName}".`
-          )
+          toast({
+            title: "Multiple Events Found", 
+            description: `Found ${eventsArray.length} matching events. Using the first one: "${normalizedEvent.EventName}".`,
+            variant: "destructive"
+          })
         }
       } else {
         console.log("❌ No events found")
         setMatchedEvent(null)
-        showWarningToast(
-          "No Events Found", 
-          `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`
-        )
+        toast({
+          title: "No Events Found", 
+          description: `No events found matching "${eventNameInput}" on ${new Date(dateInput).toLocaleDateString()}. Please check the event name and date.`,
+          variant: "destructive"
+        })
       }
     } catch (error) {
       console.error("Event search failed:", error)
       
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        showErrorPopup(
-          "Network Error", 
-          "Unable to connect to the server. Please check your internet connection and try again."
-        )
+        toast({
+          title: "Network Error", 
+          description: "Unable to connect to the server. Please check your internet connection and try again.",
+          variant: "destructive"
+        })
       } else {
-        showErrorPopup(
-          "Search Failed", 
-          error instanceof Error ? error.message : "An unexpected error occurred while searching for events."
-        )
+        toast({
+          title: "Search Failed", 
+          description: error instanceof Error ? error.message : "An unexpected error occurred while searching for events.",
+          variant: "destructive"
+        })
       }
       
       setMatchedEvent(null)
@@ -409,12 +408,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   const handleGenerateReport = async () => {
     // Input validation
     if (!matchedEvent) {
-      showWarningToast("No Event Selected", "Please search for and select an event first.")
+      toast({
+        title: "No Event Selected",
+        description: "Please search for and select an event first.",
+        variant: "destructive"
+      })
       return
     }
     
     if (!reportType) {
-      showWarningToast("No Report Type", "Please select a report type (Summary or Transaction).")
+      toast({
+        title: "No Report Type",
+        description: "Please select a report type (Summary or Transaction).",
+        variant: "destructive"
+      })
       return
     }
 
@@ -471,10 +478,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }
 
       if (!apiEndpoint) {
-        showErrorPopup(
-          "Invalid Configuration", 
-          "Unable to determine the correct API endpoint for your role and report type."
-        )
+        toast({
+          title: "Invalid Configuration", 
+          description: "Unable to determine the correct API endpoint for your role and report type.",
+          variant: "destructive"
+        })
         return
       }
 
@@ -516,17 +524,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           setReportData([])
           setCurrentPage(1)
           
-          showWarningToast(
-            "No Bookings Found", 
-            `No booking data available for ${matchedEvent.EventName}. This event may not have any bookings yet.`
-          )
+          toast({
+            title: "No Bookings Found", 
+            description: `No booking data available for ${matchedEvent.EventName}. This event may not have any bookings yet.`,
+            variant: "destructive"
+          })
           return
         } else {
           // This is an actual error
-          showErrorPopup(
-            "Report Generation Failed", 
-            data.message || "The server returned an error while generating the report."
-          )
+          toast({
+            title: "Report Generation Failed", 
+            description: data.message || "The server returned an error while generating the report.",
+            variant: "destructive"
+          })
           return
         }
       }      // Handle API response structure based on report type
@@ -648,15 +658,17 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.error("Report generation failed:", error)
       
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        showErrorPopup(
-          "Network Error", 
-          "Unable to connect to the server. Please check your internet connection and try again."
-        )
+        toast({
+          title: "Network Error", 
+          description: "Unable to connect to the server. Please check your internet connection and try again.",
+          variant: "destructive"
+        })
       } else {
-        showErrorPopup(
-          "Report Generation Failed", 
-          error instanceof Error ? error.message : "An unexpected error occurred while generating the report."
-        )
+        toast({
+          title: "Report Generation Failed", 
+          description: error instanceof Error ? error.message : "An unexpected error occurred while generating the report.",
+          variant: "destructive"
+        })
       }
       
       // Set empty data
@@ -984,48 +996,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           <div className="flex justify-end gap-2 mt-6">
             <Button variant="outline" onClick={() => setIsDetailsModalOpen(false)}>
               Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>      {/* Enhanced Error Dialog */}
-      <Dialog open={isErrorDialogOpen} onOpenChange={setIsErrorDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-destructive" />
-              Error
-            </DialogTitle>
-            <DialogDescription>
-              An error occurred while processing your request.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-md">
-              <p className="text-sm text-destructive font-medium whitespace-pre-line">{errorMessage}</p>
-            </div>
-            <div className="mt-4 text-xs text-muted-foreground">
-              <p>If this error persists, please:</p>
-              <ul className="list-disc list-inside mt-1 space-y-1">
-                <li>Check your internet connection</li>
-                <li>Refresh the page and try again</li>
-                <li>Contact support if the issue continues</li>
-              </ul>
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setIsErrorDialogOpen(false)}>
-              Close
-            </Button>
-            <Button onClick={() => {
-              setIsErrorDialogOpen(false)
-              // Optional: Add retry functionality
-              if (matchedEvent && reportType) {
-                handleGenerateReport()
-              } else {
-                handleSearchEvent()
-              }
-            }}>
-              Retry
             </Button>
           </div>
         </DialogContent>

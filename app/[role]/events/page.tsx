@@ -818,11 +818,11 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const handleCheckReport = (eventId: string) => {
     // Navigate to reports page to check bookings for this event
-    window.open(`/${role}/events/${eventId}/report`, '_blank')
+    window.open(`/${role}/events/${eventId}/report`)
   }
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    window.open(`/${role}/events/${eventId}/booking`, '_blank')
+    window.open(`/${role}/events/${eventId}/booking`)
   }
   // Function to render tab-specific content with table
   const renderTabContent = () => {
