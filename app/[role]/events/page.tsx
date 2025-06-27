@@ -822,7 +822,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    router.push(`/${role}/events/${eventId}/booking`)
+    router.push(`/${role}/events/${eventId}/booking-tickets`)
   }
   // Function to render tab-specific content with table
   const renderTabContent = () => {

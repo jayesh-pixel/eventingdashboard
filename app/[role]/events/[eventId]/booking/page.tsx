@@ -196,6 +196,36 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     })
   }
 
+  // Fetch promoter tickets by event date
+  const fetchPromoterTicketsByEventDate = async (eventId: string, eventDateTimeId: string, promoterId: string) => {
+    try {
+      setLoading(true)
+      const apiUrl = "https://devapi.eventingclub.in/eventstickets/getPromoterTicketsbyEventDate"
+      const payload = {
+        event_id: eventId,
+        eventDateTime_id: eventDateTimeId,
+        promoter_id: promoterId,
+      }
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      })
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      const data = await response.json()
+      return data
+    } catch (error) {
+      console.error("Error fetching promoter tickets by event date:", error)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Fetch bookings data for specific event
   const fetchEventBookingsData = async () => {
     try {
@@ -217,11 +247,32 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       let requestPayload: any = {}
 
       if ((role as UserRole) === "promoter") {
-        apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER,
-        requestPayload = {
-          promoter_id: user.user_id,
-          event_id: eventId // Filter by specific event
+        // --- INTEGRATED: Use the new API for promoters ---
+        // TODO: Replace this with actual eventDateTime_id source
+        const eventDateTimeId = "<eventDateTime_id_here>" // <-- Replace with actual value
+        const promoterId = user.user_id
+        const promoterTicketsData = await fetchPromoterTicketsByEventDate(eventId, eventDateTimeId, promoterId)
+        if (promoterTicketsData && Array.isArray(promoterTicketsData.data)) {
+          const normalizedBookings = normalizeBookingData(promoterTicketsData.data)
+          setBookingsData(normalizedBookings)
+          setOriginalData(normalizedBookings)
+          if (normalizedBookings.length > 0) {
+            setEventName(normalizedBookings[0].eventName)
+          }
+          toast({
+            title: "Success",
+            description: `Loaded ${normalizedBookings.length} promoter tickets for this event date`,
+          })
+        } else {
+          setBookingsData([])
+          setOriginalData([])
+          toast({
+            title: "No Data",
+            description: "No promoter tickets found for this event date",
+          })
         }
+        setLoading(false)
+        return
       } else {
         apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
         requestPayload = {
@@ -229,7 +280,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           user_id: user.user_id,
           event_id: eventId, // Filter by specific event
           page: "1",
-          limit: "100", // Get more bookings for this specific event
+          limit: "10", // Get more bookings for this specific event
         }
       }
 
