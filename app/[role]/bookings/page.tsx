@@ -785,26 +785,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
   // Helper function to format dates for Excel export
   const formatDateForExport = (date: Date | string | number) => {
-    if (!date || date === "N/A" || date === "") {
-      return "N/A"
-    }
-    
-    try {
-      const dateObj = new Date(date)
-      if (isNaN(dateObj.getTime())) {
-        return "N/A"
-      }
-      
-      return dateObj.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    } catch (error) {
-      return "N/A"
-    }
+    const dateObj = parseDate(date)
+    if (!dateObj) return "N/A"
+    return dateObj.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
   }
 
   const formatCurrency = (amount: number) => {
@@ -815,26 +804,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   const formatDate = (date: Date | string | number) => {
-    if (!date || date === "N/A" || date === "") {
-      return "N/A"
-    }
-    
-    try {
-      const dateObj = new Date(date)
-      if (isNaN(dateObj.getTime())) {
-        return "N/A"
-      }
-      
-      return dateObj.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    } catch (error) {
-      return "N/A"
-    }
+    const dateObj = parseDate(date)
+    if (!dateObj) return "N/A"
+    return dateObj.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    })
   }
 
   const getStatusBadgeVariant = (status: string) => {
@@ -849,6 +827,38 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       default:
         return "default"
     }
+  }
+
+  // Helper to parse both ISO and DD-MM-YYYY HH:mm:ss formats
+  function parseDate(date: string | number | Date): Date | null {
+    if (!date) return null
+    if (typeof date === "string") {
+      // Check for DD-MM-YYYY HH:mm:ss
+      const ddmmyyyy = date.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/)
+      if (ddmmyyyy) {
+        // new Date(year, monthIndex, day, hour, minute, second)
+        return new Date(
+          Number(ddmmyyyy[3]),
+          Number(ddmmyyyy[2]) - 1,
+          Number(ddmmyyyy[1]),
+          Number(ddmmyyyy[4]),
+          Number(ddmmyyyy[5]),
+          Number(ddmmyyyy[6])
+        )
+      }
+      // Try ISO or other formats
+      const iso = new Date(date)
+      if (!isNaN(iso.getTime())) return iso
+      return null
+    }
+    if (typeof date === "number") {
+      const d = new Date(date)
+      return isNaN(d.getTime()) ? null : d
+    }
+    if (date instanceof Date) {
+      return isNaN(date.getTime()) ? null : date
+    }
+    return null
   }
 
   if (loading) {
