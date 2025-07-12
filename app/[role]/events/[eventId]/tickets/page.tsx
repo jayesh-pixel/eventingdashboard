@@ -81,6 +81,9 @@ interface ExtendedNormalTicket extends NormalTicket {
   EventTicketStatus?: number        // Different field, may be for internal status
   AvailabilityStatus?: string
   IsSoldOut?: boolean
+  // Creation date fields with different naming conventions
+  CreatedAt?: string
+  createdAt: string
 }
 
 interface ExtendedBulkTicket {
@@ -129,9 +132,8 @@ interface ExtendedBulkTicket {
 interface EventDateTime {
   _id: string
   event_id: string
-  date: string
-  start_time: string
-  end_time: string
+  EventStartDateTime: string
+  EventEndDateTime: string
   DateTimeStatus: number
   createdAt: string
 }
@@ -190,6 +192,9 @@ export default function TicketsPage() {
   const [activeTab, setActiveTab] = React.useState("normal")
   const [searchTerm, setSearchTerm] = React.useState("")
   const [availabilityFilter, setAvailabilityFilter] = React.useState<string>("all")
+  
+  // Track which tabs have been loaded to avoid unnecessary API calls
+  const [loadedTabs, setLoadedTabs] = React.useState<Set<string>>(new Set())
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = React.useState(false)
@@ -202,7 +207,7 @@ export default function TicketsPage() {
   // Form states - separate for normal and bulk tickets
   const [normalFormData, setNormalFormData] = React.useState<CreateNormalTicketForm>({
     TicketName: "",
-    TicketType: 1,
+    TicketType: 1, // Will be set automatically based on event type
     TicketDescription: "",
     EventDateTime_id: "",
     TicketPrice: 0,
@@ -211,6 +216,10 @@ export default function TicketsPage() {
     TicketStatus: 1,
     VisibilityLevel: 1
   })
+  
+  // State for multiple date selection
+  const [selectedEventDateTimes, setSelectedEventDateTimes] = React.useState<string[]>([])
+  const [isMultiDateEvent, setIsMultiDateEvent] = React.useState(false)
   
   const [bulkFormData, setBulkFormData] = React.useState<CreateBulkTicketForm>({
     TicketName: "",
@@ -227,11 +236,36 @@ export default function TicketsPage() {
   // Helper functions
   const formatDate = (dateString: string) => {
     if (!dateString) return "N/A"
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+    try {
+      let date: Date
+      
+      // Check for DD-MM-YYYY HH:mm:ss format (like "31-01-2025 18:44:41")
+      const ddmmyyyy = dateString.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/)
+      if (ddmmyyyy) {
+        // new Date(year, monthIndex, day, hour, minute, second)
+        date = new Date(
+          Number(ddmmyyyy[3]),     // year
+          Number(ddmmyyyy[2]) - 1, // month (0-indexed)
+          Number(ddmmyyyy[1]),     // day
+          Number(ddmmyyyy[4]),     // hour
+          Number(ddmmyyyy[5]),     // minute
+          Number(ddmmyyyy[6])      // second
+        )
+      } else {
+        // Try ISO or other standard formats
+        date = new Date(dateString)
+      }
+      
+      // Check if the date is valid
+      if (isNaN(date.getTime())) return "N/A"
+      return date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    } catch (error) {
+      return "N/A"
+    }
   }
 
   const formatCurrency = (amount: number) => {
@@ -321,24 +355,42 @@ export default function TicketsPage() {
           // Set event data for display
           setEventData(data.data)
           
+          // Determine ticket type based on event type and date times
+          let automaticTicketType = 1 // Default to Single Day
+          const eventDateTimes = data.data.EventDateTime || []
+          const isMultiDate = eventDateTimes.length > 1 || data.data.EventType === 2
+          
+          setIsMultiDateEvent(isMultiDate)
+          
+          if (isMultiDate) {
+            automaticTicketType = 2 // Multiple Day
+          }
+          
           // Set event date times and auto-populate forms
-          if (data.data.EventDateTime && data.data.EventDateTime.length > 0) {
-            console.log("Event date times found:", data.data.EventDateTime)
-            setEventDateTimes(data.data.EventDateTime)
-            const firstDateTime = data.data.EventDateTime[0]
+          if (eventDateTimes.length > 0) {
+            console.log("Event date times found:", eventDateTimes)
+            setEventDateTimes(eventDateTimes)
+            const firstDateTime = eventDateTimes[0]
             
             console.log("First date time:", firstDateTime)
             console.log("Auto-populating forms with EventDateTime_id:", firstDateTime._id)
+            console.log("Automatic ticket type:", automaticTicketType)
             
-            // Auto-populate both forms with the first event date/time
+            // Auto-populate both forms with the first event date/time and automatic ticket type
             setNormalFormData(prev => ({ 
               ...prev, 
-              EventDateTime_id: firstDateTime._id 
+              EventDateTime_id: firstDateTime._id,
+              TicketType: automaticTicketType
             }))
             setBulkFormData(prev => ({ 
               ...prev, 
               EventDateTime_id: firstDateTime._id 
             }))
+            
+            // If multi-day event, select the first date by default but allow multiple selection
+            if (isMultiDate || eventDateTimes.length > 1) {
+              setSelectedEventDateTimes([firstDateTime._id])
+            }
           } else {
             console.warn("No EventDateTime found in event data")
           }
@@ -365,13 +417,13 @@ export default function TicketsPage() {
     }
   }
 
-  const fetchTickets = async () => {
+  const fetchNormalTickets = async () => {
     try {
       setLoading(true)
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      console.log("Fetching tickets for eventId:", eventId)
+      console.log("Fetching normal tickets for eventId:", eventId)
       
       const payload = {
         event_id: eventId,
@@ -379,7 +431,8 @@ export default function TicketsPage() {
         user_id: user.user_id,
       }
 
-      console.log("Tickets API Payload:", JSON.stringify(payload, null, 2))      // Fetch normal tickets using the new endpoint
+      console.log("Normal tickets API Payload:", JSON.stringify(payload, null, 2))
+
       const normalTicketsResponse = await fetch(ticketEndPoint.GET_ALL_EVENT_TICKETS, {
         method: "POST",
         headers: {
@@ -394,9 +447,11 @@ export default function TicketsPage() {
       if (normalTicketsResponse.ok) {
         const normalData = await normalTicketsResponse.json()
         console.log("Normal tickets response data:", JSON.stringify(normalData, null, 2))
-          if (!normalData.error) {
+        
+        if (!normalData.error) {
           // Check if the response has the new structure with EventTicketsData
-          if (normalData.data && normalData.data.EventTicketsData) {            console.log("Using new response structure - EventTicketsData")
+          if (normalData.data && normalData.data.EventTicketsData) {
+            console.log("Using new response structure - EventTicketsData")
             console.log("EventTicketsData length:", normalData.data.EventTicketsData.length)
             if (normalData.data.EventTicketsData.length > 0) {
               console.log("First ticket sample:", JSON.stringify(normalData.data.EventTicketsData[0], null, 2))
@@ -419,8 +474,26 @@ export default function TicketsPage() {
         const errorText = await normalTicketsResponse.text()
         console.error("Normal tickets API call failed:", normalTicketsResponse.status, errorText)
       }
+    } catch (error) {
+      console.error("Error fetching normal tickets:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load normal tickets",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
-      // Fetch bulk tickets
+  const fetchBulkTickets = async () => {
+    try {
+      setLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      console.log("Fetching bulk tickets for eventId:", eventId)
+
       const bulkTicketsPayload = {
         event_id: eventId
       }
@@ -463,10 +536,10 @@ export default function TicketsPage() {
         console.error("Bulk tickets API call failed:", bulkTicketsResponse.status, errorText)
       }
     } catch (error) {
-      console.error("Error fetching tickets:", error)
+      console.error("Error fetching bulk tickets:", error)
       toast({
         title: "Error",
-        description: "Failed to load tickets",
+        description: "Failed to load bulk tickets",
         variant: "destructive",
       })
     } finally {
@@ -502,7 +575,12 @@ export default function TicketsPage() {
           title: "Success",
           description: `Ticket ${newStatus === 1 ? "enabled" : "disabled"} successfully`,
         })
-        fetchTickets()
+        // Refresh only the current tab's tickets
+        if (activeTab === "normal") {
+          fetchNormalTickets()
+        } else {
+          fetchBulkTickets()
+        }
       }
     } catch (error) {
       console.error("Error toggling ticket status:", error)
@@ -541,7 +619,12 @@ export default function TicketsPage() {
           title: "Success",
           description: "Ticket deleted successfully",
         })
-        fetchTickets()
+        // Refresh only the current tab's tickets
+        if (activeTab === "normal") {
+          fetchNormalTickets()
+        } else {
+          fetchBulkTickets()
+        }
       }
     } catch (error) {
       console.error("Error deleting ticket:", error)
@@ -615,7 +698,7 @@ export default function TicketsPage() {
           
           // Refresh the tickets list to get the actual server state
           console.log("Refreshing tickets after successful toggle...")
-          await fetchTickets()
+          await fetchNormalTickets()
         } else {
           console.error("API returned error:", data)
           // Revert optimistic update on error
@@ -666,14 +749,27 @@ export default function TicketsPage() {
       }
       
       // Validate event date/time selection for normal tickets
-      if (activeTab === "normal" && !normalFormData.EventDateTime_id) {
-        toast({
-          title: "Validation Error",
-          description: "Event date & time is required. Please wait for event data to load.",
-          variant: "destructive",
-        })
-        setLoading(false)
-        return
+      if (activeTab === "normal") {
+        if (isMultiDateEvent || eventDateTimes.length > 1) {
+          // Multi-day event: check if at least one date is selected
+          if (selectedEventDateTimes.length === 0) {
+            toast({
+              title: "Validation Error",
+              description: "Please select at least one event date for this ticket.",
+              variant: "destructive",
+            })
+            setLoading(false)
+            return
+          }
+        } else if (!normalFormData.EventDateTime_id) {
+          toast({
+            title: "Validation Error",
+            description: "Event date & time is required. Please wait for event data to load.",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
       }
       
       // Validate event date/time selection for bulk tickets
@@ -718,12 +814,17 @@ export default function TicketsPage() {
       }
       
       if (activeTab === "normal") {
+        // For multi-day events, use selected dates; for single-day events, use the default EventDateTime_id
+        const eventDateTimeIds = (isMultiDateEvent || eventDateTimes.length > 1) 
+          ? selectedEventDateTimes.map(id => ({ eventDateTime_id: id }))
+          : [{ eventDateTime_id: normalFormData.EventDateTime_id }]
+          
         payload = {
           ...payload,
           Name: normalFormData.TicketName,
           EventTicketType: normalFormData.TicketType.toString(),
           Description: normalFormData.TicketDescription,
-          EventDateTimeIds: [{ eventDateTime_id: normalFormData.EventDateTime_id }],
+          EventDateTimeIds: eventDateTimeIds,
           Price: normalFormData.TicketPrice,
           Quantity: normalFormData.MaxQuantity,
           BookingMaxLimit: normalFormData.BookingMaxLimit,
@@ -775,10 +876,17 @@ export default function TicketsPage() {
         }
         setShowCreateModal(false)
         setSelectedPromoters([]) // Reset selected promoters
+        setSelectedEventDateTimes([]) // Reset selected dates
         if (activeTab === "normal") {
+          // Determine automatic ticket type for reset
+          let automaticTicketType = 1
+          if (isMultiDateEvent || eventDateTimes.length > 1) {
+            automaticTicketType = 2
+          }
+          
           setNormalFormData({
             TicketName: "",
-            TicketType: 1,
+            TicketType: automaticTicketType,
             TicketDescription: "",
             EventDateTime_id: eventDateTimes.length > 0 ? eventDateTimes[0]._id : "",
             TicketPrice: 0,
@@ -787,6 +895,11 @@ export default function TicketsPage() {
             TicketStatus: 1,
             VisibilityLevel: 1
           })
+          
+          // Reset selected dates for multi-day events
+          if (isMultiDateEvent || eventDateTimes.length > 1) {
+            setSelectedEventDateTimes(eventDateTimes.length > 0 ? [eventDateTimes[0]._id] : [])
+          }
         } else {
           setBulkFormData({
             TicketName: "",
@@ -798,7 +911,12 @@ export default function TicketsPage() {
             TicketPrice: 0
           })
         }
-        fetchTickets()
+        // Refresh only the current tab's tickets
+        if (activeTab === "normal") {
+          fetchNormalTickets()
+        } else {
+          fetchBulkTickets()
+        }
       }
     } catch (error) {
       console.error("Error creating ticket:", error)
@@ -850,7 +968,12 @@ export default function TicketsPage() {
         })
         setShowEditModal(false)
         setEditFormData({})
-        fetchTickets()
+        // Refresh only the current tab's tickets
+        if (activeTab === "normal") {
+          fetchNormalTickets()
+        } else {
+          fetchBulkTickets()
+        }
       }
     } catch (error) {
       console.error("Error updating ticket:", error)
@@ -888,7 +1011,7 @@ export default function TicketsPage() {
           title: "Success",
           description: data.message || "Bulk ticket cancelled successfully",
         })
-        fetchTickets() // Refresh the ticket list
+        fetchBulkTickets() // Refresh the bulk tickets list
       } else {
         throw new Error("Failed to cancel bulk ticket")
       }
@@ -950,23 +1073,63 @@ export default function TicketsPage() {
 
   // Effects
   React.useEffect(() => {
-    fetchTickets()
-    fetchPromoters()
-    fetchEventDateTimes()
+    // Load initial data when component mounts
+    if (user && eventId) {
+      fetchPromoters()
+      fetchEventDateTimes()
+      
+      // Load tickets for the initial active tab only
+      if (activeTab === "normal") {
+        fetchNormalTickets()
+        setLoadedTabs(prev => new Set(prev).add("normal"))
+      } else if (activeTab === "bulk") {
+        fetchBulkTickets()
+        setLoadedTabs(prev => new Set(prev).add("bulk"))
+      }
+    }
   }, [eventId, user])
+
+  // Handle tab changes - load data only when switching to a new tab
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab)
+    
+    // Load data only if this tab hasn't been loaded before
+    if (!loadedTabs.has(newTab)) {
+      if (newTab === "normal") {
+        fetchNormalTickets()
+        setLoadedTabs(prev => new Set(prev).add("normal"))
+      } else if (newTab === "bulk") {
+        fetchBulkTickets()
+        setLoadedTabs(prev => new Set(prev).add("bulk"))
+      }
+    }
+  }
 
   const handleOpenCreateModal = () => {
     // Auto-populate form with event data when opening modal
     if (eventDateTimes.length > 0) {
       const firstDateTime = eventDateTimes[0]
+      
+      // Determine automatic ticket type based on event configuration
+      let automaticTicketType = 1 // Default to Single Day
+      if (isMultiDateEvent || eventDateTimes.length > 1) {
+        automaticTicketType = 2 // Multiple Day
+      }
+      
       setNormalFormData(prev => ({ 
         ...prev, 
-        EventDateTime_id: firstDateTime._id 
+        EventDateTime_id: firstDateTime._id,
+        TicketType: automaticTicketType
       }))
       setBulkFormData(prev => ({ 
         ...prev, 
         EventDateTime_id: firstDateTime._id 
       }))
+      
+      // Initialize selected dates for multi-day events
+      if (isMultiDateEvent || eventDateTimes.length > 1) {
+        setSelectedEventDateTimes([firstDateTime._id])
+      }
     }
     setShowCreateModal(true)
   }
@@ -999,8 +1162,8 @@ export default function TicketsPage() {
   }  // Filter promoters based on search
   const filteredPromoters = promoters.filter(promoter =>
     promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
-    promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
-    promoter.Phone1.includes(promoterSearchTerm)
+    (promoter.Email && promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
+    (promoter.Phone1 && promoter.Phone1.includes(promoterSearchTerm))
   )
 
   const filteredNormalTickets = normalTickets.filter(ticket => {
@@ -1124,7 +1287,7 @@ export default function TicketsPage() {
       </Card>
 
       {/* Tickets Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <TabsList>
           <TabsTrigger value="normal" className="flex items-center gap-2">
             <Ticket className="h-4 w-4" />
@@ -1231,7 +1394,7 @@ export default function TicketsPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {formatDate(ticket.createdAt)}
+                              {formatDate(extendedTicket.createdAt || extendedTicket.CreatedAt || ticket.createdAt || ticket.CreatedAt || '')}
                             </TableCell>
                             <TableCell className="text-right">
                               <DropdownMenu>
@@ -1324,7 +1487,7 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {eventDateTimes.length > 0 ? (
-                                `${new Date(eventDateTimes[0].date).toLocaleDateString()} ${eventDateTimes[0].start_time} - ${eventDateTimes[0].end_time}`
+                                `${new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString()} ${new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -1340,7 +1503,7 @@ export default function TicketsPage() {
                               {extendedTicket.PhoneNo || ticket.PhoneNo || 'N/A'}
                             </TableCell>
                             <TableCell>
-                              {formatDate(extendedTicket.CreatedAt || ticket.createdAt || '')}
+                              {formatDate(extendedTicket.createdAt || extendedTicket.CreatedAt || ticket.createdAt || ticket.CreatedAt || '')}
                             </TableCell>
                             <TableCell>
                               {quantity}
@@ -1412,7 +1575,7 @@ export default function TicketsPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="normal">Normal Ticket</TabsTrigger>
               <TabsTrigger value="bulk">Bulk Ticket</TabsTrigger>
@@ -1428,23 +1591,17 @@ export default function TicketsPage() {
                     value={normalFormData.TicketName}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                   />
-                </div>                <div className="grid grid-cols-2 gap-4">
+                </div>                <div className="grid grid-cols-1 gap-4">
+                  {/* Show ticket type as read-only info */}
                   <div className="space-y-2">
-                    <Label htmlFor="ticketType">Event Type</Label>
-                    <Select
-                      value={normalFormData.TicketType.toString()}
-                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketType: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Single Day</SelectItem>
-                        <SelectItem value="2">Multiple Day</SelectItem>
-                        <SelectItem value="3">Season Pass</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>                  <div className="space-y-2">
+                    <Label>Ticket Type</Label>
+                    <div className="p-3 bg-muted rounded-md text-sm">
+                      {getTicketTypeName(normalFormData.TicketType)}
+                      {normalFormData.TicketType === 2 && " (Based on event configuration)"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="visibilityLevel">Visibility</Label>
                     <Select
                       value={normalFormData.VisibilityLevel.toString()}
@@ -1487,13 +1644,70 @@ export default function TicketsPage() {
                       </div>                    )}                  </div>
                 </div>
 
-                {/* Show selected event date/time info (read-only) */}
+                {/* Event Date & Time Selection */}
                 {eventDateTimes.length > 0 && (
                   <div className="space-y-2">
-                    <Label>Event Date & Time</Label>
-                    <div className="p-3 bg-muted rounded-md text-sm">
-                      {new Date(eventDateTimes[0].date).toLocaleDateString()} - {eventDateTimes[0].start_time} to {eventDateTimes[0].end_time}
-                    </div>
+                    <Label>Event Date & Time Selection</Label>
+                    {isMultiDateEvent || eventDateTimes.length > 1 ? (
+                      <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                          This is a multi-day event. Select the dates for which this ticket is valid:
+                        </p>
+                        <div className="grid gap-2 max-h-48 overflow-y-auto">
+                          {eventDateTimes.map((dateTime) => (
+                            <div
+                              key={dateTime._id}
+                              className="flex items-center space-x-2 p-2 border rounded-md hover:bg-muted/50"
+                            >
+                              <Checkbox
+                                id={`datetime-${dateTime._id}`}
+                                checked={selectedEventDateTimes.includes(dateTime._id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedEventDateTimes(prev => [...prev, dateTime._id])
+                                  } else {
+                                    setSelectedEventDateTimes(prev => prev.filter(id => id !== dateTime._id))
+                                  }
+                                }}
+                              />
+                              <label
+                                htmlFor={`datetime-${dateTime._id}`}
+                                className="text-sm cursor-pointer flex-1"
+                              >
+                                {new Date(dateTime.EventStartDateTime).toLocaleDateString()} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </label>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {selectedEventDateTimes.length} of {eventDateTimes.length} dates selected
+                          </span>
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedEventDateTimes(eventDateTimes.map(dt => dt._id))}
+                            >
+                              Select All
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedEventDateTimes([])}
+                            >
+                              Clear All
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-muted rounded-md text-sm">
+                        {new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString()} - {new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1544,7 +1758,10 @@ export default function TicketsPage() {
                   Cancel
                 </Button>                <Button
                   onClick={handleCreateTicket}
-                  disabled={loading || !normalFormData.TicketName || !normalFormData.EventDateTime_id}
+                  disabled={loading || !normalFormData.TicketName || 
+                    (isMultiDateEvent || eventDateTimes.length > 1 
+                      ? selectedEventDateTimes.length === 0 
+                      : !normalFormData.EventDateTime_id)}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Ticket
@@ -1609,7 +1826,7 @@ export default function TicketsPage() {
                     <SelectContent>
                       {eventDateTimes.map((dateTime) => (
                         <SelectItem key={dateTime._id} value={dateTime._id}>
-                          {new Date(dateTime.date).toLocaleDateString()} - {dateTime.start_time} to {dateTime.end_time}
+                          {new Date(dateTime.EventStartDateTime).toLocaleDateString()} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1842,11 +2059,11 @@ export default function TicketsPage() {
                     />
                     <div className="flex-1">
                       <div className="font-medium">{promoter.FullName}</div>
-                      <div className="text-sm text-muted-foreground">{promoter.Email}</div>
-                      <div className="text-sm text-muted-foreground">{promoter.Phone1}</div>
+                      <div className="text-sm text-muted-foreground">{promoter.Email || 'No email'}</div>
+                      <div className="text-sm text-muted-foreground">{promoter.Phone1 || 'No phone'}</div>
                     </div>
                     <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>
-                      {promoter.Status}
+                      {promoter.Status === "Active" ? "Active" : promoter.Status || "Inactive"}
                     </Badge>
                   </div>
                 ))

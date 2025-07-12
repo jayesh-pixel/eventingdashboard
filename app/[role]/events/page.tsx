@@ -71,7 +71,7 @@ interface EventsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
-const ITEMS_PER_PAGE = 9 // Changed to 9 for better card grid layout
+const ITEMS_PER_PAGE = 10 // Changed to 9 for better card grid layout
 
 // Mock promoter-specific events with additional data
 
