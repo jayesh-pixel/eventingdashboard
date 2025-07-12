@@ -1,3 +1,31 @@
+// Scanner User Types
+export enum ScannerUserType {
+  Event = 1,
+  Organizer = 2,
+}
+
+export enum ScannerUserStatus {
+  Inactive = 0,
+  Active = 1,
+  Disabled = 2,
+}
+
+export interface ScannerUser {
+  _id: string;
+  Username: string;
+  UserType: ScannerUserType;
+  status: ScannerUserStatus;
+  Events?: { event_id: string }[];
+  Organizers?: { organizer_id: string }[];
+  [key: string]: any;
+}
+
+export interface ScannerUsersApiResponse {
+  success: boolean;
+  data: ScannerUser[] | { data: ScannerUser[]; [key: string]: any };
+  error?: boolean;
+  message?: string;
+}
 export interface Event {
   _id: string
   eventName: string

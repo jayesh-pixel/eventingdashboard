@@ -780,7 +780,6 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               <Table>                <TableHeader>
                   <TableRow>
                     <TableHead>Artist</TableHead>
-                    <TableHead>Contact</TableHead>
                     <TableHead>Priority</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Images</TableHead>
@@ -790,53 +789,38 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                 </TableHeader>
                 <TableBody>
                   {paginatedArtists.map((artist) => (
-                    <TableRow key={artist._id}>
-                      <TableCell>
-                        <div className="flex items-center space-x-3">
-                          {/* Artist Image */}
-                          <div className="flex-shrink-0">
-                            {artist.Images && artist.Images.length > 0 ? (
-                              <img
-                                src={`${process.env.NEXT_PUBLIC_API_BASE_URL}/${artist.Images[0].image_path}`}
-                                alt={artist.Name}
-                                className="h-10 w-10 rounded-full object-cover border"
-                                onError={(e) => {
-                                  const target = e.target as HTMLImageElement;
-                                  target.src = '/placeholder-user.jpg';
-                                }}
-                              />
-                            ) : (
-                              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                                <User className="h-5 w-5 text-gray-400" />
-                              </div>
-                            )}
-                          </div>
-                          {/* Artist Name */}
-                          <div>
-                            <div className="font-medium text-gray-900">{artist.Name}</div>
-                            {artist.status && (
-                              <Badge variant={artist.status === 1 ? "default" : "secondary"} className="text-xs">
-                                {artist.status === 1 ? "Active" : "Inactive"}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1">
-                          {artist.Email && (
-                            <div className="flex items-center text-sm text-muted-foreground">
-                              <Mail className="mr-1 h-3 w-3" />
-                              {artist.Email}
+                  <TableRow key={artist._id}>
+                    <TableCell>
+                      <div className="flex items-center space-x-3">
+                        {/* Artist Image */}
+                        <div className="flex-shrink-0">
+                          {artist.Images && artist.Images.length > 0 ? (
+                            <img
+                              src={`${process.env.NEXT_PUBLIC_API_BASE_URL}/${artist.Images[0].image_path}`}
+                              alt={artist.Name}
+                              className="h-10 w-10 rounded-full object-cover border"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/placeholder-user.jpg';
+                              }}
+                            />
+                          ) : (
+                            <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                              <User className="h-5 w-5 text-gray-400" />
                             </div>
                           )}
-                          {artist.PhoneNo && (
-                            <div className="flex items-center text-sm text-muted-foreground">
-                              <Phone className="mr-1 h-3 w-3" />
-                              {artist.PhoneNo}
-                            </div>                          )}
                         </div>
-                      </TableCell>
+                        {/* Artist Name */}
+                        <div>
+                          <div className="font-medium text-gray-900">{artist.Name}</div>
+                          {artist.status && (
+                            <Badge variant={artist.status === 1 ? "default" : "secondary"} className="text-xs">
+                              {artist.status === 1 ? "Active" : "Inactive"}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="font-mono">
                           {artist.Priority || 0}

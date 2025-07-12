@@ -36,7 +36,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
-import { venueEndPoint } from "@/lib/api-endpoints"
+import { venueEndPoint, getallcityDataEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
@@ -116,6 +116,61 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     city: "",
     mapLocation: "",
   })
+
+  // State/city data for dropdowns (AddAddress logic)
+  interface State { id: number; name: string; iso2: string; }
+  interface City { id: number; name: string; }
+  const [stateData, setStateData] = React.useState<State[]>([]);
+  const [cityData, setCityData] = React.useState<City[]>([]);
+  const [loadingCities, setLoadingCities] = React.useState(false);
+  const API_KEY = "TUo5UThvYmNjckE0U294WmdzeFBtZmV4RzZlMUxhUHhTaG05TURVdQ==";
+
+  // Fetch all states on dialog open
+  React.useEffect(() => {
+    if ((isCreateDialogOpen || isEditDialogOpen)) {
+      const fetchStates = async () => {
+        try {
+          const resp = await fetch("https://api.countrystatecity.in/v1/countries/IN/states", {
+            headers: { "X-CSCAPI-KEY": API_KEY }
+          });
+          if (!resp.ok) throw new Error("Failed to fetch states");
+          const data = await resp.json();
+          setStateData(data);
+        } catch (err) {
+          setStateData([]);
+        }
+      };
+      fetchStates();
+    }
+  }, [isCreateDialogOpen, isEditDialogOpen]);
+
+  // Fetch cities when state changes
+  React.useEffect(() => {
+    if (formData.state && (isCreateDialogOpen || isEditDialogOpen)) {
+      setLoadingCities(true);
+      const fetchCities = async () => {
+        try {
+          const selectedState = stateData.find(s => s.name === formData.state);
+          if (!selectedState) { setCityData([]); setLoadingCities(false); return; }
+          const resp = await fetch(`https://api.countrystatecity.in/v1/countries/IN/states/${selectedState.iso2}/cities`, {
+            headers: { "X-CSCAPI-KEY": API_KEY }
+          });
+          if (!resp.ok) throw new Error("Failed to fetch cities");
+          const data = await resp.json();
+          setCityData(data);
+        } catch (err) {
+          setCityData([]);
+        } finally {
+          setLoadingCities(false);
+        }
+      };
+      fetchCities();
+    } else {
+      setCityData([]);
+    }
+  }, [formData.state, isCreateDialogOpen, isEditDialogOpen, stateData]);
+
+  // ...existing code...
 
   // API function to fetch venues
   const fetchVenues = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
@@ -495,30 +550,35 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="state">State</Label>
-                  <Select value={formData.state} onValueChange={(value) => setFormData({ ...formData, state: value })}>
+                  <Select value={formData.state} onValueChange={(value) => {
+                    setFormData({ ...formData, state: value, city: "" })
+                  }}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select state" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Andhra Pradesh">Andhra Pradesh</SelectItem>
-                      <SelectItem value="Karnataka">Karnataka</SelectItem>
-                      <SelectItem value="Kerala">Kerala</SelectItem>
-                      <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
-                      <SelectItem value="Maharashtra">Maharashtra</SelectItem>
-                      <SelectItem value="Gujarat">Gujarat</SelectItem>
-                      <SelectItem value="West Bengal">West Bengal</SelectItem>
-                      <SelectItem value="Meghalaya">Meghalaya</SelectItem>
+                      {stateData.map(state => (
+                        <SelectItem key={state.id} value={state.name}>{state.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="city">City</Label>
-                  <Input
-                    id="city"
+                  <Select
                     value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    placeholder="Enter city"
-                  />
+                    onValueChange={(value) => setFormData({ ...formData, city: value })}
+                    disabled={!formData.state || loadingCities || cityData.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingCities ? "Loading..." : cityData.length === 0 ? "Select state first" : "Select city"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cityData.map(city => (
+                        <SelectItem key={city.id} value={city.name}>{city.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               
@@ -745,30 +805,35 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="editState">State</Label>
-                <Select value={formData.state} onValueChange={(value) => setFormData({ ...formData, state: value })}>
+                <Select value={formData.state} onValueChange={(value) => {
+                  setFormData({ ...formData, state: value, city: "" })
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select state" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Andhra Pradesh">Andhra Pradesh</SelectItem>
-                    <SelectItem value="Karnataka">Karnataka</SelectItem>
-                    <SelectItem value="Kerala">Kerala</SelectItem>
-                    <SelectItem value="Tamil Nadu">Tamil Nadu</SelectItem>
-                    <SelectItem value="Maharashtra">Maharashtra</SelectItem>
-                    <SelectItem value="Gujarat">Gujarat</SelectItem>
-                    <SelectItem value="West Bengal">West Bengal</SelectItem>
-                    <SelectItem value="Meghalaya">Meghalaya</SelectItem>
+                    {stateData.map(state => (
+                      <SelectItem key={state.id} value={state.name}>{state.name}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="editCity">City</Label>
-                <Input
-                  id="editCity"
+                <Select
                   value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  placeholder="Enter city"
-                />
+                  onValueChange={(value) => setFormData({ ...formData, city: value })}
+                  disabled={!formData.state || loadingCities || cityData.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={loadingCities ? "Loading..." : cityData.length === 0 ? "Select state first" : "Select city"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cityData.map(city => (
+                      <SelectItem key={city.id} value={city.name}>{city.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             

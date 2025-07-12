@@ -614,10 +614,10 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Category Name</TableHead>
-                <TableHead className="hidden md:table-cell">Description</TableHead>
+                <TableHead>Description</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="hidden lg:table-cell">Created Date</TableHead>
+                <TableHead>Created Date</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -647,15 +647,18 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{category.Name}</TableCell>
-                    <TableCell className="hidden md:table-cell max-w-xs truncate">
+                    <TableCell className="max-w-xs truncate">
                       {category.Description || "No description"}
+                    </TableCell>
+                    <TableCell>
+                      {category.Priority || 0}
                     </TableCell>
                     <TableCell>
                       <Badge variant={getStatusDisplay(category.status).variant}>
                         {getStatusDisplay(category.status).text}
                       </Badge>
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell">
+                    <TableCell>
                       {new Date(category.createdAt).toLocaleDateString()}
                     </TableCell>
                     <TableCell>

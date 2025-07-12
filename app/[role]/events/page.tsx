@@ -56,6 +56,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getValidToken } from "@/lib/token-utils"
 import PromoterEventCard from "@/components/create-event/promotereventcard"
 import AddPromoterAndShow from "@/components/add-promoter-and-show"
+import MultipleOrganizersDisplay from "@/components/multiple-organizers-display"
+import PromoterIndicator from "@/components/promoter-indicator"
+import PromoterPopup from "@/components/promoter-popup"
 import {
   Dialog,
   DialogContent,
@@ -109,6 +112,11 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [dateFilterOption, setDateFilterOption] = React.useState("")
   // Event format modal state
   const [showEventFormatModal, setShowEventFormatModal] = React.useState(false)
+  
+  // Promoter popup state
+  const [showPromoterPopup, setShowPromoterPopup] = React.useState(false)
+  const [selectedPromoterData, setSelectedPromoterData] = React.useState<any>(null)
+  const [selectedEventId, setSelectedEventId] = React.useState<string>("")
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -148,11 +156,13 @@ export default function EventsPage({ params }: EventsPageProps) {
         venueName: event.VenueName || event.venueName || event.Venue || event.venue || "Unknown Venue",
         venueId: event.venue_id || event.venueId || event.VenueId,
         
-        // Organizer info from PopUpOrganizerData
+        // Organizer info from PopUpOrganizerData (handle multiple organizers)
+        organizers: event.PopUpOrganizerData || event.EventOrganizers || [],
         organizerId: event.PopUpOrganizerData?.[0]?.organizer_id || event.organizerId || event.OrganizerId,
         organizerName: event.PopUpOrganizerData?.[0]?.OrganizerName || event.organizerName || event.OrganizerName || "Unknown Organizer",
         
         // Promoter info from PopUpPromoterData
+        promoterData: event.PopUpPromoterData?.[0] || null,
         promoterId: event.PopUpPromoterData?.[0]?.promoter_id || event.promoterId,
         promoterName: event.PopUpPromoterData?.[0]?.PromoterName || event.promoterName,
         
@@ -820,9 +830,16 @@ export default function EventsPage({ params }: EventsPageProps) {
     // Navigate to reports page to check bookings for this event
     router.push(`/${role}/events/${eventId}/report`)
   }
+  
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
     router.push(`/${role}/events/${eventId}/booking-tickets`)
+  }
+
+  const handlePromoterClick = (promoterData: any, eventId: string) => {
+    setSelectedPromoterData(promoterData)
+    setSelectedEventId(eventId)
+    setShowPromoterPopup(true)
   }
   // Function to render tab-specific content with table
   const renderTabContent = () => {
@@ -893,23 +910,39 @@ export default function EventsPage({ params }: EventsPageProps) {
                   currentEvents.map((event) => (
                     <TableRow key={event._id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">
-                        <div className="flex items-center gap-3">
-                          <img
-                            src={event.eventImage || "/placeholder.svg"}
-                            alt={event.eventName}
-                            className="w-10 h-10 rounded-lg object-cover"
-                          />
-                          <div>
-                            <div className="font-semibold text-sm">{event.eventName}</div>
-                            <div className="text-xs text-muted-foreground">{event.eventType}</div>
-                          </div>
+                        <div>
+                          <div className="font-semibold text-sm">{event.eventName}</div>
+                          <div className="text-xs text-muted-foreground">{event.eventType}</div>
                         </div>
                       </TableCell>
                       <TableCell>{formatDateForDisplay(event.eventStartDate)}</TableCell>
                       <TableCell>{formatTime(event.eventStartDate)}</TableCell>
                       <TableCell>{event.categoryName}</TableCell>
-                      <TableCell>{event.organizerName}</TableCell>                      <TableCell>
-                        {((role as UserRole) === "superadmin" || (role as UserRole) === "organizer") ? (
+                      <TableCell>
+                        {(role as UserRole) === "superadmin" ? (
+                          <MultipleOrganizersDisplay 
+                            organizers={event.organizers || []}
+                            maxDisplay={2}
+                            size="sm"
+                          />
+                        ) : (
+                          event.organizerName
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {(role as UserRole) === "superadmin" ? (
+                          <div className="flex items-center gap-2">
+                            <PromoterIndicator
+                              promoterData={event.promoterData}
+                              onClick={() => handlePromoterClick(event.promoterData, event._id)}
+                              size="sm"
+                            />
+                            <AddPromoterAndShow 
+                              eventData={event} 
+                              onPromoterUpdate={() => getAllEventData()}
+                            />
+                          </div>
+                        ) : ((role as UserRole) === "organizer") ? (
                           <div className="flex items-center gap-2">
                             <span className="text-sm">{event.promoterName || ""}</span>
                             <AddPromoterAndShow 
@@ -1333,6 +1366,14 @@ export default function EventsPage({ params }: EventsPageProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Promoter Details Popup */}
+      <PromoterPopup
+        isOpen={showPromoterPopup}
+        onClose={() => setShowPromoterPopup(false)}
+        promoterData={selectedPromoterData}
+        eventId={selectedEventId}
+      />
     </div>
   )
 }

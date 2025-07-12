@@ -188,7 +188,7 @@ const AddNewPromoterModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
@@ -212,129 +212,136 @@ const AddNewPromoterModal = ({
               </Badge>
             </div>
 
-            {/* Currently Assigned Promoters Section */}
-            {openModalPromoterData && openModalPromoterData.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-primary" />
-                  <h3 className="text-sm font-semibold text-foreground">Currently Assigned Promoters</h3>
-                </div>
-                <div className="border rounded-md bg-muted/10">
-                  <div className="p-3 space-y-2">
-                    {openModalPromoterData.map((currentPromoter, index) => {
-                      // Find the full promoter data from API to get more details
-                      const fullPromoterData = apiAllPromoterData.find(
-                        (p) => p._id === currentPromoter.promoter_id
-                      )
-                      
-                      return (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-2 bg-background rounded-md border border-border/30"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                {currentPromoter.PromoterName 
-                                  ? currentPromoter.PromoterName.charAt(0).toUpperCase() 
-                                  : "P"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">
-                                {currentPromoter.PromoterName || fullPromoterData?.PromoterName || fullPromoterData?.Username || "Unknown Promoter"}
-                              </p>
-                              {fullPromoterData?.email && (
-                                <p className="text-xs text-muted-foreground">
-                                  {fullPromoterData.email}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              Current
-                            </Badge>
-                            <Checkbox
-                              checked={selectedPromoterIds.includes(currentPromoter.promoter_id)}
-                              onCheckedChange={() => handlePromoterToggle(currentPromoter.promoter_id)}
-                            />
-                          </div>
+            {/* Scrollable Content */}
+            <div className="max-h-[50vh] overflow-hidden">
+              <ScrollArea className="h-[50vh]">
+                <div className="space-y-4 pr-4">
+                  {/* Currently Assigned Promoters Section */}
+                  {openModalPromoterData && openModalPromoterData.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-primary" />
+                        <h3 className="text-sm font-semibold text-foreground">Currently Assigned Promoters</h3>
+                      </div>
+                      <div className="border rounded-md bg-muted/10">
+                        <div className="p-3 space-y-2">
+                          {openModalPromoterData.map((currentPromoter, index) => {
+                            // Find the full promoter data from API to get more details
+                            const fullPromoterData = apiAllPromoterData.find(
+                              (p) => p._id === currentPromoter.promoter_id
+                            )
+                            
+                            return (
+                              <div
+                                key={index}
+                                className="flex items-center justify-between p-2 bg-background rounded-md border border-border/30"
+                              >
+                                <div className="flex items-center space-x-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                                      {currentPromoter.PromoterName 
+                                        ? currentPromoter.PromoterName.charAt(0).toUpperCase() 
+                                        : "P"}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium">
+                                      {currentPromoter.PromoterName || fullPromoterData?.PromoterName || fullPromoterData?.Username || "Unknown Promoter"}
+                                    </p>
+                                    {fullPromoterData?.email && (
+                                      <p className="text-xs text-muted-foreground">
+                                        {fullPromoterData.email}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="text-xs">
+                                    Current
+                                  </Badge>
+                                  <Checkbox
+                                    checked={selectedPromoterIds.includes(currentPromoter.promoter_id)}
+                                    onCheckedChange={() => handlePromoterToggle(currentPromoter.promoter_id)}
+                                  />
+                                </div>
+                              </div>
+                            )
+                          })}
                         </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* All Available Promoters Section */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">All Available Promoters</h3>
-              </div>
-              <ScrollArea className="h-48 w-full border rounded-md">
-                <div className="p-4 space-y-3">
-                  {apiAllPromoterData.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No promoters available
+                      </div>
                     </div>
-                  ) : (
-                    apiAllPromoterData.map((promoter) => {
-                      const isCurrentlyAssigned = (openModalPromoterData || []).some(
-                        (currentPromoter) => currentPromoter.promoter_id === promoter._id
-                      )
-                      
-                      return (
-                        <div
-                          key={promoter._id}
-                          className={`flex items-center space-x-3 p-2 rounded-md transition-colors ${
-                            isCurrentlyAssigned 
-                              ? 'bg-primary/5 border border-primary/20' 
-                              : 'hover:bg-muted/50'
-                          }`}
-                        >
-                          <Checkbox
-                            id={promoter._id}
-                            checked={selectedPromoterIds.includes(promoter._id)}
-                            onCheckedChange={() => handlePromoterToggle(promoter._id)}
-                          />
-                          <Avatar className="h-8 w-8">
-                            <AvatarFallback className={`text-xs ${
-                              isCurrentlyAssigned 
-                                ? 'bg-primary/10 text-primary' 
-                                : 'bg-muted'
-                            }`}>
-                              {(promoter.PromoterName || promoter.Username)?.charAt(0).toUpperCase() || "P"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <label
-                              htmlFor={promoter._id}
-                              className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
-                            >
-                              {promoter.PromoterName || promoter.Username}
-                              {isCurrentlyAssigned && (
-                                <Badge variant="secondary" className="text-xs">
-                                  Assigned
-                                </Badge>
-                              )}
-                            </label>
-                            {promoter.email && (
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {promoter.email}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      )
-                    })
                   )}
+
+                  {/* All Available Promoters Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <h3 className="text-sm font-semibold text-foreground">All Available Promoters</h3>
+                    </div>
+                    <div className="border rounded-md">
+                      <div className="p-4 space-y-3">
+                        {apiAllPromoterData.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No promoters available
+                          </div>
+                        ) : (
+                          apiAllPromoterData.map((promoter) => {
+                            const isCurrentlyAssigned = (openModalPromoterData || []).some(
+                              (currentPromoter) => currentPromoter.promoter_id === promoter._id
+                            )
+                            
+                            return (
+                              <div
+                                key={promoter._id}
+                                className={`flex items-center space-x-3 p-2 rounded-md transition-colors ${
+                                  isCurrentlyAssigned 
+                                    ? 'bg-primary/5 border border-primary/20' 
+                                    : 'hover:bg-muted/50'
+                                }`}
+                              >
+                                <Checkbox
+                                  id={promoter._id}
+                                  checked={selectedPromoterIds.includes(promoter._id)}
+                                  onCheckedChange={() => handlePromoterToggle(promoter._id)}
+                                />
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className={`text-xs ${
+                                    isCurrentlyAssigned 
+                                      ? 'bg-primary/10 text-primary' 
+                                      : 'bg-muted'
+                                  }`}>
+                                    {(promoter.PromoterName || promoter.Username)?.charAt(0).toUpperCase() || "P"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1">
+                                  <label
+                                    htmlFor={promoter._id}
+                                    className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
+                                  >
+                                    {promoter.PromoterName || promoter.Username}
+                                    {isCurrentlyAssigned && (
+                                      <Badge variant="secondary" className="text-xs">
+                                        Assigned
+                                      </Badge>
+                                    )}
+                                  </label>
+                                  {promoter.email && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {promoter.email}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </ScrollArea>
             </div>            {/* Actions */}
-            <div className="flex justify-between items-center pt-4">
+            <div className="flex justify-between items-center pt-4 border-t border-border/20 flex-shrink-0">
               <div className="flex gap-2">
                 {/* Quick Action Buttons */}
                 {openModalPromoterData && openModalPromoterData.length > 0 && (

@@ -256,15 +256,23 @@ export default function ScannerUsersPage() {
   }
 
   const getAssignmentInfo = (user: ScannerUser) => {
-    if (user.UserType === ScannerUserType.Event && user.Events.length > 0) {
+    if (
+      user.UserType === ScannerUserType.Event &&
+      Array.isArray(user.Events) &&
+      user.Events.length > 0
+    ) {
       return {
         type: "Event",
         count: user.Events.length,
         display: `${user.Events.length} Event${user.Events.length > 1 ? 's' : ''}`
       }
-    } else if (user.UserType === ScannerUserType.Organizer && user.Organizers.length > 0) {
+    } else if (
+      user.UserType === ScannerUserType.Organizer &&
+      Array.isArray(user.Organizers) &&
+      user.Organizers.length > 0
+    ) {
       return {
-        type: "Organizer", 
+        type: "Organizer",
         count: user.Organizers.length,
         display: `${user.Organizers.length} Organizer${user.Organizers.length > 1 ? 's' : ''}`
       }
@@ -273,7 +281,8 @@ export default function ScannerUsersPage() {
       type: "None",
       count: 0,
       display: "Not Assigned"
-    }  }
+    }
+  }
 
   // CRUD Functions
   const handleCreateUser = async () => {
@@ -448,8 +457,8 @@ export default function ScannerUsersPage() {
       username: user.Username,
       password: "", // Don't show existing password
       userType: user.UserType.toString(),
-      selectedEvents: user.Events.map(e => e.event_id),
-      selectedOrganizers: user.Organizers.map(o => o.organizer_id),
+      selectedEvents: Array.isArray(user.Events) ? user.Events.map(e => e.event_id) : [],
+      selectedOrganizers: Array.isArray(user.Organizers) ? user.Organizers.map(o => o.organizer_id) : [],
     })
     
     // Fetch organizers if this is an organizer scanner
