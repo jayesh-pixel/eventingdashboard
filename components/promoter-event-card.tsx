@@ -8,7 +8,7 @@ import {
   MapPin,
   Users,
   Clock,
-  DollarSign,
+  IndianRupee,
   BarChart3,
   Star,
   Phone,
@@ -97,7 +97,7 @@ export default function PromoterEventCard({
                 onBookTicket(event._id, event.arrangedEventDateTime)
               }}
             >
-              <DollarSign className="h-3 w-3 mr-1.5" />
+              <IndianRupee className="h-3 w-3 mr-1.5" />
               Book Now
             </Button>
           </div>
@@ -209,7 +209,7 @@ export default function PromoterEventCard({
               onBookTicket(event._id, event.arrangedEventDateTime)
             }}
           >
-            <DollarSign className="h-4 w-4 mr-2" />
+            <IndianRupee className="h-4 w-4 mr-2" />
             Book Tickets
           </Button>
         </div>

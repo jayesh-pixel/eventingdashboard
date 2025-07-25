@@ -11,6 +11,7 @@ import {
   DollarSign,
   BarChart3,
   Star,
+  IndianRupee,
 } from "lucide-react"
 
 interface PromoterEventCardProps {
@@ -37,7 +38,7 @@ export default function PromoterEventCard({
   return (
     <Card
       key={event._id}
-      className="group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border border-border"
+      className="group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border -mt-16 border-border"
     >
       {/* Image */}
       <div className="relative w-full h-48">
@@ -69,10 +70,7 @@ export default function PromoterEventCard({
           {event.eventName}
         </h3>
 
-        {/* Description */}
-        <p className="text-sm text-muted-foreground line-clamp-2">
-          {stripHtmlTags(event.eventDescription).slice(0, 100)}...
-        </p>
+
 
         {/* Date & Time */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -89,11 +87,7 @@ export default function PromoterEventCard({
           <span className="ml-1">| {event.city}</span>
         </div>
 
-        {/* Organizer */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
-          <Users className="h-4 w-4 text-primary" />
-          <span className="font-medium truncate">{event.organizerName}</span>
-        </div>
+
 
         {/* Action buttons */}
         <div className="flex gap-2 pt-2">
@@ -117,7 +111,7 @@ export default function PromoterEventCard({
               onBookTicket(event._id, event.arrangedEventDateTime)
             }}
           >
-            <DollarSign className="h-4 w-4 mr-1" />
+            <IndianRupee className="h-4 w-4 mr-1" />
             Book
           </Button>
         </div>

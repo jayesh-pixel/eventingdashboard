@@ -109,7 +109,8 @@ const formatDateBlock = (iso: string) => {
 // Component
 // -----------------------------------------------------------------------------
 export default function BookingTicketsPage({ params }: BookingTicketsPageProps) {
-  const { role, eventId } = params;
+  const paramsObj = React.use(params) as any;
+  const { role, eventId } = paramsObj;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
@@ -169,6 +170,27 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
             ? data.data.EventDateTimeData
             : data?.data?.EventDateTime ?? [];
         setDates(list);
+        // If only one date, auto-select it and fetch tickets
+        if (list.length === 1) {
+          setSelectedDateId(list[0]._id);
+          // Fetch tickets for the single date
+          const token2 = getValidToken();
+          if (user && token2) {
+            const payload = { event_id: eventId, eventDateTime_id: list[0]._id, promoter_id: user.user_id };
+            const res2 = await fetch(promoterEndPointPannel.GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token2}`,
+              },
+              body: JSON.stringify(payload),
+            });
+            if (res2.ok) {
+              const data2 = await res2.json();
+              setTickets(data2.data ?? []);
+            }
+          }
+        }
       } catch (err) {
         console.error(err);
         toast({ title: "Error", description: "Could not fetch event dates", variant: "destructive" });
@@ -427,18 +449,11 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                   {formErrors.FullName && <p className="text-destructive text-xs">{formErrors.FullName}</p>}
                 </div>
 
-                {/* Phone & Age */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="font-medium">Phone Number</label>
-                    <input value={customer.PhoneNo} maxLength={10} pattern="[6-9][0-9]{9}" className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("PhoneNo", e.target.value.replace(/\D/g, "").slice(0, 10))} />
-                    {formErrors.PhoneNo && <p className="text-destructive text-xs">{formErrors.PhoneNo}</p>}
-                  </div>
-                  <div className="space-y-1">
-                    <label className="font-medium">Age (optional)</label>
-                    <input value={customer.Age} type="number" min="1" max="120" className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("Age", e.target.value)} />
-                    {formErrors.Age && <p className="text-destructive text-xs">{formErrors.Age}</p>}
-                  </div>
+                {/* Phone only */}
+                <div className="space-y-1">
+                  <label className="font-medium">Phone Number</label>
+                  <input value={customer.PhoneNo} maxLength={10} pattern="[6-9][0-9]{9}" className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("PhoneNo", e.target.value.replace(/\D/g, "").slice(0, 10))} />
+                  {formErrors.PhoneNo && <p className="text-destructive text-xs">{formErrors.PhoneNo}</p>}
                 </div>
 
                 {/* Email */}
@@ -520,28 +535,52 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Book Event Tickets</h1>
         </div>
 
-        {/* Date selection */}
-        <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
-          <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-            <CardTitle className="flex items-center gap-2 text-xl"><CalendarDays className="h-5 w-5 text-primary" /> Select Event Date</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 flex gap-3 flex-wrap">
-            {dates.map((d) => {
-              const f = formatDateBlock(d.EventStartDateTime);
-              if (!f) return null;
+        {/* Date selection UI: show as selected if only one date, else show list */}
+        {dates.length === 1 && selectedDateId && (
+          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
+              <CardTitle className="flex items-center gap-2 text-xl"><CalendarDays className="h-5 w-5 text-primary" /> Event Date</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 flex gap-3 flex-wrap">
+              {(() => {
+                const d = dates[0];
+                const f = formatDateBlock(d.EventStartDateTime);
+                if (!f) return null;
+                return (
+                  <div key={d._id} className={"border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center border-primary bg-primary text-primary-foreground scale-105"}>
+                    <p className="text-sm font-semibold underline mb-1">{f.day}</p>
+                    <p className="text-xs opacity-80 mb-1">{f.month} {f.year}</p>
+                    <span className={"inline-block text-lg font-bold rounded-full px-3 py-1 bg-white/20"}>{f.date}</span>
+                    <p className="text-xs opacity-80 mt-1">{f.time}</p>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
+        {dates.length > 1 && (
+          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
+              <CardTitle className="flex items-center gap-2 text-xl"><CalendarDays className="h-5 w-5 text-primary" /> Select Event Date</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 flex gap-3 flex-wrap">
+              {dates.map((d) => {
+                const f = formatDateBlock(d.EventStartDateTime);
+                if (!f) return null;
 
-              const selected = selectedDateId === d._id;
-              return (
-                <div key={d._id} onClick={() => handleDateClick(d._id)} className={`cursor-pointer border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
-                  <p className="text-sm font-semibold underline mb-1">{f.day}</p>
-                  <p className="text-xs opacity-80 mb-1">{f.month} {f.year}</p>
-                  <span className={`inline-block text-lg font-bold rounded-full px-3 py-1 ${selected ? "bg-white/20" : "bg-primary/10 text-primary"}`}>{f.date}</span>
-                  <p className="text-xs opacity-80 mt-1">{f.time}</p>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+                const selected = selectedDateId === d._id;
+                return (
+                  <div key={d._id} onClick={() => handleDateClick(d._id)} className={`cursor-pointer border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
+                    <p className="text-sm font-semibold underline mb-1">{f.day}</p>
+                    <p className="text-xs opacity-80 mb-1">{f.month} {f.year}</p>
+                    <span className={`inline-block text-lg font-bold rounded-full px-3 py-1 ${selected ? "bg-white/20" : "bg-primary/10 text-primary"}`}>{f.date}</span>
+                    <p className="text-xs opacity-80 mt-1">{f.time}</p>
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Ticket selection */}
         {selectedDateId && (
@@ -563,11 +602,9 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                       <CardContent className="p-4 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
                         <div className="flex-1 space-y-1 min-w-0 pr-2">
                           <p className="font-bold truncate">{t.Name}</p>
-                          <p className="text-xs text-muted-foreground truncate">{formatTimeInIST(t.EventStartDateTime)} – {formatTimeInIST(t.EventEndDateTime)}</p>
                           {t.Description && <p className="text-xs text-muted-foreground leading-tight">{t.Description}</p>}
                           <div className="flex gap-4 text-xs mt-1">
                             <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full"></span>Available: {t.AvailableQuantity}</span>
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-blue-500 rounded-full"></span>Max/order: {maxAllowed}</span>
                           </div>
                         </div>
                         <div className="flex flex-row lg:flex-col items-center gap-3 lg:gap-2">
