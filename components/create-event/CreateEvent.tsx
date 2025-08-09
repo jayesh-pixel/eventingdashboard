@@ -212,7 +212,8 @@ interface EventFormValues {
 }
 
 // Validation Schema
-const eventValidationSchema = Yup.object().shape({
+// Dynamic validation schema function
+const getEventValidationSchema = (eventSelectionFlag: number) => Yup.object().shape({
   eventname: Yup.string()
     .required("Event name is required")
     .min(3, "Event name must be at least 3 characters"),
@@ -276,6 +277,7 @@ const eventValidationSchema = Yup.object().shape({
       otherwise: (schema) => schema.notRequired()
     }),
   
+  
   organizers: Yup.array()
     .min(1, "At least one organizer is required"),
   
@@ -301,12 +303,10 @@ const eventValidationSchema = Yup.object().shape({
   events: Yup.array()
     .min(1, "At least one event date/time is required"),
   
-  eventTour_id: Yup.string()
-    .when([], {
-      is: () => false, // We'll handle this conditionally in component
-      then: (schema) => schema.required("Tour selection is required"),
-      otherwise: (schema) => schema.notRequired()
-    })
+  // Tour event validation - conditionally required based on eventSelectionFlag
+  eventTour_id: eventSelectionFlag === 1 
+    ? Yup.string().required("TourEvent is required")
+    : Yup.string().notRequired()
 })
 
 export default function CreateEvent({ 
@@ -327,6 +327,7 @@ export default function CreateEvent({
   const [artists, setArtists] = React.useState<SelectOption[]>([])
   const [genres, setGenres] = React.useState<SelectOption[]>([])
   const [eventTours, setEventTours] = React.useState<SelectOption[]>([])
+  const [indianLanguages, setIndianLanguages] = React.useState<SelectOption[]>([])
   const [states, setStates] = React.useState<SelectOption[]>([])
   const [cities, setCities] = React.useState<SelectOption[]>([])
 
@@ -337,12 +338,14 @@ export default function CreateEvent({
   const [loadingArtists, setLoadingArtists] = React.useState(false)
   const [loadingGenres, setLoadingGenres] = React.useState(false)
   const [loadingEventTours, setLoadingEventTours] = React.useState(false)
+  const [loadingLanguages, setLoadingLanguages] = React.useState(false)
   const [loadingStates, setLoadingStates] = React.useState(false)
   const [loadingCities, setLoadingCities] = React.useState(false)
 
   // Image state
   const [carouselImages, setCarouselImages] = React.useState<File[]>([])
   const [carouselImagePreviews, setCarouselImagePreviews] = React.useState<string[]>([])
+  const [existingCarouselImages, setExistingCarouselImages] = React.useState<Array<{image_path: string, _id: string}>>([])
   const [galleryImages, setGalleryImages] = React.useState<File[]>([])
   const [galleryImagePreviews, setGalleryImagePreviews] = React.useState<string[]>([])
   const [venueLayoutImage, setVenueLayoutImage] = React.useState<File | null>(null)
@@ -354,6 +357,9 @@ export default function CreateEvent({
   const [showCreateArtistModal, setShowCreateArtistModal] = React.useState(false)
   const [showCreateGenreModal, setShowCreateGenreModal] = React.useState(false)
   const [showCreateEventTourModal, setShowCreateEventTourModal] = React.useState(false)
+
+  // State to track if multi-select fields have been populated (to prevent infinite loops)
+  const [fieldsPopulated, setFieldsPopulated] = React.useState(false)
 
   // Store setFieldValue reference for modal usage
   const [formikSetFieldValue, setFormikSetFieldValue] = React.useState<((field: string, value: any) => void) | null>(null)
@@ -377,11 +383,96 @@ export default function CreateEvent({
     return new Date().toISOString().split('T')[0]
   }, [])
 
+  // Helper function to transform existing EventDateTime data from API format to form format
+  const transformEventDateTime = (apiEventDateTime: any[]): EventDateTime[] => {
+    if (!apiEventDateTime || !Array.isArray(apiEventDateTime)) {
+      return []
+    }
+
+    return apiEventDateTime.map((item: any) => {
+      const startDate = new Date(item.EventStartDateTime || item.eventStartDateTime)
+      const endDate = new Date(item.EventEndDateTime || item.eventEndDateTime)
+
+      return {
+        EventStartDate: startDate.toISOString().split('T')[0],
+        EventStartTime: startDate.toTimeString().slice(0, 5),
+        EventEndDate: endDate.toISOString().split('T')[0],
+        EventEndTime: endDate.toTimeString().slice(0, 5)
+      }
+    })
+  }
+  const transformExistingData = (existingData: any[], availableOptions: SelectOption[], type: string): SelectOption[] => {
+    if (!existingData || !Array.isArray(existingData) || availableOptions.length === 0) {
+      return []
+    }
+
+    const transformed = existingData.map((item: any) => {
+      let id: string = ''
+      
+      if (typeof item === 'string') {
+        id = item
+      } else if (typeof item === 'object' && item !== null) {
+        id = item.organizer_id || item.category_id || item.artist_id || item.genre_id ||
+             item.OrganizerId || item.CategoryId || item.ArtistId || item.GenreId ||
+             item._id || item.id || String(item)
+      }
+
+      const matchingOption = availableOptions.find(option => option.value === id)
+      return matchingOption || null
+    }).filter(Boolean) as SelectOption[]
+
+    return transformed
+  }
+
+  const transformExistingLanguageData = (existingLanguages: any[]): SelectOption[] => {
+    if (!existingLanguages || !Array.isArray(existingLanguages)) {
+      console.log('🔍 transformExistingLanguageData: No language data available')
+      return []
+    }
+
+    const languageMapping: { [key: string]: string } = {
+      'Hindi': 'hi', 'English': 'en', 'Marathi': 'mr', 'Gujarati': 'gu',
+      'Bengali': 'bn', 'Tamil': 'ta', 'Telugu': 'te', 'Kannada': 'kn',
+      'Malayalam': 'ml', 'Punjabi': 'pa', 'Urdu': 'ur', 'Odia': 'or',
+      'Assamese': 'as'
+    }
+
+    const transformed = existingLanguages.map((lang: any) => {
+      let langString = ''
+      
+      if (typeof lang === 'string') {
+        langString = lang
+      } else if (typeof lang === 'object' && lang !== null) {
+        langString = lang.name || lang.label || lang.LanguageName || String(lang)
+      }
+
+      // Try to find by name first
+      const langOption = indianLanguages.find(option => 
+        option.label === langString || 
+        option.value === langString ||
+        option.value === languageMapping[langString]
+      )
+
+      if (langOption) {
+        console.log(`✅ Language matched: ${langString} -> ${langOption.label}`)
+        return langOption
+      } else {
+        console.log(`❌ Language not found: ${langString}`)
+        return null
+      }
+    }).filter(Boolean) as SelectOption[]
+
+    console.log('🔄 transformExistingLanguageData result:', transformed)
+    return transformed
+  }
+
   // Initial form values  // Helper function to get initial values for the form
   const getInitialValues = (): EventFormValues => {
     if (editMode && existingEventData) {
       // Pre-populate form with existing event data
-      return {
+      console.log("🔄 Processing existing event data for edit mode:", existingEventData) // Debug log
+      
+      const initialValues = {
         eventname: existingEventData.EventName || existingEventData.eventName || "",
         eventDescription: existingEventData.EventDescription || existingEventData.eventDescription || "",
         eventTermsandConditions: existingEventData.EventTermsCondition || existingEventData.eventTermsCondition || "",
@@ -390,28 +481,66 @@ export default function CreateEvent({
         eventType: existingEventData.EventType ? existingEventData.EventType.toString() : "1",
         bookingphonenumber: existingEventData.BookingPhoneNumber || existingEventData.bookingPhoneNumber || "",
         whatsappnumber: existingEventData.WhatsappNumber || existingEventData.whatsappNumber || "",
-        locationType: existingEventData.OnlineEventFlag === 1 ? "online" : "venue",
+        locationType: existingEventData.OnlineEventFlag === 1 ? "online" : 
+                     existingEventData.locationType === "tba" ? "tba" : "venue",
         venue_id: existingEventData.venue_id || existingEventData.VenueId || "",
         onlineEventUrl: existingEventData.Online_Event_Link || existingEventData.onlineEventLink || "",
         stateIsoCode: existingEventData.StateIsoCode || existingEventData.stateIsoCode || "",
         stateName: existingEventData.StateName || existingEventData.stateName || "",
         cityIsoCode: existingEventData.CityIsoCode || existingEventData.cityIsoCode || "",
         cityName: existingEventData.CityName || existingEventData.cityName || "",
-        organizers: existingEventData.EventOrganizers || existingEventData.eventOrganizers || [],
-        categories: existingEventData.EventCategories || existingEventData.eventCategories || [],
-        artists: existingEventData.EventArtist || existingEventData.eventArtists || [],
-        genres: existingEventData.EventGenre || existingEventData.eventGenres || [],
-        languages: existingEventData.EventLanguages || existingEventData.eventLanguages || [],
+        
+        // Multi-select fields - transform existing data to proper format
+        organizers: transformExistingData(existingEventData.EventOrganizers || existingEventData.eventOrganizers, organizers, 'organizer'),
+        categories: transformExistingData(existingEventData.EventCategories || existingEventData.eventCategories, categories, 'category'),
+        artists: transformExistingData(existingEventData.EventArtist || existingEventData.eventArtists, artists, 'artist'),
+        genres: transformExistingData(existingEventData.EventGenre || existingEventData.eventGenres, genres, 'genre'),
+        languages: transformExistingLanguageData(existingEventData.EventLanguages || existingEventData.eventLanguages),
+        
         eventTour_id: existingEventData.EventTour_id || existingEventData.eventTour_id || "",
         ageRestriction: existingEventData.AgeRestriction || existingEventData.ageRestriction || "",
         isFeatured: existingEventData.FeaturedEventFlag === 1 || existingEventData.featuredEventFlag === 1 || false,
         feeunit: existingEventData.ConvinienceFeeUnit || existingEventData.convinienceFeeUnit || ConvinienceFeeUnit.Percentage,
         feevalue: existingEventData.ConvinienceFeeValue || existingEventData.convinienceFeeValue || 0,
-        events: existingEventData.arrangedEventDateTime || existingEventData.events || [],
+        events: transformEventDateTime(existingEventData.EventDateTime || existingEventData.arrangedEventDateTime || []),
         faqs: existingEventData.EventFAQs || existingEventData.eventFAQs || []
       }
+      
+      // Debug: Check event dates specifically
+      console.log("🗓️ Event dates debug:", {
+        'existingEventData.EventDateTime': existingEventData.EventDateTime,
+        'existingEventData.arrangedEventDateTime': existingEventData.arrangedEventDateTime,
+        'existingEventData.events': existingEventData.events,
+        'final events value': initialValues.events,
+        'events length': initialValues.events?.length
+      })
+      
+      console.log("✅ Initial values with populated multi-selects:", {
+        organizers: initialValues.organizers.length,
+        categories: initialValues.categories.length,
+        artists: initialValues.artists.length,
+        genres: initialValues.genres.length,
+        languages: initialValues.languages.length,
+        details: initialValues
+      })
+      console.log("📋 Raw data for multi-select matching:", {
+        'Raw Organizers': existingEventData.EventOrganizers || existingEventData.eventOrganizers,
+        'Raw Categories': existingEventData.EventCategories || existingEventData.eventCategories, 
+        'Raw Artists': existingEventData.EventArtist || existingEventData.eventArtists,
+        'Raw Genres': existingEventData.EventGenre || existingEventData.eventGenres,
+        'Raw Languages': existingEventData.EventLanguages || existingEventData.eventLanguages,
+        'Options availability': {
+          organizers: organizers.length,
+          categories: categories.length,
+          artists: artists.length,
+          genres: genres.length,
+          languages: indianLanguages.length
+        }
+      })
+      return initialValues
     }
     
+    console.log("🆕 Using default values for create mode")
     // Default values for create mode
     return {
       eventname: "",
@@ -444,7 +573,6 @@ export default function CreateEvent({
     }
   }
 
-  const initialValues: EventFormValues = getInitialValues()
   // API utility function
   const getApiEndpoint = (endpoint: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -459,6 +587,7 @@ export default function CreateEvent({
     fetchCategories()
     fetchArtists()
     fetchGenres()
+    fetchLanguages()
     fetchStates()
     if (eventSelectionFlag === 1) {
       fetchEventTours()
@@ -646,6 +775,33 @@ export default function CreateEvent({
       console.error("Error fetching states:", error)
     } finally {
       setLoadingStates(false)
+    }
+  }
+
+  const fetchLanguages = async () => {
+    try {
+      setLoadingLanguages(true)
+      // Static Indian languages data
+      const languages = [
+        { value: "hi", label: "Hindi" },
+        { value: "en", label: "English" },
+        { value: "mr", label: "Marathi" },
+        { value: "gu", label: "Gujarati" },
+        { value: "bn", label: "Bengali" },
+        { value: "ta", label: "Tamil" },
+        { value: "te", label: "Telugu" },
+        { value: "kn", label: "Kannada" },
+        { value: "ml", label: "Malayalam" },
+        { value: "pa", label: "Punjabi" },
+        { value: "ur", label: "Urdu" },
+        { value: "or", label: "Odia" },
+        { value: "as", label: "Assamese" }
+      ]
+      setIndianLanguages(languages)
+    } catch (error) {
+      console.error("Error fetching languages:", error)
+    } finally {
+      setLoadingLanguages(false)
     }
   }
 
@@ -919,18 +1075,40 @@ export default function CreateEvent({
       // Additional validation for tour events
       if (eventSelectionFlag === 1 && !values.eventTour_id) {
         toast({
-          title: "Validation Error",
-          description: "Please select a tour for this event",
+          title: "TourEvent is required",
+          description: "Please select a tour for this event before publishing",
           variant: "destructive"
         })
         return
       }
 
-      // Validate images (less strict for edit mode)
+      // Validate images - in edit mode, we allow no new images if there are existing ones
       if (!editMode && carouselImages.length === 0) {
         toast({
           title: "Validation Error",
           description: "Please upload at least one carousel image",
+          variant: "destructive"
+        })
+        return
+      }
+      
+      // In edit mode, if there are existing images, new uploads are optional
+      if (editMode && carouselImages.length === 0 && existingCarouselImages.length === 0) {
+        toast({
+          title: "Validation Error", 
+          description: "Please upload at least one carousel image or keep existing images",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Validate EventDateTime - must have at least one event date/time
+      if (!values.events || values.events.length === 0) {
+        toast({
+          title: "Validation Error",
+          description: editMode 
+            ? "No event dates found. Please add at least one event date and time." 
+            : "Please add at least one event date and time",
           variant: "destructive"
         })
         return
@@ -946,82 +1124,142 @@ export default function CreateEvent({
       
       // Add carousel images (only if new ones are uploaded)
       if (carouselImages.length > 0) {
-        carouselImages.forEach((image) => {
-          submitData.append("carouselImages", image)
+        carouselImages.forEach((image, index) => {
+          submitData.append("CarouselImages", image, `carousel_${index}.${image.name.split('.').pop()}`)
         })
       }
 
       // Add gallery images if any
       if (galleryImages.length > 0) {
-        galleryImages.forEach((image) => {
-          submitData.append("galleryImages", image)
+        galleryImages.forEach((image, index) => {
+          submitData.append("GalleryImages", image, `gallery_${index}.${image.name.split('.').pop()}`)
         })
       }
 
       // Add venue layout image if applicable
       if (venueLayoutImage && values.locationType === "venue") {
-        submitData.append("venueLayoutImage", venueLayoutImage)
+        submitData.append("VenueLayoutImage", venueLayoutImage, `layout.${venueLayoutImage.name.split('.').pop()}`)
       }
 
       // Add form data using the exact field names required by the API
-      submitData.append("eventname", values.eventname)
-      submitData.append("eventDescription", values.eventDescription)
-      submitData.append("eventTermsandConditions", values.eventTermsandConditions)
-      submitData.append("eventVisibility", values.eventVisibility)
-      submitData.append("eventType", values.eventType)
-      submitData.append("locationType", values.locationType)
-      submitData.append("isFeatured", values.isFeatured ? "1" : "0")
-      submitData.append("feeunit", values.feeunit.toString())
-      submitData.append("feevalue", values.feevalue.toString())
-      submitData.append("ageRestriction", values.ageRestriction)
-      submitData.append("status", eventStatus === EventStatus.Draft ? "draft" : "published")
+      submitData.append("EventName", values.eventname || "")
+      submitData.append("EventDescription", values.eventDescription || "")
+      submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
+      submitData.append("EventVisibility", values.eventVisibility || "1")
+      submitData.append("EventType", values.eventType || "1")
+      submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
+      submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
+      submitData.append("ConvinienceFeeValue", (values.feevalue || 0).toString())
+      submitData.append("Status", eventStatus === EventStatus.Draft ? "1" : "3")
 
-      // Add conditional fields
-      if (values.eventVideoUrl) {
-        submitData.append("eventVideoUrl", values.eventVideoUrl)
+      // Add conditional fields only if they have values
+      if (values.eventVideoUrl && values.eventVideoUrl.trim && values.eventVideoUrl.trim()) {
+        submitData.append("EventVideoUrl", values.eventVideoUrl.trim())
       }
 
-      if (values.eventType === "1" && values.bookingphonenumber) {
-        submitData.append("bookingphonenumber", values.bookingphonenumber)
+      if (values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
+        submitData.append("BookingPhoneNumber", values.bookingphonenumber.trim())
       }
 
-      if (values.eventType === "3" && values.whatsappnumber) {
-        submitData.append("whatsappnumber", values.whatsappnumber)
+      if (values.eventType === "3" && values.whatsappnumber && values.whatsappnumber.trim && values.whatsappnumber.trim()) {
+        submitData.append("WhatsappNumber", values.whatsappnumber.trim())
       }
 
-      // Add location-specific data
-      if (values.locationType === "venue") {
+      // Add location-specific data with correct field names
+      if (values.locationType === "venue" && values.venue_id) {
         submitData.append("venue_id", values.venue_id)
-      } else if (values.locationType === "online") {
-        submitData.append("onlineEventUrl", values.onlineEventUrl)
+        submitData.append("VenueEventFlag", "1")
+        submitData.append("OnlineEventFlag", "0")
+        submitData.append("VenueToBeAnnounced", "0")
+      } else if (values.locationType === "online" && values.onlineEventUrl && values.onlineEventUrl.trim && values.onlineEventUrl.trim()) {
+        submitData.append("Online_Event_Link", values.onlineEventUrl.trim())
+        submitData.append("OnlineEventFlag", "1")
+        submitData.append("VenueEventFlag", "0")
+        submitData.append("VenueToBeAnnounced", "0")
       } else if (values.locationType === "tba") {
-        submitData.append("stateIsoCode", values.stateIsoCode)
-        submitData.append("stateName", values.stateName)
-        submitData.append("cityIsoCode", values.cityIsoCode)
-        submitData.append("cityName", values.cityName)
+        submitData.append("VenueToBeAnnounced", "1")
+        submitData.append("VenueEventFlag", "0")
+        submitData.append("OnlineEventFlag", "0")
+        if (values.stateIsoCode) submitData.append("StateIsoCode", values.stateIsoCode)
+        if (values.stateName) submitData.append("StateName", values.stateName)
+        if (values.cityIsoCode) submitData.append("CityIsoCode", values.cityIsoCode)
+        if (values.cityName) submitData.append("CityName", values.cityName)
       }
 
-      // Add relationship arrays
-      submitData.append("organizers", JSON.stringify(values.organizers.map(o => o.value)))
-      submitData.append("categories", JSON.stringify(values.categories.map(c => c.value)))
-      submitData.append("artists", JSON.stringify(values.artists.map(a => a.value)))
-      submitData.append("genres", JSON.stringify(values.genres.map(g => g.value)))
-      submitData.append("languages", JSON.stringify(values.languages.map(l => l.value)))
+      // Add relationship arrays only if they have values - matching API format
+      if (values.organizers && values.organizers.length > 0) {
+        const organizersArray = values.organizers.map(o => ({ organizer_id: o.value }))
+        submitData.append("EventOrganizers", JSON.stringify(organizersArray))
+      }
+      if (values.categories && values.categories.length > 0) {
+        const categoriesArray = values.categories.map(c => ({ category_id: c.value }))
+        submitData.append("EventCategories", JSON.stringify(categoriesArray))
+      }
+      if (values.artists && values.artists.length > 0) {
+        const artistsArray = values.artists.map(a => ({ artist_id: a.value }))
+        submitData.append("EventArtist", JSON.stringify(artistsArray))
+      }
+      if (values.genres && values.genres.length > 0) {
+        const genresArray = values.genres.map(g => ({ genre_id: g.value }))
+        submitData.append("EventGenre", JSON.stringify(genresArray))
+      }
+      if (values.languages && values.languages.length > 0) {
+        const languagesArray = values.languages.map(l => l.value)
+        submitData.append("EventLanguages", JSON.stringify(languagesArray))
+      }
 
       // Add tour ID if applicable
       if (eventSelectionFlag === 1 && values.eventTour_id) {
-        submitData.append("eventTour_id", values.eventTour_id)
+        submitData.append("EventTour_id", values.eventTour_id)
+        submitData.append("TourEvent", "1")
+      } else {
+        submitData.append("TourEvent", "0")
       }
 
-      // Add events and FAQs
-      submitData.append("events", JSON.stringify(values.events))
-      submitData.append("faqs", JSON.stringify(values.faqs))
-
-      // Add administrative fields
-      if (user) {
-        submitData.append("createdBy", user.AdminRole || role)
-        submitData.append("createdUserId", user.user_id)
+      // Add events data - different handling for create vs edit mode
+      if (!editMode) {
+        // CREATE MODE: Send full event date/time data
+        if (values.events && values.events.length > 0) {
+          const firstEvent = values.events[0]
+          
+          // Convert back to datetime format for API
+          const startDateTime = new Date(`${firstEvent.EventStartDate}T${firstEvent.EventStartTime}:00.000Z`)
+          const endDateTime = new Date(`${firstEvent.EventEndDate}T${firstEvent.EventEndTime}:00.000Z`)
+          
+          // For create mode, try the field names that work for new events
+          submitData.append("startDateTime", startDateTime.toISOString())
+          submitData.append("endDateTime", endDateTime.toISOString())
+          
+          // Also try separate date and time fields
+          submitData.append("eventStartDate", firstEvent.EventStartDate)
+          submitData.append("eventStartTime", firstEvent.EventStartTime)
+          submitData.append("eventEndDate", firstEvent.EventEndDate)
+          submitData.append("eventEndTime", firstEvent.EventEndTime)
+        }
       }
+      // EDIT MODE: Skip date/time fields (handled separately by API)
+      
+      if (values.faqs && values.faqs.length > 0) {
+        // Clean FAQ data by removing _id fields that are not allowed by the API
+        const cleanedFAQs = values.faqs.map((faq: any) => ({
+          Question: faq.Question,
+          Answer: faq.Answer
+        }))
+        submitData.append("EventFAQs", JSON.stringify(cleanedFAQs))
+      }
+
+      // Add administrative fields (CREATE MODE ONLY)
+      if (!editMode && user) {
+        if (user.AdminRole || role) {
+          submitData.append("CreatedBy", "1")
+        }
+        if (user.user_id) {
+          submitData.append("createduser_id", user.user_id)
+        }
+      }
+
+      // Add BestSuitedFor field
+      submitData.append("BestSuitedFor", "1")
 
       // Submit to API
       const authToken = getValidToken()
@@ -1194,8 +1432,13 @@ export default function CreateEvent({
       </Card>
 
       <Formik
-        initialValues={initialValues}
-        validationSchema={eventValidationSchema}
+        key={`${organizers.length}-${categories.length}-${artists.length}-${genres.length}-${indianLanguages.length}`}
+        initialValues={React.useMemo(() => getInitialValues(), [
+          editMode, existingEventData,
+          organizers.length, categories.length, artists.length, genres.length, indianLanguages.length
+        ])}
+        enableReinitialize={true} // Re-initialize when existingEventData changes
+        validationSchema={getEventValidationSchema(eventSelectionFlag ?? 0)}
         onSubmit={() => {}} // We handle submission manually through buttons
       >
         {({ values, errors, touched, setFieldValue, setFieldTouched }: FormikProps<EventFormValues>) => {
@@ -1203,6 +1446,264 @@ export default function CreateEvent({
           React.useEffect(() => {
             setFormikSetFieldValue(() => setFieldValue)
           }, [setFieldValue])
+
+          // Load existing carousel images in edit mode
+          React.useEffect(() => {
+            if (editMode && existingEventData && existingEventData.EventCarouselImages) {
+              console.log("🖼️ Loading existing carousel images:", existingEventData.EventCarouselImages)
+              setExistingCarouselImages(existingEventData.EventCarouselImages)
+            }
+          }, [editMode, existingEventData])
+
+          // Effect to populate multi-select fields when both existingEventData and options are loaded
+          // NOTE: This is now handled in getInitialValues() directly, but keeping for reference
+          React.useEffect(() => {
+            console.log("🔄 useEffect triggered for field population:", {
+              editMode,
+              hasExistingData: !!existingEventData,
+              fieldsPopulated,
+              organizersLength: organizers.length,
+              categoriesLength: categories.length,
+              artistsLength: artists.length,
+              genresLength: genres.length,
+              languagesLength: indianLanguages.length,
+              eventToursLength: eventTours.length,
+              eventSelectionFlag
+            })
+
+            // Guards: Only run in edit mode when all required data is available and fields haven't been populated yet
+            if (!editMode || !existingEventData || fieldsPopulated) {
+              console.log("🚫 Skipping field population:", { 
+                editMode, 
+                hasExistingData: !!existingEventData,
+                fieldsPopulated 
+              })
+              return
+            }
+            
+            console.log("🔄 ALL OPTIONS LOADED - Populating multi-select fields with existing data...")
+            
+            // Wait for ALL option arrays to load before proceeding
+            if (organizers.length === 0 || categories.length === 0 || 
+                artists.length === 0 || genres.length === 0 || indianLanguages.length === 0) {
+              console.log("⏳ Waiting for options to load:", {
+                organizers: organizers.length,
+                categories: categories.length,
+                artists: artists.length,
+                genres: genres.length,
+                languages: indianLanguages.length,
+                eventTours: eventTours.length
+              })
+              return
+            }
+            
+            // For tour events, also wait for event tours to load
+            if (eventSelectionFlag === 1 && eventTours.length === 0) {
+              console.log("⏳ Waiting for event tours to load for tour event...")
+              return
+            }
+            
+            console.log("🔍 Raw relationship arrays:", {
+              EventOrganizers: existingEventData.EventOrganizers,
+              eventOrganizers: existingEventData.eventOrganizers,
+              EventCategories: existingEventData.EventCategories,
+              eventCategories: existingEventData.eventCategories,
+              EventArtist: existingEventData.EventArtist,
+              eventArtists: existingEventData.eventArtists,
+              EventGenre: existingEventData.EventGenre,
+              eventGenres: existingEventData.eventGenres,
+              EventLanguages: existingEventData.EventLanguages,
+              eventLanguages: existingEventData.eventLanguages
+            })
+            
+            // Helper function to extract IDs from various data formats
+            const extractIds = (dataArray: any[]): string[] => {
+              if (!Array.isArray(dataArray)) {
+                console.log("⚠️ extractIds: Not an array:", dataArray)
+                return []
+              }
+              
+              console.log("🔍 extractIds input:", dataArray)
+              
+              const extractedIds = dataArray.map(item => {
+                console.log("Processing item:", item, "Type:", typeof item)
+                
+                if (typeof item === 'string') {
+                  console.log("  → String ID:", item)
+                  // For languages, convert names to codes
+                  if (item === 'Hindi') return 'hi'
+                  if (item === 'English') return 'en'
+                  if (item === 'Marathi') return 'mr'
+                  if (item === 'Gujarati') return 'gu'
+                  if (item === 'Bengali') return 'bn'
+                  if (item === 'Tamil') return 'ta'
+                  if (item === 'Telugu') return 'te'
+                  if (item === 'Kannada') return 'kn'
+                  if (item === 'Malayalam') return 'ml'
+                  if (item === 'Punjabi') return 'pa'
+                  if (item === 'Urdu') return 'ur'
+                  if (item === 'Odia') return 'or'
+                  if (item === 'Assamese') return 'as'
+                  return item
+                }
+                if (typeof item === 'number') {
+                  console.log("  → Number ID:", String(item))
+                  return String(item)
+                }
+                if (item && typeof item === 'object') {
+                  // Handle different ID field variations from API
+                  const id = item.organizer_id || item.category_id || item.artist_id || item.genre_id ||
+                         item._id || item.id || item.OrganizerId || 
+                         item.CategoryId || item.ArtistId || item.GenreId || 
+                         item.LanguageId || item.LanguageCode || String(item)
+                  console.log("  → Object ID:", id, "from fields:", {
+                    organizer_id: item.organizer_id,
+                    category_id: item.category_id,
+                    artist_id: item.artist_id,
+                    genre_id: item.genre_id,
+                    _id: item._id,
+                    id: item.id,
+                    OrganizerId: item.OrganizerId,
+                    CategoryId: item.CategoryId,
+                    ArtistId: item.ArtistId,
+                    GenreId: item.GenreId,
+                    LanguageId: item.LanguageId,
+                    LanguageCode: item.LanguageCode
+                  })
+                  return id
+                }
+                console.log("  → Unknown format, returning null")
+                return null
+              }).filter(Boolean) // Remove any null/undefined values
+              
+              console.log("🔍 extractIds output:", extractedIds)
+              return extractedIds
+            }
+
+            // Extract ID arrays from existingEventData
+            const organizerIds = extractIds(existingEventData.EventOrganizers || existingEventData.eventOrganizers || [])
+            const categoryIds = extractIds(existingEventData.EventCategories || existingEventData.eventCategories || [])
+            const artistIds = extractIds(existingEventData.EventArtist || existingEventData.eventArtists || [])
+            const genreIds = extractIds(existingEventData.EventGenre || existingEventData.eventGenres || [])
+            const languageIds = extractIds(existingEventData.EventLanguages || existingEventData.eventLanguages || [])
+            
+            console.log("📋 Extracted IDs:", { organizerIds, categoryIds, artistIds, genreIds, languageIds })
+            
+            // Filter and set each field value
+            const selectedOrganizers = organizers.filter(o => {
+              const isMatch = organizerIds.includes(o.value)
+              console.log(`Organizer ${o.value} (${o.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
+              return isMatch
+            })
+            
+            const selectedCategories = categories.filter(c => {
+              const isMatch = categoryIds.includes(c.value)
+              console.log(`Category ${c.value} (${c.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
+              return isMatch
+            })
+            
+            const selectedArtists = artists.filter(a => {
+              const isMatch = artistIds.includes(a.value)
+              console.log(`Artist ${a.value} (${a.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
+              return isMatch
+            })
+            
+            const selectedGenres = genres.filter(g => {
+              const isMatch = genreIds.includes(g.value)
+              console.log(`Genre ${g.value} (${g.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
+              return isMatch
+            })
+            
+            const selectedLanguages = indianLanguages.filter(l => {
+              const isMatch = languageIds.includes(l.value)
+              console.log(`Language ${l.value} (${l.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
+              return isMatch
+            })
+            
+            console.log("✅ Filtered selections:", {
+              selectedOrganizers,
+              selectedCategories,
+              selectedArtists,
+              selectedGenres,
+              selectedLanguages
+            })
+            
+            // Set field values
+            console.log("✅ Debug log fixed")
+            setFieldValue('organizers', selectedOrganizers, false)
+            setFieldValue('categories', selectedCategories, false)
+            setFieldValue('artists', selectedArtists, false)
+            setFieldValue('genres', selectedGenres, false)
+            setFieldValue('languages', selectedLanguages, false)
+            
+            // Set tour event ID if this is a tour event
+            const tourEventId = existingEventData.EventTour_id || existingEventData.eventTour_id || existingEventData.tour_id || existingEventData.TourId || ""
+            if (eventSelectionFlag === 1 && tourEventId) {
+              setFieldValue('eventTour_id', tourEventId, false)
+              console.log("✅ Set tour event ID:", tourEventId)
+            }
+
+            console.log("✅ All multi-select fields have been set!")
+            
+            // Mark fields as populated to prevent re-execution
+            setFieldsPopulated(true)
+            
+            // Log current form values to verify they were set correctly
+            console.log("📊 Current form values after setFieldValue:", {
+              organizers: values.organizers,
+              categories: values.categories,
+              artists: values.artists,
+              genres: values.genres,
+              languages: values.languages
+            })
+          }, [
+            editMode, 
+            existingEventData, 
+            fieldsPopulated,
+            organizers.length, 
+            categories.length, 
+            artists.length, 
+            genres.length,
+            indianLanguages.length,
+            eventTours.length,
+            setFieldValue
+          ])
+
+          // Debug useEffect to monitor form values in real-time
+          React.useEffect(() => {
+            console.log("🔍 Form values changed:", {
+              organizers: {
+                value: values.organizers,
+                length: values.organizers?.length,
+                type: typeof values.organizers,
+                sample: values.organizers?.[0]
+              },
+              categories: {
+                value: values.categories,
+                length: values.categories?.length,
+                type: typeof values.categories,
+                sample: values.categories?.[0]
+              },
+              artists: {
+                value: values.artists,
+                length: values.artists?.length,
+                type: typeof values.artists,
+                sample: values.artists?.[0]
+              },
+              genres: {
+                value: values.genres,
+                length: values.genres?.length,
+                type: typeof values.genres,
+                sample: values.genres?.[0]
+              },
+              languages: {
+                value: values.languages,
+                length: values.languages?.length,
+                type: typeof values.languages,
+                sample: values.languages?.[0]
+              }
+            })
+          }, [values.organizers, values.categories, values.artists, values.genres, values.languages])
 
           return (
           <Form>
@@ -1245,6 +1746,62 @@ export default function CreateEvent({
                       </div>
                     </div>
 
+                    {/* Display existing carousel images (edit mode) */}
+                    {editMode && existingCarouselImages.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="text-sm font-medium text-gray-700 mb-2">Current Images</h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          {existingCarouselImages.map((image, index) => {
+                            const imageUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'}/${image.image_path}`
+                            console.log("🖼️ Loading carousel image:", {
+                              imagePath: image.image_path,
+                              fullUrl: imageUrl,
+                              apiUrl: process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+                            })
+                            
+                            return (
+                            <div key={image._id} className="relative">
+                              <img
+                                src={imageUrl}
+                                alt={`Existing Carousel ${index + 1}`}
+                                className="w-full h-24 object-cover rounded"
+                                onError={(e) => {
+                                  console.error("❌ Failed to load carousel image:", {
+                                    imagePath: image.image_path,
+                                    fullUrl: imageUrl,
+                                    error: e
+                                  });
+                                  (e.target as HTMLImageElement).src = "/placeholder.jpg";
+                                }}
+                                onLoad={() => {
+                                  console.log("✅ Successfully loaded carousel image:", imageUrl)
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                className="absolute top-1 right-1 h-6 w-6 p-0"
+                                onClick={() => {
+                                  setExistingCarouselImages(prev => 
+                                    prev.filter(img => img._id !== image._id)
+                                  )
+                                }}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                              {index === 0 && (
+                                <Badge className="absolute bottom-1 left-1 text-xs">
+                                  Thumbnail
+                                </Badge>
+                              )}
+                            </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Display uploaded carousel images */}
                     {carouselImagePreviews.length > 0 && (
                       <div className="grid grid-cols-3 gap-4">
@@ -1264,7 +1821,7 @@ export default function CreateEvent({
                             >
                               <X className="h-3 w-3" />
                             </Button>
-                            {index === 0 && (
+                            {index === 0 && existingCarouselImages.length === 0 && (
                               <Badge className="absolute bottom-1 left-1 text-xs">
                                 Thumbnail
                               </Badge>
@@ -1273,7 +1830,10 @@ export default function CreateEvent({
                         ))}
                       </div>
                     )}
-                    {carouselImages.length === 0 && (
+                    {!editMode && carouselImages.length === 0 && (
+                      <p className="text-sm text-red-600">At least one carousel image is required</p>
+                    )}
+                    {editMode && existingCarouselImages.length === 0 && carouselImages.length === 0 && (
                       <p className="text-sm text-red-600">At least one carousel image is required</p>
                     )}
                   </CardContent>
@@ -1286,7 +1846,8 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Organizers</Label>                      <Select
+                      <Label>Select Organizers</Label>
+                      <Select
                         isMulti
                         options={organizers}
                         value={values.organizers}
@@ -1389,6 +1950,7 @@ export default function CreateEvent({
                         value={values.languages}
                         onChange={(selected) => setFieldValue("languages", selected || [])}
                         placeholder="Select languages..."
+                        isLoading={loadingLanguages}
                         className="basic-multi-select"
                         classNamePrefix="select"
                         styles={getSelectStyles()}
@@ -1795,6 +2357,15 @@ export default function CreateEvent({
                       </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Debug info for development */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="p-2 bg-gray-100 rounded text-xs">
+                          <strong>Debug:</strong> eventTour_id = "{values.eventTour_id}" | 
+                          Tours loaded: {eventTours.length} | 
+                          EventSelectionFlag: {eventSelectionFlag}
+                        </div>
+                      )}
+                      
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Available Tours</Label>
                         <Select
@@ -1888,7 +2459,9 @@ export default function CreateEvent({
                     {values.events.length > 0 && (
                       <div className="space-y-2">
                         <Label>Scheduled Events:</Label>
-                        {values.events.map((event: EventDateTime, index: number) => (
+                        {values.events.map((event: EventDateTime, index: number) => {
+                          console.log("🗓️ Displaying event date:", event)
+                          return (
                           <div key={index} className="flex items-center justify-between p-3 border rounded">
                             <div className="text-sm">
                               <p><strong>Date:</strong> {new Date(event.EventStartDate).toLocaleDateString()} - {new Date(event.EventEndDate).toLocaleDateString()}</p>
@@ -1903,7 +2476,8 @@ export default function CreateEvent({
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}                    {touched.events && errors.events && (
                       <p className="text-sm text-red-600">{String(errors.events)}</p>
@@ -2758,3 +3332,5 @@ export default function CreateEvent({
     </div>
   )
 }
+
+

@@ -13,7 +13,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { eventEndPoint } from "@/lib/api-endpoints"
 
 interface EditEventPageProps {
-  params: { role: UserRole; eventId: string } | Promise<{ role: UserRole; eventId: string }>
+  params: Promise<{ role: UserRole; eventId: string }>
 }
 
 export default function EditEventPage({ params }: EditEventPageProps) {
@@ -21,22 +21,11 @@ export default function EditEventPage({ params }: EditEventPageProps) {
   const { user } = useAuth()
   const { toast } = useToast()
   
-  // Handle both sync and async params
-  const [role, setRole] = React.useState<UserRole | null>(null)
-  const [eventId, setEventId] = React.useState<string | null>(null)
+  // Use React.use() for async params
+  const { role, eventId } = React.use(params)
   const [eventData, setEventData] = React.useState<any>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  
-  React.useEffect(() => {
-    const resolveParams = async () => {
-      const resolvedParams = await Promise.resolve(params)
-      setRole(resolvedParams.role)
-      setEventId(resolvedParams.eventId)
-    }
-    
-    resolveParams()
-  }, [params])
 
   // Fetch event data for editing
   React.useEffect(() => {
@@ -71,6 +60,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
         const result = await response.json()
         
         if (result.data) {
+          console.log("Fetched event data:", result.data) // Debug log
           setEventData(result.data)
         } else {
           throw new Error("Event not found")
@@ -89,9 +79,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       }
     }
 
-    if (eventId && user) {
-      fetchEventData()
-    }
+    fetchEventData()
   }, [eventId, user, toast])
 
   const handleBackToEvents = () => {
@@ -107,7 +95,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
     router.push(`/${role}/events`)
   }
 
-  if (!role || !eventId) {
+  if (!eventId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
