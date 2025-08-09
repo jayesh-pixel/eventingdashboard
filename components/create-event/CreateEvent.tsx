@@ -426,7 +426,7 @@ export default function CreateEvent({
 
   const transformExistingLanguageData = (existingLanguages: any[]): SelectOption[] => {
     if (!existingLanguages || !Array.isArray(existingLanguages)) {
-      console.log('🔍 transformExistingLanguageData: No language data available')
+      // console.log('🔍 transformExistingLanguageData: No language data available')
       return []
     }
 
@@ -454,15 +454,15 @@ export default function CreateEvent({
       )
 
       if (langOption) {
-        console.log(`✅ Language matched: ${langString} -> ${langOption.label}`)
+        // console.log(`✅ Language matched: ${langString} -> ${langOption.label}`)
         return langOption
       } else {
-        console.log(`❌ Language not found: ${langString}`)
+        // console.log(`❌ Language not found: ${langString}`)
         return null
       }
     }).filter(Boolean) as SelectOption[]
 
-    console.log('🔄 transformExistingLanguageData result:', transformed)
+    // console.log('🔄 transformExistingLanguageData result:', transformed)
     return transformed
   }
 
@@ -470,7 +470,7 @@ export default function CreateEvent({
   const getInitialValues = (): EventFormValues => {
     if (editMode && existingEventData) {
       // Pre-populate form with existing event data
-      console.log("🔄 Processing existing event data for edit mode:", existingEventData) // Debug log
+      // console.log("🔄 Processing existing event data for edit mode:", existingEventData) // Debug log
       
       const initialValues = {
         eventname: existingEventData.EventName || existingEventData.eventName || "",
@@ -507,40 +507,40 @@ export default function CreateEvent({
       }
       
       // Debug: Check event dates specifically
-      console.log("🗓️ Event dates debug:", {
-        'existingEventData.EventDateTime': existingEventData.EventDateTime,
-        'existingEventData.arrangedEventDateTime': existingEventData.arrangedEventDateTime,
-        'existingEventData.events': existingEventData.events,
-        'final events value': initialValues.events,
-        'events length': initialValues.events?.length
-      })
+      // console.log("🗓️ Event dates debug:", {
+      //   'existingEventData.EventDateTime': existingEventData.EventDateTime,
+      //   'existingEventData.arrangedEventDateTime': existingEventData.arrangedEventDateTime,
+      //   'existingEventData.events': existingEventData.events,
+      //   'final events value': initialValues.events,
+      //   'events length': initialValues.events?.length
+      // })
       
-      console.log("✅ Initial values with populated multi-selects:", {
-        organizers: initialValues.organizers.length,
-        categories: initialValues.categories.length,
-        artists: initialValues.artists.length,
-        genres: initialValues.genres.length,
-        languages: initialValues.languages.length,
-        details: initialValues
-      })
-      console.log("📋 Raw data for multi-select matching:", {
-        'Raw Organizers': existingEventData.EventOrganizers || existingEventData.eventOrganizers,
-        'Raw Categories': existingEventData.EventCategories || existingEventData.eventCategories, 
-        'Raw Artists': existingEventData.EventArtist || existingEventData.eventArtists,
-        'Raw Genres': existingEventData.EventGenre || existingEventData.eventGenres,
-        'Raw Languages': existingEventData.EventLanguages || existingEventData.eventLanguages,
-        'Options availability': {
-          organizers: organizers.length,
-          categories: categories.length,
-          artists: artists.length,
-          genres: genres.length,
-          languages: indianLanguages.length
-        }
-      })
+      // console.log("✅ Initial values with populated multi-selects:", {
+      //   organizers: initialValues.organizers.length,
+      //   categories: initialValues.categories.length,
+      //   artists: initialValues.artists.length,
+      //   genres: initialValues.genres.length,
+      //   languages: initialValues.languages.length,
+      //   details: initialValues
+      // })
+      // console.log("📋 Raw data for multi-select matching:", {
+      //   'Raw Organizers': existingEventData.EventOrganizers || existingEventData.eventOrganizers,
+      //   'Raw Categories': existingEventData.EventCategories || existingEventData.eventCategories, 
+      //   'Raw Artists': existingEventData.EventArtist || existingEventData.eventArtists,
+      //   'Raw Genres': existingEventData.EventGenre || existingEventData.eventGenres,
+      //   'Raw Languages': existingEventData.EventLanguages || existingEventData.eventLanguages,
+      //   'Options availability': {
+      //     organizers: organizers.length,
+      //     categories: categories.length,
+      //     artists: artists.length,
+      //     genres: genres.length,
+      //     languages: indianLanguages.length
+      //   }
+      // })
       return initialValues
     }
     
-    console.log("🆕 Using default values for create mode")
+    // console.log("🆕 Using default values for create mode")
     // Default values for create mode
     return {
       eventname: "",
@@ -606,12 +606,10 @@ export default function CreateEvent({
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Venues data:", data) // Debug log
         const venueOptions = data.data.map((venue: any) => ({
           value: venue._id || venue.id,
           label: venue.Name || "Unnamed Venue"
         }))
-        console.log("Venue options:", venueOptions) // Debug log
         setVenues([...venueOptions, createVenueOption])
       } else {
         console.error("Failed to fetch venues:", response.status, response.statusText)
@@ -634,7 +632,6 @@ export default function CreateEvent({
 
       if (response.ok) {
         const data = await response.json()
-        console.log("Organizers data:", data) // Debug log
         const organizerOptions = data.data.map((organizer: any) => {
           const label =  organizer.Username || organizer.FullName || organizer.Name || "Unnamed Organizer"
           console.log(`Organizer: ${organizer._id}, CompanyName: ${organizer.CompanyName}, Username: ${organizer.Username}, FullName: ${organizer.FullName}, Selected Label: ${label}`)
@@ -643,7 +640,6 @@ export default function CreateEvent({
             label: label
           }
         })
-        console.log("Organizer options:", organizerOptions) // Debug log
         setOrganizers([...organizerOptions, createOrganizerOption])
       }
     } catch (error) {
@@ -1412,24 +1408,26 @@ export default function CreateEvent({
   }
 
   return (
-    <div className="max-w-7xl mx-auto p-6 space-y-6">
-      {/* Page Header */}
-      <Card>
-        <CardHeader>          <CardTitle className="text-2xl">
-            {editMode 
-              ? (eventSelectionFlag === 1 ? 'Edit Tour Event' : 'Edit Event')
-              : (eventSelectionFlag === 1 ? 'Create Tour Event' : 'Create Event')
-            }
-          </CardTitle>
-          <p className="text-muted-foreground">
-            {editMode 
-              ? `Update the details below to modify your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
-              : `Fill in the details below to create your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
-            }
-            Fields marked with * are required.
-          </p>
-        </CardHeader>
-      </Card>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Page Header */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-2xl">
+              {editMode 
+                ? (eventSelectionFlag === 1 ? 'Edit Tour Event' : 'Edit Event')
+                : (eventSelectionFlag === 1 ? 'Create Tour Event' : 'Create Event')
+              }
+            </CardTitle>
+            <p className="text-muted-foreground">
+              {editMode 
+                ? `Update the details below to modify your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
+                : `Fill in the details below to create your ${eventSelectionFlag === 1 ? 'tour ' : ''}event.`
+              }
+              Fields marked with * are required.
+            </p>
+          </CardHeader>
+        </Card>
 
       <Formik
         key={`${organizers.length}-${categories.length}-${artists.length}-${genres.length}-${indianLanguages.length}`}
@@ -1629,7 +1627,6 @@ export default function CreateEvent({
             })
             
             // Set field values
-            console.log("✅ Debug log fixed")
             setFieldValue('organizers', selectedOrganizers, false)
             setFieldValue('categories', selectedCategories, false)
             setFieldValue('artists', selectedArtists, false)
@@ -1722,7 +1719,7 @@ export default function CreateEvent({
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                    <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-6 hover:border-muted-foreground/50 transition-colors">
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <input
                           type="file"
@@ -1734,13 +1731,13 @@ export default function CreateEvent({
                         />
                         <label htmlFor="carousel-upload" className="cursor-pointer">
                           <div className="flex flex-col items-center space-y-2">
-                            <ImagePlus className="h-12 w-12 text-gray-400" />
-                            <p className="text-gray-500">Upload Carousel Images</p>
+                            <ImagePlus className="h-12 w-12 text-muted-foreground" />
+                            <p className="text-muted-foreground">Upload Carousel Images</p>
                           </div>
                         </label>
                       </div>
                       <div className="flex justify-center mt-4">
-                        <p className="text-sm text-gray-600">
+                        <p className="text-sm text-muted-foreground">
                           Only PNG or JPG files. 500 KB max size. 612x408 dimensions required.
                         </p>
                       </div>
@@ -1749,7 +1746,7 @@ export default function CreateEvent({
                     {/* Display existing carousel images (edit mode) */}
                     {editMode && existingCarouselImages.length > 0 && (
                       <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Current Images</h4>
+                        <h4 className="text-sm font-medium text-foreground mb-2">Current Images</h4>
                         <div className="grid grid-cols-3 gap-4">
                           {existingCarouselImages.map((image, index) => {
                             const imageUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'}/${image.image_path}`
@@ -2122,7 +2119,7 @@ export default function CreateEvent({
                           {/* Venue Layout Upload */}
                           <div className="space-y-2">
                             <Label>Venue Layout (Optional)</Label>
-                            <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 hover:border-muted-foreground/50 transition-colors">
                               <div className="flex flex-col items-center justify-center space-y-2">
                                 <input
                                   type="file"
@@ -2143,8 +2140,8 @@ export default function CreateEvent({
                                     />
                                   ) : (
                                     <div className="flex flex-col items-center space-y-2">
-                                      <ImagePlus className="h-8 w-8 text-gray-400" />
-                                      <p className="text-gray-500">Upload Venue Layout</p>
+                                      <ImagePlus className="h-8 w-8 text-muted-foreground" />
+                                      <p className="text-muted-foreground">Upload Venue Layout</p>
                                     </div>
                                   )}
                                 </label>
@@ -2357,14 +2354,7 @@ export default function CreateEvent({
                       </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* Debug info for development */}
-                      {process.env.NODE_ENV === 'development' && (
-                        <div className="p-2 bg-gray-100 rounded text-xs">
-                          <strong>Debug:</strong> eventTour_id = "{values.eventTour_id}" | 
-                          Tours loaded: {eventTours.length} | 
-                          EventSelectionFlag: {eventSelectionFlag}
-                        </div>
-                      )}
+                    
                       
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Available Tours</Label>
@@ -2460,7 +2450,7 @@ export default function CreateEvent({
                       <div className="space-y-2">
                         <Label>Scheduled Events:</Label>
                         {values.events.map((event: EventDateTime, index: number) => {
-                          console.log("🗓️ Displaying event date:", event)
+                          // console.log("🗓️ Displaying event date:", event)
                           return (
                           <div key={index} className="flex items-center justify-between p-3 border rounded">
                             <div className="text-sm">
@@ -2574,8 +2564,8 @@ export default function CreateEvent({
                         />
                         <label htmlFor="gallery-upload" className="cursor-pointer">
                           <div className="flex flex-col items-center space-y-2">
-                            <ImagePlus className="h-8 w-8 text-gray-400" />
-                            <p className="text-gray-500">Upload Gallery Images</p>
+                            <ImagePlus className="h-8 w-8 text-muted-foreground" />
+                            <p className="text-muted-foreground">Upload Gallery Images</p>
                           </div>
                         </label>
                       </div>
@@ -3330,6 +3320,9 @@ export default function CreateEvent({
         </Dialog>
       )}
     </div>
+        </div>
+
+
   )
 }
 

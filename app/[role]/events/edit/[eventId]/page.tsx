@@ -108,8 +108,8 @@ export default function EditEventPage({ params }: EditEventPageProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white border-b">
+      <div className="min-h-screen bg-background">
+        <div className="bg-card border-b border-border dark:bg-card dark:border-border">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center space-x-4">
@@ -117,15 +117,15 @@ export default function EditEventPage({ params }: EditEventPageProps) {
                   variant="ghost"
                   size="sm"
                   onClick={handleBackToEvents}
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 text-foreground hover:bg-accent focus:bg-accent dark:text-foreground"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   <span>Back to Events</span>
                 </Button>
-                <div className="h-6 w-px bg-gray-300" />
+                <div className="h-6 w-px bg-border dark:bg-border" />
                 <div>
-                  <h1 className="text-xl font-semibold text-gray-900">Edit Event</h1>
-                  <p className="text-sm text-gray-500">Loading event data...</p>
+                  <h1 className="text-xl font-semibold text-foreground">Edit Event</h1>
+                  <p className="text-sm text-muted-foreground">Loading event data...</p>
                 </div>
               </div>
             </div>
@@ -144,8 +144,8 @@ export default function EditEventPage({ params }: EditEventPageProps) {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="bg-white border-b">
+      <div className="min-h-screen bg-background">
+        <div className="bg-card border-b border-border dark:bg-card dark:border-border">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between h-16">
               <div className="flex items-center space-x-4">
@@ -153,15 +153,15 @@ export default function EditEventPage({ params }: EditEventPageProps) {
                   variant="ghost"
                   size="sm"
                   onClick={handleBackToEvents}
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 text-foreground hover:bg-accent focus:bg-accent dark:text-foreground"
                 >
                   <ArrowLeft className="h-4 w-4" />
                   <span>Back to Events</span>
                 </Button>
-                <div className="h-6 w-px bg-gray-300" />
+                <div className="h-6 w-px bg-border dark:bg-border" />
                 <div>
-                  <h1 className="text-xl font-semibold text-gray-900">Edit Event</h1>
-                  <p className="text-sm text-gray-500">Error loading event</p>
+                  <h1 className="text-xl font-semibold text-foreground">Edit Event</h1>
+                  <p className="text-sm text-muted-foreground">Error loading event</p>
                 </div>
               </div>
             </div>
@@ -191,9 +191,9 @@ export default function EditEventPage({ params }: EditEventPageProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-card border-b border-border dark:bg-card dark:border-border">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
@@ -201,17 +201,17 @@ export default function EditEventPage({ params }: EditEventPageProps) {
                 variant="ghost"
                 size="sm"
                 onClick={handleBackToEvents}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-2 text-foreground hover:bg-accent focus:bg-accent dark:text-foreground"
               >
                 <ArrowLeft className="h-4 w-4" />
                 <span>Back to Events</span>
               </Button>
-              <div className="h-6 w-px bg-gray-300" />
+              <div className="h-6 w-px bg-border dark:bg-border" />
               <div>
-                <h1 className="text-xl font-semibold text-gray-900">
+                <h1 className="text-xl font-semibold text-foreground">
                   Edit Event
                 </h1>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   {eventData?.EventName || eventData?.eventName || "Update event details"}
                 </p>
               </div>

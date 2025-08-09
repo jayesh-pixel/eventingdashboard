@@ -109,8 +109,7 @@ const formatDateBlock = (iso: string) => {
 // Component
 // -----------------------------------------------------------------------------
 export default function BookingTicketsPage({ params }: BookingTicketsPageProps) {
-  const paramsObj = React.use(params) as any;
-  const { role, eventId } = paramsObj;
+  const { role, eventId } = params;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
