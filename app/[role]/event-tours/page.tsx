@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, Image as ImageIcon, Calendar, Loader2, Upload, X } from "lucide-react"
 import {
   Pagination,
@@ -37,6 +38,7 @@ import type { UserRole } from "@/lib/navigation"
 import { eventTourEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
+import { formatDate } from "@/lib/utils"
 import type { EventTour } from "@/lib/types"
 import Image from "next/image"
 
@@ -422,8 +424,8 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   }
 
   const handleUploadTourImage = async (tourId: string, imageFile: File) => {
-    setLoading(true)
     try {
+      setLoading(true)
       const authToken = getValidToken()
       
       if (!authToken) {
@@ -435,9 +437,16 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         return
       }
 
+      console.log("Uploading image:", imageFile.name, "for tour:", tourId)
+
       const formDataToSend = new FormData()
       formDataToSend.append("eventTour_id", tourId)
       formDataToSend.append("EventTourImage", imageFile)
+
+      console.log("FormData contents:", {
+        eventTour_id: tourId,
+        EventTourImage: imageFile.name
+      })
 
       const response = await fetch(eventTourEndPoint.EVENT_TOUR_UPLOAD_IMAGE, {
         method: "POST",
@@ -448,7 +457,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         body: formDataToSend,
       })
 
+      console.log("Upload response status:", response.status)
       const data = await response.json()
+      console.log("Upload response data:", data)
 
       if (data.error || !response.ok) {
         throw new Error(data.message || "Failed to upload image")
@@ -456,17 +467,70 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
       toast({
         title: "Success",
-        description: "Image uploaded successfully",
+        description: `Image "${imageFile.name}" uploaded successfully!`,
       })
 
-      // Refresh the event tours list
+      // Refresh the event tours list to get updated images
       fetchEventTours(currentPage)
 
     } catch (error: any) {
       console.error("Image upload failed:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to upload image. Please try again.",
+        description: error.message || `Failed to upload image "${imageFile.name}". Please try again.`,
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEnableDisableTour = async (tourId: string, enable: boolean) => {
+    try {
+      setLoading(true)
+      const authToken = getValidToken()
+      
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to modify event tours.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const endpoint = enable ? eventTourEndPoint.EVENT_TOUR_ENABLE : eventTourEndPoint.EVENT_TOUR_DISABLE
+      
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          eventTourId: tourId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error || !response.ok) {
+        throw new Error(data.message || `Failed to ${enable ? 'enable' : 'disable'} event tour`)
+      }
+
+      toast({
+        title: "Success",
+        description: `Event tour ${enable ? 'enabled' : 'disabled'} successfully!`,
+      })
+
+      // Refresh the event tours list
+      fetchEventTours(currentPage)
+
+    } catch (error: any) {
+      console.error(`Event tour ${enable ? 'enable' : 'disable'} failed:`, error)
+      toast({
+        title: "Error",
+        description: error.message || `Failed to ${enable ? 'enable' : 'disable'} event tour. Please try again.`,
         variant: "destructive",
       })
     } finally {
@@ -626,6 +690,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   <TableHead>Image</TableHead>
                   <TableHead>Tour Name</TableHead>
                   <TableHead className="hidden md:table-cell">Description</TableHead>
+                  <TableHead className="hidden md:table-cell">Status</TableHead>
                   <TableHead className="hidden md:table-cell">Created</TableHead>
                   <TableHead>
                     <span className="sr-only">Actions</span>
@@ -635,7 +700,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
               <TableBody>
                 {currentTours.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
+                    <TableCell colSpan={6} className="text-center py-8">
                       No event tours found
                     </TableCell>
                   </TableRow>
@@ -646,10 +711,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                         {tour.Images && tour.Images.length > 0 ? (
                           <div className="relative w-12 h-12">
                             <Image
-                              src={tour.Images[0].image_path}
+                              src={`${process.env.NEXT_PUBLIC_API_BASE_URL}/${tour.Images[0].image_path}`}
                               alt={tour.Name || "Tour image"}
                               fill
                               className="object-cover rounded"
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.src = '/placeholder.jpg';
+                              }}
                             />
                           </div>
                         ) : (
@@ -665,9 +734,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
+                        <Badge variant={tour.status === 1 ? "default" : "secondary"}>
+                          {tour.status === 1 ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-4 w-4" />
-                          {new Date(tour.createdAt).toLocaleDateString()}
+                          {formatDate(tour.createdAt)}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -684,6 +758,23 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
+                            {tour.status === 1 ? (
+                              <DropdownMenuItem 
+                                onClick={() => handleEnableDisableTour(tour._id, false)}
+                                className="text-orange-600"
+                              >
+                                <X className="mr-2 h-4 w-4" />
+                                Disable
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem 
+                                onClick={() => handleEnableDisableTour(tour._id, true)}
+                                className="text-green-600"
+                              >
+                                <Calendar className="mr-2 h-4 w-4" />
+                                Enable
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem
                               onClick={() => handleDeleteTour(tour._id)}
                               className="text-red-600"
@@ -784,10 +875,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                     <div key={image._id} className="relative group">
                       <div className="relative w-full h-24">
                         <Image
-                          src={image.image_path}
+                          src={`${process.env.NEXT_PUBLIC_API_BASE_URL}/${image.image_path}`}
                           alt="Tour image"
                           fill
                           className="object-cover rounded border"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/placeholder.jpg';
+                          }}
                         />
                       </div>
                       <Button
@@ -837,18 +932,22 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => {
+                    onClick={async () => {
                       if (selectedTour && formData.imageFiles.length > 0) {
-                        formData.imageFiles.forEach(file => {
-                          handleUploadTourImage(selectedTour._id, file)
-                        })
+                        for (const file of formData.imageFiles) {
+                          await handleUploadTourImage(selectedTour._id, file)
+                        }
+                        // Clear the file list after successful uploads
                         setFormData({ ...formData, imageFiles: [] })
+                        // Clear the file input
+                        const fileInput = document.getElementById('editImageFiles') as HTMLInputElement
+                        if (fileInput) fileInput.value = ''
                       }
                     }}
-                    disabled={loading}
+                    disabled={loading || formData.imageFiles.length === 0}
                   >
-                    <Upload className="mr-2 h-4 w-4" />
-                    Upload Selected Images
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                    Upload Selected Images ({formData.imageFiles.length})
                   </Button>
                 </div>
               )}

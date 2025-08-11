@@ -78,6 +78,8 @@ export const eventTourEndPoint = {
   EVENT_TOUR_DELETE: BASE_URL + "/eventtour/delete",
   EVENT_TOUR_UPLOAD_IMAGE: BASE_URL + "/eventtour/upload/image",
   EVENT_TOUR_IMAGE_REMOVE: BASE_URL + "/eventtour/deleteEventTour/image",
+  EVENT_TOUR_ENABLE: BASE_URL + "/eventtour/enable",
+  EVENT_TOUR_DISABLE: BASE_URL + "/eventtour/disable",
 }
 
 // Organizer API Endpoints

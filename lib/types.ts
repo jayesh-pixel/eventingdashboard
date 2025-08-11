@@ -388,3 +388,22 @@ export interface BulkTicketFormData {
   PromoterCommissionRate?: number
   PromoterCommissionType?: number
 }
+
+// EventTour Interface
+export interface EventTour {
+  _id: string
+  Name: string
+  Description?: string
+  Images: EventTourImage[]
+  createdAt: string
+  FilterationDateTime?: string
+  ActiveEvent?: number
+  status: number
+  __v?: number
+}
+
+export interface EventTourImage {
+  _id: string
+  image_path: string
+  createdAt: string
+}
