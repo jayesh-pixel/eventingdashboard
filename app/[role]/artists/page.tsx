@@ -61,6 +61,7 @@ import type { UserRole } from "@/lib/navigation"
 import { artistEndpoints } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
+import { formatDate } from "@/lib/utils"
 
 interface ArtistsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -871,7 +872,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                       </TableCell>
                       <TableCell>
                         <div className="text-sm text-muted-foreground">
-                          {new Date(artist.createdAt).toLocaleDateString()}
+                          {formatDate(artist.createdAt)}
                         </div>
                       </TableCell>
                       <TableCell>
