@@ -29,6 +29,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { formatDate } from "@/lib/utils"
 
 interface CustomersPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -71,9 +72,14 @@ export default function CustomersPage({ params }: CustomersPageProps) {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
       setCurrentPage(1) // Reset to first page when searching
-    }, 300)
+    }, 500) // Increased debounce time to 500ms
     return () => clearTimeout(timer)
   }, [searchTerm])
+
+  // Separate handler for search input
+  const handleSearchChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value)
+  }, [])
 
   // Fetch customers data
   const fetchCustomers = React.useCallback(async (page: number = 1, search: string = "") => {
@@ -88,10 +94,14 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         throw new Error("No valid authentication token found")
       }
 
-      const body = {
+      const body: any = {
         page: page.toString(),
         limit: ITEMS_PER_PAGE.toString(),
-        ...(search && { search }) // Add search if provided
+      }
+      
+      // Add search parameter if search term is provided
+      if (search && search.trim()) {
+        body.search = search.trim()
       }
 
       const response = await fetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
@@ -142,15 +152,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
 
   const handleRefresh = () => {
     fetchCustomers(currentPage, debouncedSearchTerm)
-  }
-
-  // Format date for display
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString()
-    } catch {
-      return "N/A"
-    }
   }
 
   // Format phone number for display
@@ -261,9 +262,10 @@ export default function CustomersPage({ params }: CustomersPageProps) {
             <Input
               placeholder="Search by customer name, email, or phone number..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-10 pr-10 h-12 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm sm:text-base transition-all duration-200 shadow-inner"
               disabled={loading}
+              autoComplete="off"
             />
             <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
           </div>

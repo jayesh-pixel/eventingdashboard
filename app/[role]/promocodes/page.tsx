@@ -37,6 +37,7 @@ import { promocodeEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus } from "@/lib/types"
+import { formatDate } from "@/lib/utils"
 
 const statusColors: Record<number, string> = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -78,7 +79,7 @@ export default function PromocodesPage() {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
       setCurrentPage(1) // Reset to first page when searching
-    }, 300)
+    }, 500)
     return () => clearTimeout(timer)
   }, [searchTerm])
 
@@ -153,9 +154,9 @@ export default function PromocodesPage() {
     setCurrentPage(newPage)
   }
 
-  const handleSearch = (value: string) => {
+  const handleSearch = useCallback((value: string) => {
     setSearchTerm(value)
-  }
+  }, [])
 
   const handleStatusFilter = (value: string) => {
     setStatusFilter(value)
@@ -171,18 +172,6 @@ export default function PromocodesPage() {
       style: 'currency',
       currency: 'INR'
     }).format(amount)
-  }
-
-  const formatDate = (dateString: string) => {
-    try {
-      return new Date(dateString).toLocaleDateString('en-IN', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      })
-    } catch {
-      return "N/A"
-    }
   }
 
   const handleCreatePromocode = () => {
@@ -232,6 +221,7 @@ export default function PromocodesPage() {
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
+            autoComplete="off"
           />
         </div>
         <Select value={statusFilter} onValueChange={handleStatusFilter}>
@@ -315,7 +305,7 @@ export default function PromocodesPage() {
                       <TableCell className="font-medium">{promocode.PromoCodeName}</TableCell>
                       <TableCell>{typeLabels[promocode.PromocodeType] || 'Unknown'}</TableCell>
                       <TableCell>
-                        {promocode.PromocodeType === PromocodeType.Percentage 
+                        {promocode.PromocodeType === 2 
                           ? `${promocode.Value}%` 
                           : formatCurrency(promocode.Value)
                         }

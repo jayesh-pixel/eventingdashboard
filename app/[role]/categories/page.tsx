@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -142,6 +143,25 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     categoryImage: null as File | null,
     categoryPriority: 1,
   })
+
+  // Edit form state
+  const [editFormData, setEditFormData] = React.useState<{
+    categoryId: string
+    categoryName: string
+    categoryDescription: string
+    categoryPriority: number
+    categoryImages: Array<{ image_path: string; _id: string }>
+  }>({
+    categoryId: "",
+    categoryName: "",
+    categoryDescription: "",
+    categoryPriority: 1,
+    categoryImages: []
+  })
+
+  // Image upload state
+  const [selectedImages, setSelectedImages] = React.useState<File[]>([])
+  const [uploadingImages, setUploadingImages] = React.useState(false)
   // API function to fetch categories
   const fetchCategories = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
@@ -193,10 +213,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       setTotalCategories(data.data.totalCategories || 0)
       setUseMockData(false)
 
-      toast({
-        title: "Success",
-        description: data.message || "Categories fetched successfully",
-      })
+      // Remove the toast from the success case to avoid dependency issues
+      console.log("Categories fetched successfully:", data.message)
     } catch (error) {
       console.error("Categories fetch failed:", error)
       setApiError("Could not fetch categories from server")
@@ -215,11 +233,12 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     } finally {
       setLoading(false)
     }
-  }, [user, toast])
+  }, [user])
   // Initial data fetch
   React.useEffect(() => {
     fetchCategories(currentPage)
-  }, [currentPage, fetchCategories])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage])
 
   // Helper function to get category image
   const getCategoryImage = (category: Category): string => {
@@ -237,16 +256,6 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       ? { text: "Active", variant: "default" } 
       : { text: "Inactive", variant: "secondary" }
   }
-  const handleEditClick = (category: Category) => {
-    setSelectedCategory(category)
-    setFormData({
-      categoryName: category.Name,
-      categoryDescription: category.Description || "",
-      categoryImage: null,
-      categoryPriority: category.Priority || 1,
-    })
-    setIsEditDialogOpen(true)
-  }
 
   // Filter categories based on search (now works on current page data)
   const filteredCategories = React.useMemo(() => {
@@ -258,6 +267,133 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   const currentCategories = filteredCategories
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
+  }
+
+  // Handle image selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setSelectedImages(files)
+  }
+
+  // Upload images function
+  const uploadImages = async (categoryId: string) => {
+    if (selectedImages.length === 0) return
+
+    setUploadingImages(true)
+    try {
+      const authToken = getValidToken()
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to upload images.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      for (const image of selectedImages) {
+        const formData = new FormData()
+        formData.append("category_id", categoryId)
+        formData.append("Image", image)
+
+        const response = await fetch(categorieEndPoint.CATEGORIES_UPLOAD_IMAGE, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: formData,
+        })
+
+        const data = await response.json()
+        if (data.error) {
+          throw new Error(data.message || "Failed to upload image")
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Images uploaded successfully!",
+      })
+
+      // Clear selected images
+      setSelectedImages([])
+
+    } catch (error: any) {
+      console.error("Image upload failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload images. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingImages(false)
+    }
+  }
+
+  // Remove image function
+  const removeImage = async (categoryId: string, imageId: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to remove images.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(categorieEndPoint.CATEGORIES_IMAGE_REMOVE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          category_id: categoryId,
+          image_id: imageId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to remove image")
+      }
+
+      toast({
+        title: "Success",
+        description: "Image removed successfully!",
+      })
+
+      // Update editFormData by removing the deleted image
+      setEditFormData(prev => ({
+        ...prev,
+        categoryImages: prev.categoryImages.filter(img => img._id !== imageId)
+      }))
+
+      // Refresh the categories list
+      fetchCategories(currentPage)
+
+    } catch (error: any) {
+      console.error("Image removal failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove image. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Reset form data
+  const resetForm = () => {
+    setFormData({
+      categoryName: "",
+      categoryDescription: "",
+      categoryImage: null,
+      categoryPriority: 1,
+    })
+    setSelectedImages([])
   }
 
   const handleCreateCategory = async () => {
@@ -300,7 +436,14 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       }
       formDataToSend.append("Priority", formData.categoryPriority.toString())
       
-      // Add image if selected
+      // Add all selected images to the payload
+      if (selectedImages.length > 0) {
+        selectedImages.forEach((image) => {
+          formDataToSend.append("CategoryImages", image)
+        })
+      }
+      
+      // Add single image if selected (from the old input)
       if (formData.categoryImage) {
         formDataToSend.append("CategoryImages", formData.categoryImage)
       }
@@ -325,6 +468,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
 
       setIsCreateDialogOpen(false)
       setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
+      setSelectedImages([])
       
       // Refresh the categories list
       fetchCategories(currentPage)
@@ -394,9 +538,15 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         description: "Category updated successfully!",
       })
 
+      // Upload new images if any selected
+      if (selectedImages.length > 0 && selectedCategory) {
+        await uploadImages(selectedCategory._id)
+      }
+
       setIsEditDialogOpen(false)
       setSelectedCategory(null)
       setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
+      setSelectedImages([])
       
       // Refresh the categories list
       fetchCategories(currentPage)
@@ -500,12 +650,15 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       categoryImage: null,
       categoryPriority: category.Priority || 1,
     })
+    setEditFormData({
+      categoryId: category._id,
+      categoryName: category.Name,
+      categoryDescription: category.Description || "",
+      categoryPriority: category.Priority || 1,
+      categoryImages: category.Images || []
+    })
+    setSelectedImages([])
     setIsEditDialogOpen(true)
-  }
-
-  const resetForm = () => {
-    setFormData({ categoryName: "", categoryDescription: "", categoryImage: null, categoryPriority: 1 })
-    setSelectedCategory(null)
   }
 
   if (role !== "superadmin") {
@@ -566,13 +719,33 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categoryImage">Category Image</Label>
+                <Label>Add Images</Label>
                 <Input
-                  id="categoryImage"
                   type="file"
+                  multiple
                   accept="image/*"
-                  onChange={(e) => setFormData({ ...formData, categoryImage: e.target.files?.[0] || null })}
+                  onChange={handleImageSelect}
+                  className="cursor-pointer"
                 />
+                
+                {selectedImages.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      {selectedImages.length} image(s) selected
+                    </p>
+                    <div className="grid grid-cols-3 gap-4">
+                      {selectedImages.map((file, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Selected image ${index + 1}`}
+                            className="w-full h-20 object-cover rounded"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -671,7 +844,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => handleEditClick(category)}>
+                          <DropdownMenuItem onClick={() => openEditDialog(category)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
@@ -775,14 +948,61 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 placeholder="Enter priority (0-10)"
               />
             </div>
+            
+            {/* Current Images Section */}
+            {editFormData.categoryImages && editFormData.categoryImages.length > 0 && (
+              <div className="space-y-2">
+                <Label>Current Images</Label>
+                <div className="grid grid-cols-3 gap-4">
+                  {editFormData.categoryImages.map((imageObj) => (
+                    <div key={imageObj._id} className="relative group">
+                      <img
+                        src={`${process.env.NEXT_PUBLIC_BASE_URL}${imageObj.image_path}`}
+                        alt={`Category image`}
+                        className="w-full h-20 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(editFormData.categoryId, imageObj._id)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* New Images Section */}
             <div className="space-y-2">
-              <Label htmlFor="editCategoryImage">Category Image</Label>
+              <Label>Add New Images</Label>
               <Input
-                id="editCategoryImage"
                 type="file"
+                multiple
                 accept="image/*"
-                onChange={(e) => setFormData({ ...formData, categoryImage: e.target.files?.[0] || null })}
+                onChange={handleImageSelect}
+                className="cursor-pointer"
               />
+              
+              {selectedImages.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    {selectedImages.length} new image(s) selected
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    {selectedImages.map((file, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`New image ${index + 1}`}
+                          className="w-full h-20 object-cover rounded"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

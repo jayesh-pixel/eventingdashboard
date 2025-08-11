@@ -156,6 +156,23 @@ export default function GenresPage({ params }: GenresPageProps) {
     genreImage: null as File | null,
   })
 
+  // Edit form state
+  const [editFormData, setEditFormData] = React.useState<{
+    genreId: string
+    genreName: string
+    genreDescription: string
+    genreImages: Array<{ image_path: string; _id: string }>
+  }>({
+    genreId: "",
+    genreName: "",
+    genreDescription: "",
+    genreImages: []
+  })
+
+  // Image upload state
+  const [selectedImages, setSelectedImages] = React.useState<File[]>([])
+  const [uploadingImages, setUploadingImages] = React.useState(false)
+
   // API function to fetch genres
   const fetchGenres = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
@@ -266,6 +283,7 @@ export default function GenresPage({ params }: GenresPageProps) {
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
   }
+
   const handleCreateGenre = async () => {
     if (!formData.genreName.trim()) {
       toast({
@@ -296,7 +314,14 @@ export default function GenresPage({ params }: GenresPageProps) {
         formDataToSend.append("Description", formData.genreDescription)
       }
       
-      // Add image if selected
+      // Add all selected images to the payload
+      if (selectedImages.length > 0) {
+        selectedImages.forEach((image) => {
+          formDataToSend.append("Images", image)
+        })
+      }
+      
+      // Add single image if selected (from the old input)
       if (formData.genreImage) {
         formDataToSend.append("Images", formData.genreImage)
       }
@@ -323,6 +348,7 @@ export default function GenresPage({ params }: GenresPageProps) {
 
       setIsCreateDialogOpen(false)
       setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      setSelectedImages([])
       
       // Refresh the genres list
       fetchGenres(currentPage)
@@ -383,9 +409,15 @@ export default function GenresPage({ params }: GenresPageProps) {
         description: "Genre updated successfully!",
       })
 
+      // Upload new images if any selected
+      if (selectedImages.length > 0 && selectedGenre) {
+        await uploadImages(selectedGenre._id)
+      }
+
       setIsEditDialogOpen(false)
       setSelectedGenre(null)
       setFormData({ genreName: "", genreDescription: "", genreImage: null })
+      setSelectedImages([])
       
       // Refresh the genres list
       fetchGenres(currentPage)
@@ -489,12 +521,137 @@ export default function GenresPage({ params }: GenresPageProps) {
       genreDescription: genre.Description || "",
       genreImage: null,
     })
+    setEditFormData({
+      genreId: genre._id,
+      genreName: genre.Name,
+      genreDescription: genre.Description || "",
+      genreImages: genre.Images || []
+    })
+    setSelectedImages([])
     setIsEditDialogOpen(true)
   }
 
   const resetForm = () => {
     setFormData({ genreName: "", genreDescription: "", genreImage: null })
+    setSelectedImages([])
     setSelectedGenre(null)
+  }
+
+  // Handle image selection
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setSelectedImages(files)
+  }
+
+
+  // Upload images function
+  const uploadImages = async (genreId: string) => {
+    if (selectedImages.length === 0) return
+
+    setUploadingImages(true)
+    try {
+      const authToken = getValidToken()
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to upload images.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      for (const image of selectedImages) {
+        const formData = new FormData()
+        formData.append("genre_id", genreId)
+        formData.append("GenreImage", image)
+
+        const response = await fetch(genreEndPoint.GENRE_UPLOAD_IMAGE, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: formData,
+        })
+
+        const data = await response.json()
+        if (data.error) {
+          throw new Error(data.message || "Failed to upload image")
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Images uploaded successfully!",
+      })
+
+      // Clear selected images
+      setSelectedImages([])
+
+    } catch (error: any) {
+      console.error("Image upload failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to upload images. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingImages(false)
+    }
+  }
+
+  // Remove image function
+  const removeImage = async (genreId: string, imageId: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!authToken) {
+        toast({
+          title: "Authentication Error",
+          description: "Please log in to remove images.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(genreEndPoint.GENRE_IMAGE_REMOVE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          genre_id: genreId,
+          image_id: imageId,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.error) {
+        throw new Error(data.message || "Failed to remove image")
+      }
+
+      toast({
+        title: "Success",
+        description: "Image removed successfully!",
+      })
+
+      // Update editFormData by removing the deleted image
+      setEditFormData(prev => ({
+        ...prev,
+        genreImages: prev.genreImages.filter(img => img._id !== imageId)
+      }))
+
+      // Refresh the genres list
+      fetchGenres(currentPage)
+
+    } catch (error: any) {
+      console.error("Image removal failed:", error)
+      toast({
+        title: "Error",
+        description: error.message || "Failed to remove image. Please try again.",
+        variant: "destructive",
+      })
+    }
   }
 
   if (role !== "superadmin") {
@@ -542,13 +699,33 @@ export default function GenresPage({ params }: GenresPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="genreImage">Genre Image</Label>
+                <Label>Add Images</Label>
                 <Input
-                  id="genreImage"
                   type="file"
+                  multiple
                   accept="image/*"
-                  onChange={(e) => setFormData({ ...formData, genreImage: e.target.files?.[0] || null })}
+                  onChange={handleImageSelect}
+                  className="cursor-pointer"
                 />
+                
+                {selectedImages.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-600">
+                      {selectedImages.length} image(s) selected
+                    </p>
+                    <div className="grid grid-cols-3 gap-4">
+                      {selectedImages.map((file, index) => (
+                        <div key={index} className="relative">
+                          <img
+                            src={URL.createObjectURL(file)}
+                            alt={`Selected image ${index + 1}`}
+                            className="w-full h-20 object-cover rounded"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -737,14 +914,61 @@ export default function GenresPage({ params }: GenresPageProps) {
                 rows={3}
               />
             </div>
+            
+            {/* Current Images Section */}
+            {editFormData.genreImages && editFormData.genreImages.length > 0 && (
+              <div className="space-y-2">
+                <Label>Current Images</Label>
+                <div className="grid grid-cols-3 gap-4">
+                  {editFormData.genreImages.map((imageObj) => (
+                    <div key={imageObj._id} className="relative group">
+                      <img
+                        src={`${process.env.NEXT_PUBLIC_BASE_URL}${imageObj.image_path}`}
+                        alt={`Genre image`}
+                        className="w-full h-20 object-cover rounded"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(editFormData.genreId, imageObj._id)}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* New Images Section */}
             <div className="space-y-2">
-              <Label htmlFor="editGenreImage">Genre Image</Label>
+              <Label>Add New Images</Label>
               <Input
-                id="editGenreImage"
                 type="file"
+                multiple
                 accept="image/*"
-                onChange={(e) => setFormData({ ...formData, genreImage: e.target.files?.[0] || null })}
+                onChange={handleImageSelect}
+                className="cursor-pointer"
               />
+              
+              {selectedImages.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">
+                    {selectedImages.length} new image(s) selected
+                  </p>
+                  <div className="grid grid-cols-3 gap-4">
+                    {selectedImages.map((file, index) => (
+                      <div key={index} className="relative">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={`New image ${index + 1}`}
+                          className="w-full h-20 object-cover rounded"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>

@@ -40,6 +40,9 @@ import { venueEndPoint, getallcityDataEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
+import { formatDate } from "@/lib/utils"
+
+const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
 interface VenuesPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -101,10 +104,30 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalVenues, setTotalVenues] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
+  const [isViewDialogOpen, setIsViewDialogOpen] = React.useState(false)
   const [selectedVenue, setSelectedVenue] = React.useState<Venue | null>(null)
   const [apiError, setApiError] = React.useState<string | null>(null)
+
+  // Image upload state
+  const [selectedImages, setSelectedImages] = React.useState<File[]>([])
+  const [uploadingImages, setUploadingImages] = React.useState(false)
+
+  // Debounce search term
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setCurrentPage(1) // Reset to first page when searching
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Search handler
+  const handleSearchChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value)
+  }, [])
 
   // Form state
   const [formData, setFormData] = React.useState({
@@ -173,7 +196,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   // ...existing code...
 
   // API function to fetch venues
-  const fetchVenues = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
+  const fetchVenues = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE, search: string = "") => {
     try {
       setLoading(true)
       setApiError(null)
@@ -184,18 +207,28 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         return
       }
 
-      const response = await fetch(venueEndPoint.VENUES_PAGINATED_URL, {
+      // Use search endpoint if search term is provided
+      const endpoint = search.trim() ? venueEndPoint.VENUE_SEARCH_BY_NAME : venueEndPoint.VENUES_PAGINATED_URL
+      
+      const body: any = {
+        AdminRole: getNumericAdminRole(user.AdminRole || role),
+        user_id: user.user_id,
+        page: page,
+        limit: limit.toString(),
+      }
+
+      // Add search parameter if searching
+      if (search.trim()) {
+        body.search = search.trim()
+      }
+
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({
-          AdminRole: getNumericAdminRole(user.AdminRole || role),
-          user_id: user.user_id,
-          page: page,
-          limit: limit.toString(),
-        }),
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
@@ -227,24 +260,23 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     }
   }, [user, role])
 
-  // Initial data fetch
+  // Initial data fetch and search
   React.useEffect(() => {
-    fetchVenues(currentPage)
-  }, [currentPage, fetchVenues])
+    fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
+  }, [currentPage, fetchVenues, debouncedSearchTerm])
 
-  // Filter venues based on search (client-side)
-  const filteredVenues = React.useMemo(() => {
-    if (!searchTerm) return venues
-    return venues.filter(
-      (venue) =>
-        venue.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        venue.City.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
-  }, [venues, searchTerm])
+  // Remove the client-side filtering since we're now using API search
+  // const filteredVenues = React.useMemo(() => {
+  //   if (!searchTerm) return venues
+  //   return venues.filter(
+  //     (venue) =>
+  //       venue.Name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //       venue.City.toLowerCase().includes(searchTerm.toLowerCase()),
+  //   )
+  // }, [venues, searchTerm])
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
-    fetchVenues(page)
   }
 
   const handleCreateVenue = async () => {
@@ -299,7 +331,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         throw new Error(result.message || "Failed to create venue")
       }
 
-      await fetchVenues(currentPage)
+      // Upload images if any selected
+      if (selectedImages.length > 0 && result.data?.venue_id) {
+        await uploadImages(result.data.venue_id)
+      }
+
+      await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
       setIsCreateDialogOpen(false)
       resetForm()
 
@@ -372,7 +409,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         throw new Error(result.message || "Failed to update venue")
       }
 
-      await fetchVenues(currentPage)
+      // Upload new images if any selected
+      if (selectedImages.length > 0 && selectedVenue) {
+        await uploadImages(selectedVenue._id)
+      }
+
+      await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
       setIsEditDialogOpen(false)
       setSelectedVenue(null)
       resetForm()
@@ -426,7 +468,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         throw new Error(result.message || "Failed to delete venue")
       }
 
-      await fetchVenues(currentPage)
+      await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
 
       toast({
         title: "Success",
@@ -458,6 +500,11 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     setIsEditDialogOpen(true)
   }
 
+  const openViewDialog = (venue: Venue) => {
+    setSelectedVenue(venue)
+    setIsViewDialogOpen(true)
+  }
+
   const resetForm = () => {
     setFormData({
       venueName: "",
@@ -469,6 +516,105 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       mapLocation: "",
     })
     setSelectedVenue(null)
+    setSelectedImages([])
+  }
+
+  // Image upload functions
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    setSelectedImages(files)
+  }
+
+  const uploadImages = async (venueId: string) => {
+    if (selectedImages.length === 0) return true
+
+    setUploadingImages(true)
+    try {
+      const authToken = getValidToken()
+      if (!authToken) throw new Error("Authentication required")
+
+      for (const image of selectedImages) {
+        const formData = new FormData()
+        formData.append('image', image)
+        formData.append('venue_id', venueId)
+        formData.append('AdminRole', getNumericAdminRole(user?.AdminRole || role).toString())
+        formData.append('user_id', user?.user_id || '')
+
+        const response = await fetch(venueEndPoint.VENUE_UPLOAD_IMAGE, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error(`Failed to upload image: ${response.status}`)
+        }
+
+        const result = await response.json()
+        if (result.error) {
+          throw new Error(result.message || "Failed to upload image")
+        }
+      }
+
+      return true
+    } catch (error) {
+      console.error("Image upload error:", error)
+      toast({
+        title: "Warning",
+        description: error instanceof Error ? error.message : "Some images failed to upload",
+        variant: "destructive",
+      })
+      return false
+    } finally {
+      setUploadingImages(false)
+    }
+  }
+
+  const removeImage = async (venueId: string, imageId: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!authToken) throw new Error("Authentication required")
+
+      const response = await fetch(venueEndPoint.VENUE_IMAGE_REMOVE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          AdminRole: getNumericAdminRole(user?.AdminRole || role),
+          user_id: user?.user_id || '',
+          venue_id: venueId,
+          image_id: imageId,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Failed to remove image: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.error) {
+        throw new Error(result.message || "Failed to remove image")
+      }
+
+      // Refresh venues to show updated images
+      await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
+
+      toast({
+        title: "Success",
+        description: "Image removed successfully",
+      })
+    } catch (error) {
+      console.error("Remove image error:", error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to remove image",
+        variant: "destructive",
+      })
+    }
   }
 
   // Helper function to get status display
@@ -476,6 +622,11 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     return status === 1 
       ? { text: "Active", variant: "default" } 
       : { text: "Inactive", variant: "secondary" }
+  }
+
+  // Helper function to construct full image URL
+  const getImageUrl = (imagePath: string) => {
+    return `${BASE_URL}/${imagePath}`
   }
 
   if (role !== "superadmin") {
@@ -592,15 +743,36 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   rows={2}
                 />
               </div>
+
+              {/* Image Upload Section */}
+              <div className="space-y-2">
+                <Label htmlFor="venueImages">Venue Images</Label>
+                <div className="flex items-center gap-4">
+                  <Input
+                    id="venueImages"
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageSelect}
+                    className="flex-1"
+                  />
+                  <Upload className="h-4 w-4 text-muted-foreground" />
+                </div>
+                {selectedImages.length > 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Selected: {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}
+                  </div>
+                )}
+              </div>
             </div>
             
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleCreateVenue} disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Create Venue
+              <Button onClick={handleCreateVenue} disabled={loading || uploadingImages}>
+                {(loading || uploadingImages) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {uploadingImages ? "Uploading Images..." : "Create Venue"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -615,9 +787,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             <Input
               placeholder="Search venues..."
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-10"
               disabled={loading}
+              autoComplete="off"
             />
           </div>
         </CardContent>
@@ -639,7 +812,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               <Loader2 className="h-8 w-8 animate-spin" />
               <span className="ml-2">Loading venues...</span>
             </div>
-          ) : filteredVenues.length === 0 ? (
+          ) : venues.length === 0 ? (
             <div className="text-center py-8">
               <div className="text-muted-foreground">
                 {searchTerm ? `No venues found matching "${searchTerm}"` : "No venues found"}
@@ -651,22 +824,52 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
+                    <TableHead>Images</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Priority</TableHead>
+                    <TableHead>Created</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVenues.map((venue) => {
+                  {venues.map((venue: Venue) => {
                     const statusDisplay = getStatusDisplay(venue.status)
                     return (
                       <TableRow key={venue._id}>
                         <TableCell className="font-medium">{venue.Name}</TableCell>
+                        <TableCell>
+                          {venue.Images && venue.Images.length > 0 ? (
+                            <div className="flex gap-1">
+                              {venue.Images.slice(0, 2).map((image, index) => (
+                                <img
+                                  key={image._id}
+                                  src={getImageUrl(image.image_path)}
+                                  alt={`${venue.Name} image ${index + 1}`}
+                                  className="w-10 h-10 object-cover rounded-md border"
+                                  onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    target.src = '/placeholder.svg';
+                                  }}
+                                />
+                              ))}
+                              {venue.Images.length > 2 && (
+                                <div className="w-10 h-10 bg-muted rounded-md border flex items-center justify-center text-xs text-muted-foreground">
+                                  +{venue.Images.length - 2}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">No images</span>
+                          )}
+                        </TableCell>
                         <TableCell>{venue.City}</TableCell>
                         <TableCell>{venue.State}</TableCell>
                         <TableCell>{venue.Priority}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDate(venue.createdAt)}
+                        </TableCell>
                         <TableCell>
                           <Badge variant={statusDisplay.variant}>
                             {statusDisplay.text}
@@ -681,6 +884,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem onClick={() => openViewDialog(venue)}>
+                                <MapPin className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => openEditDialog(venue)}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit
@@ -748,6 +955,114 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* View Details Dialog */}
+      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Venue Details</DialogTitle>
+            <DialogDescription>View complete venue information</DialogDescription>
+          </DialogHeader>
+          
+          {selectedVenue && (
+            <div className="space-y-6">
+              {/* Basic Information */}
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Venue Name</Label>
+                    <p className="text-lg font-semibold">{selectedVenue.Name}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Description</Label>
+                    <p className="text-sm">{selectedVenue.Description || "N/A"}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Address</Label>
+                    <p className="text-sm">{selectedVenue.Address}</p>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">City</Label>
+                      <p className="text-sm font-medium">{selectedVenue.City}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">State</Label>
+                      <p className="text-sm font-medium">{selectedVenue.State}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Priority</Label>
+                      <p className="text-sm">{selectedVenue.Priority}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-muted-foreground">Status</Label>
+                      <Badge variant={getStatusDisplay(selectedVenue.status).variant}>
+                        {getStatusDisplay(selectedVenue.status).text}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-muted-foreground">Created Date</Label>
+                    <p className="text-sm">{formatDate(selectedVenue.createdAt)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Images Gallery */}
+              {selectedVenue.Images && selectedVenue.Images.length > 0 && (
+                <div className="space-y-3">
+                  <Label className="text-lg font-medium">Images ({selectedVenue.Images.length})</Label>
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                    {selectedVenue.Images.map((image, index) => (
+                      <div key={image._id} className="relative group">
+                        <img
+                          src={getImageUrl(image.image_path)}
+                          alt={`${selectedVenue.Name} image ${index + 1}`}
+                          className="w-full h-32 object-cover rounded-lg border shadow-sm"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/placeholder.svg';
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Map Location */}
+              {selectedVenue.Map_Location && (
+                <div className="space-y-3">
+                  <Label className="text-lg font-medium">Location</Label>
+                  <div 
+                    className="w-full h-64 border rounded-lg overflow-hidden"
+                    dangerouslySetInnerHTML={{ __html: selectedVenue.Map_Location }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              if (selectedVenue) {
+                setIsViewDialogOpen(false)
+                openEditDialog(selectedVenue)
+              }
+            }}>
+              Edit Venue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -847,15 +1162,66 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 rows={2}
               />
             </div>
+
+            {/* Existing Images Section */}
+            {selectedVenue && selectedVenue.Images && selectedVenue.Images.length > 0 && (
+              <div className="space-y-2">
+                <Label>Current Images</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {selectedVenue.Images.map((image, index) => (
+                    <div key={image._id} className="relative group">
+                      <img
+                        src={getImageUrl(image.image_path)}
+                        alt={`Venue image ${index + 1}`}
+                        className="w-full h-20 object-cover rounded-md"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.src = '/placeholder.svg';
+                        }}
+                      />
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeImage(selectedVenue._id, image._id)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add New Images Section */}
+            <div className="space-y-2">
+              <Label htmlFor="editVenueImages">Add New Images</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="editVenueImages"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="flex-1"
+                />
+                <Upload className="h-4 w-4 text-muted-foreground" />
+              </div>
+              {selectedImages.length > 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Selected: {selectedImages.length} new image{selectedImages.length !== 1 ? 's' : ''}
+                </div>
+              )}
+            </div>
           </div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleEditVenue} disabled={loading}>
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update Venue
+            <Button onClick={handleEditVenue} disabled={loading || uploadingImages}>
+              {(loading || uploadingImages) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {uploadingImages ? "Uploading Images..." : "Update Venue"}
             </Button>
           </DialogFooter>
         </DialogContent>
