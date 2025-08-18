@@ -11,12 +11,25 @@ export function cn(...inputs: ClassValue[]) {
  */
 export function formatDate(dateString: string): string {
   try {
-    if (!dateString) return "N/A"
+    if (!dateString || typeof dateString !== 'string') return "N/A"
     
     // Check if it's in DD-MM-YYYY HH:mm:ss format (from API)
     if (dateString.includes('-') && dateString.includes(' ') && dateString.includes(':')) {
       const [datePart, timePart] = dateString.split(' ')
       const [day, month, year] = datePart.split('-')
+      
+      // Validate date components
+      if (!day || !month || !year || day.length !== 2 || month.length !== 2 || year.length !== 4) {
+        // Try as standard ISO format instead
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) return "Invalid Date"
+        return date.toLocaleDateString('en-IN', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        })
+      }
+      
       // Convert to ISO format: YYYY-MM-DD HH:mm:ss
       const isoString = `${year}-${month}-${day} ${timePart}`
       const date = new Date(isoString)
@@ -39,7 +52,7 @@ export function formatDate(dateString: string): string {
       })
     }
     
-    // Handle standard ISO date format
+    // Handle standard ISO date format (YYYY-MM-DD or ISO string)
     const date = new Date(dateString)
     if (isNaN(date.getTime())) return "Invalid Date"
     return date.toLocaleDateString('en-IN', {

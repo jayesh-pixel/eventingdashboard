@@ -225,6 +225,7 @@ export const websiteCustomer = {
   CREATE_CUSTOMER_WEBSITE: BASE_URL + "/websitecustomers/customerRegistrationBySuperAdmin",
   GET_ALL_CUSTOMER_DATA: BASE_URL + "/websitecustomers/getall",
   GET_ALL_PAGINATED_CUSTOMERS_DATA: BASE_URL + "/websitecustomers/getAllPaginatedCustomersData",
+  CUSTOMER_SEARCH_PAGINATED: BASE_URL + "/websitecustomers/getCustomerDataBySearchKeywordPaginated",
   GET_CUSTOMER_BOOKINGS: BASE_URL + "/eventticketsbooking/getCustomerBookingsById",
 }
 
