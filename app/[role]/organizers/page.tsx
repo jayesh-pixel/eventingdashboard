@@ -278,7 +278,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
   // Generate password function
   const handleGeneratePassword = () => {
-    const length = 12
+    const length = 8
     const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
     let password = ""
     for (let i = 0; i < length; i++) {

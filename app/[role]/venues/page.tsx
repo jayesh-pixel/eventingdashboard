@@ -207,8 +207,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         return
       }
 
-      // Use search endpoint if search term is provided
-      const endpoint = search.trim() ? venueEndPoint.VENUE_SEARCH_BY_NAME : venueEndPoint.VENUES_PAGINATED_URL
+      // Use paginated search endpoint if search term is provided, otherwise use regular paginated endpoint
+      const endpoint = search.trim() ? venueEndPoint.VENUE_SEARCH_PAGINATED : venueEndPoint.VENUES_PAGINATED_URL
       
       const body: any = {
         AdminRole: getNumericAdminRole(user.AdminRole || role),
@@ -217,9 +217,9 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         limit: limit.toString(),
       }
 
-      // Add search parameter if searching
+      // Add search parameter if searching - use correct parameter name
       if (search.trim()) {
-        body.search = search.trim()
+        body.search_keyword = search.trim()
       }
 
       const response = await fetch(endpoint, {
@@ -280,10 +280,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   }
 
   const handleCreateVenue = async () => {
-    if (!formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.mapLocation.trim()) {
+    if (!formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.city.trim() || !formData.mapLocation.trim()) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (Name, Description, Address, City, and Map Location)",
         variant: "destructive",
       })
       return
@@ -296,6 +296,9 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         throw new Error("Authentication required")
       }
 
+      const selectedState = stateData.find(s => s.name === formData.state)
+      const selectedCity = cityData.find(c => c.name === formData.city)
+
       const payload = {
         AdminRole: getNumericAdminRole(user.AdminRole || role),
         user_id: user.user_id,
@@ -306,11 +309,13 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         State: formData.state,
         Country: "India",
         CountryIsoCode: "IN",
-        StateIsoCode: "",
-        CityIsoCode: "",
+        StateIsoCode: selectedState?.iso2 || "",
+        CityIsoCode: selectedCity?.id?.toString() || "",
         Map_Location: formData.mapLocation,
         Priority: formData.priority,
       }
+
+      console.log("Creating venue with payload:", payload)
 
       const response = await fetch(venueEndPoint.VENUE_CREATION_URL, {
         method: "POST",
@@ -321,11 +326,16 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body: JSON.stringify(payload),
       })
 
+      console.log("Create venue response status:", response.status)
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorText = await response.text()
+        console.error("Create venue error response:", errorText)
+        throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`)
       }
 
       const result = await response.json()
+      console.log("Create venue response:", result)
 
       if (result.error) {
         throw new Error(result.message || "Failed to create venue")
@@ -357,10 +367,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   }
 
   const handleEditVenue = async () => {
-    if (!selectedVenue || !formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim()) {
+    if (!selectedVenue || !formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.city.trim()) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (Name, Description, Address, and City)",
         variant: "destructive",
       })
       return
@@ -373,6 +383,9 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         throw new Error("Authentication required")
       }
 
+      const selectedState = stateData.find(s => s.name === formData.state)
+      const selectedCity = cityData.find(c => c.name === formData.city)
+
       const payload = {
         AdminRole: getNumericAdminRole(user.AdminRole || role),
         user_id: user.user_id,
@@ -384,8 +397,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         State: formData.state,
         Country: "India",
         CountryIsoCode: "IN",
-        StateIsoCode: "",
-        CityIsoCode: "",
+        StateIsoCode: selectedState?.iso2 || "",
+        CityIsoCode: selectedCity?.id?.toString() || "",
         Map_Location: formData.mapLocation,
         Priority: formData.priority,
       }
@@ -715,7 +728,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="city">City</Label>
+                  <Label htmlFor="city">City *</Label>
                   <Select
                     value={formData.city}
                     onValueChange={(value) => setFormData({ ...formData, city: value })}
@@ -1134,7 +1147,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editCity">City</Label>
+                <Label htmlFor="editCity">City *</Label>
                 <Select
                   value={formData.city}
                   onValueChange={(value) => setFormData({ ...formData, city: value })}

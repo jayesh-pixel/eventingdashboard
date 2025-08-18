@@ -44,6 +44,41 @@ const AddAddress: React.FC<AddAddressProps> = ({
     getallStateData();
   }, []);
 
+  // Load cities when stateIsoCode is provided (for edit mode)
+  useEffect(() => {
+    if (stateIsoCode) {
+      loadCitiesForState(stateIsoCode);
+    }
+  }, [stateIsoCode]);
+
+  const loadCitiesForState = async (stateiso2: string) => {
+    if (!stateiso2) return;
+
+    const countryIso2 = "IN";
+    try {
+      const config = {
+        headers: {
+          "X-CSCAPI-KEY": API_KEY,
+        },
+      };
+
+      const response = await axios.get<City[]>(
+        `https://api.countrystatecity.in/v1/countries/${countryIso2}/states/${stateiso2}/cities`,
+        config
+      );
+
+      console.log("Loaded cities for state:", response.data);
+      setCitydata(response.data);
+    } catch (error) {
+      console.error("Error loading cities:", error);
+
+      if (axios.isAxiosError(error) && error.response) {
+        const { status, data } = error.response;
+        console.error(`Response error - Status: ${status}, Data:`, data);
+      }
+    }
+  };
+
   const getallStateData = async () => {
     try {
       const config = {
@@ -70,31 +105,7 @@ const AddAddress: React.FC<AddAddressProps> = ({
     setStateIsoCode(stateiso2);
     console.log("iso2", stateiso2);
 
-    if (!stateiso2) return;
-
-    const countryIso2 = "IN";
-    try {
-      const config = {
-        headers: {
-          "X-CSCAPI-KEY": API_KEY,
-        },
-      };
-
-      const response = await axios.get<City[]>(
-        `https://api.countrystatecity.in/v1/countries/${countryIso2}/states/${stateiso2}/cities`,
-        config
-      );
-
-      console.log(response.data);
-      setCitydata(response.data);
-    } catch (error) {
-      console.error("Error:", error);
-
-      if (axios.isAxiosError(error) && error.response) {
-        const { status, data } = error.response;
-        console.error(`Response error - Status: ${status}, Data:`, data);
-      }
-    }
+    await loadCitiesForState(stateiso2);
   };
 
   const handlerchangecity = async (event?: React.ChangeEvent<HTMLSelectElement>) => {

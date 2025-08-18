@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, UserCheck, UserX } from "lucide-react"
+import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, UserCheck, UserX } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
 import { promoterEndpoint } from "@/lib/api-endpoints"
@@ -123,6 +123,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   const [showStatusDialog, setShowStatusDialog] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [statusAction, setStatusAction] = React.useState<'enable' | 'disable'>('disable')
+  const [showPassword, setShowPassword] = React.useState(false)
   // Form data
   const [formData, setFormData] = React.useState({
     FullName: "",
@@ -516,7 +517,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           description: "Promoter updated successfully",
         })
         setShowEditDialog(false)
-        resetForm()
+        setSelectedPromoter(null)
         await fetchPromoters(currentPage, debouncedSearchTerm)
       } else {
         throw new Error(result.message || "Failed to update promoter")
@@ -564,7 +565,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           description: `Promoter ${statusAction}d successfully`,
         })
         setShowStatusDialog(false)
-        resetForm()
+        setSelectedPromoter(null)
         await fetchPromoters(currentPage, debouncedSearchTerm)
       } else {
         throw new Error(result.message || `Failed to ${statusAction} promoter`)
@@ -634,6 +635,34 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     setStateName("")
     setCityIsoCode("")
     setCityName("")
+    
+    // Reset password visibility
+    setShowPassword(false)
+  }
+
+  // Generate password function
+  const handleGeneratePassword = () => {
+    const length = 8
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    
+    setFormData(prev => ({ ...prev, Password: password }))
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(password).then(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}\nPassword copied to clipboard!`,
+      })
+    }).catch(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}`,
+      })
+    })
   }
 
   return (
@@ -953,13 +982,36 @@ export default function PromotersPage({ params }: PromotersPageProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password *</Label>
-              <Input
-                id="password"
-                type="password"
-                value={formData.Password}
-                onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
-                placeholder="Enter password"
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={formData.Password}
+                  onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
+                  placeholder="Enter password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-gray-400" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-gray-400" />
+                  )}
+                </button>
+              </div>
+              {/* Generate Password Button */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleGeneratePassword}
+                className="w-full"
+              >
+                Generate Password
+              </Button>
             </div>            <div className="grid gap-2">
               <Label htmlFor="phone">Phone * (10 digits)</Label>
               <Input
