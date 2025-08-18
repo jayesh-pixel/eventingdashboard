@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { authEndpoints, organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { Loader2, Eye, EyeOff, UserCheck } from "lucide-react"
-import { Logo } from "@/components/logo"
+import Image from "next/image"
 
 type LoginRole = "superadmin" | "organizer" | "promoter"
 
@@ -321,7 +321,7 @@ export default function LoginPage() {
       <div className="absolute bottom-0 right-0 w-[180px] h-[180px] sm:w-[300px] sm:h-[300px] bg-primary opacity-10 rounded-full blur-2xl z-0" />
       <Card className="w-full max-w-xs sm:max-w-md bg-white/80 dark:bg-card/80 shadow-2xl backdrop-blur-lg border-0 z-10 mx-auto">
         <CardHeader className="space-y-1 flex flex-col items-center">
-          <Logo className="mb-4 w-32 sm:w-44" />
+          <Image src="/blacklogo.svg" alt="Logo" width={176} height={44} className="mb-4 w-32 sm:w-44" />
           <CardTitle className="text-2xl sm:text-3xl font-bold text-primary text-center">Welcome to EventingClub</CardTitle>
           <CardDescription className="text-center text-sm sm:text-base text-muted-foreground">Select your login type to continue</CardDescription>
         </CardHeader>
