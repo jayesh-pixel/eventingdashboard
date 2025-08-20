@@ -7,10 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, UserCheck, UserX } from "lucide-react"
+import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, UserCheck, UserX, KeyRound, MoreHorizontal } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
-import { promoterEndpoint } from "@/lib/api-endpoints"
+import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import {
@@ -32,6 +32,13 @@ import {
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
 import {
   Alert,
   AlertDescription,
@@ -121,9 +128,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   const [showCreateDialog, setShowCreateDialog] = React.useState(false)
   const [showEditDialog, setShowEditDialog] = React.useState(false)
   const [showStatusDialog, setShowStatusDialog] = React.useState(false)
+  const [showPasswordResetDialog, setShowPasswordResetDialog] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
   const [statusAction, setStatusAction] = React.useState<'enable' | 'disable'>('disable')
   const [showPassword, setShowPassword] = React.useState(false)
+  const [newPassword, setNewPassword] = React.useState("")
   // Form data
   const [formData, setFormData] = React.useState({
     FullName: "",
@@ -580,6 +589,68 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       setSubmitting(false)
     }
   }
+
+  const handlePasswordReset = async () => {
+    if (!selectedPromoter || !newPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter a new password",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const response = await fetch(promoterEndPointPannel.PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          promoter_id: selectedPromoter._id,
+          new_password: newPassword,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Password reset successfully",
+        })
+        setShowPasswordResetDialog(false)
+        setSelectedPromoter(null)
+        setNewPassword("")
+      } else {
+        throw new Error(result.message || "Failed to reset password")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to reset password",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
   const openCreateDialog = () => {
     resetForm()
     setShowCreateDialog(true)
@@ -613,6 +684,12 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     setStatusAction(action)
     setShowStatusDialog(true)
   }
+
+  const openPasswordResetDialog = (promoter: Promoter) => {
+    setSelectedPromoter(promoter)
+    setNewPassword("")
+    setShowPasswordResetDialog(true)
+  }
   
   const resetForm = () => {
     setFormData({
@@ -638,6 +715,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     
     // Reset password visibility
     setShowPassword(false)
+    setNewPassword("")
   }
 
   // Generate password function
@@ -650,6 +728,31 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     }
     
     setFormData(prev => ({ ...prev, Password: password }))
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(password).then(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}\nPassword copied to clipboard!`,
+      })
+    }).catch(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}`,
+      })
+    })
+  }
+
+  // Generate password function for reset
+  const handleGenerateResetPassword = () => {
+    const length = 8
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    
+    setNewPassword(password)
     
     // Copy to clipboard
     navigator.clipboard.writeText(password).then(() => {
@@ -760,39 +863,46 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                     </TableCell>
                     <TableCell>{formatDate(promoter.createdAt)}</TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleViewPromoter(promoter)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => openEditDialog(promoter)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        {promoter.status === 1 ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => openStatusDialog(promoter, 'disable')}
-                          >
-                            <UserX className="h-4 w-4" />
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                        ) : (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => openStatusDialog(promoter, 'enable')}
-                          >
-                            <UserCheck className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewPromoter(promoter)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEditDialog(promoter)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Profile
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openPasswordResetDialog(promoter)}>
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            Reset Password
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {promoter.status === 1 ? (
+                            <DropdownMenuItem 
+                              onClick={() => openStatusDialog(promoter, 'disable')}
+                              className="text-red-600"
+                            >
+                              <UserX className="mr-2 h-4 w-4" />
+                              Disable Account
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem 
+                              onClick={() => openStatusDialog(promoter, 'enable')}
+                              className="text-green-600"
+                            >
+                              <UserCheck className="mr-2 h-4 w-4" />
+                              Enable Account
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}              </TableBody>
@@ -1214,6 +1324,108 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 <>
                   {statusAction === 'enable' ? <UserCheck className="mr-2 h-4 w-4" /> : <UserX className="mr-2 h-4 w-4" />}
                   {statusAction === 'enable' ? 'Enable' : 'Disable'} Promoter
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={showPasswordResetDialog} onOpenChange={setShowPasswordResetDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="h-5 w-5" />
+              Reset Password
+            </DialogTitle>
+            <DialogDescription>
+              Generate and set a new password for this promoter account.
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPromoter && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4 p-4 border rounded-lg bg-muted/30">
+                <div>
+                  <p className="font-medium">{selectedPromoter.FullName}</p>
+                  <p className="text-sm text-muted-foreground">{selectedPromoter.Email || 'N/A'}</p>
+                  <p className="text-sm text-muted-foreground">@{selectedPromoter.Username}</p>
+                </div>
+              </div>
+              
+              <div className="grid gap-2">
+                <Label htmlFor="newPassword">New Password *</Label>
+                <div className="relative">
+                  <Input
+                    id="newPassword"
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 flex items-center pr-3"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+                
+                {/* Generate Password Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleGenerateResetPassword}
+                  className="w-full"
+                >
+                  Generate Secure Password
+                </Button>
+                
+                {newPassword && newPassword.length < 6 && (
+                  <p className="text-sm text-red-500">Password must be at least 6 characters long</p>
+                )}
+              </div>
+              
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  This will immediately change the promoter's password. They will need to use the new password to login.
+                </AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowPasswordResetDialog(false)
+                setSelectedPromoter(null)
+                setNewPassword("")
+                setShowPassword(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handlePasswordReset}
+              disabled={submitting || !newPassword || newPassword.length < 6}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  Reset Password
                 </>
               )}
             </Button>
