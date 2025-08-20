@@ -67,19 +67,26 @@ export default function CustomersPage({ params }: CustomersPageProps) {
   const [loadingBookings, setLoadingBookings] = React.useState(false)
   const [showBookingsDialog, setShowBookingsDialog] = React.useState(false)
 
-  // Debounce search term
+  // Debounce search term for API calls
   React.useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm)
       setCurrentPage(1) // Reset to first page when searching
-    }, 500) // Increased debounce time to 500ms
+    }, 800) // Increased debounce time for API calls
     return () => clearTimeout(timer)
   }, [searchTerm])
 
-  // Separate handler for search input
+  // Search input handler
   const handleSearchChange = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value)
   }, [])
+
+  // Handle search submit (for immediate search)
+  const handleSearchSubmit = React.useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    setDebouncedSearchTerm(searchTerm)
+    setCurrentPage(1)
+  }, [searchTerm])
 
   // Fetch customers data
   const fetchCustomers = React.useCallback(async (page: number = 1, search: string = "") => {
@@ -254,21 +261,51 @@ export default function CustomersPage({ params }: CustomersPageProps) {
       {/* Search and Filter Controls */}
       <Card className="border-0 shadow-lg bg-gradient-to-r from-card/90 to-card/95 backdrop-blur-sm">
         <CardContent className="p-4 sm:p-6">
-          <div className="relative">
+          <form onSubmit={handleSearchSubmit} className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4 z-10" />
             {loading && (
-              <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-primary h-4 w-4 animate-spin z-10" />
+              <Loader2 className="absolute right-12 top-1/2 transform -translate-y-1/2 text-primary h-4 w-4 animate-spin z-10" />
             )}
             <Input
               placeholder="Search by customer name, email, or phone number..."
               value={searchTerm}
               onChange={handleSearchChange}
-              className="pl-10 pr-10 h-12 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm sm:text-base transition-all duration-200 shadow-inner"
+              className="pl-10 pr-20 h-12 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm sm:text-base transition-all duration-200 shadow-inner"
               disabled={loading}
               autoComplete="off"
             />
+            <Button 
+              type="submit" 
+              size="sm" 
+              className="absolute right-1 top-1 h-10"
+              disabled={loading || !searchTerm.trim()}
+            >
+              Search
+            </Button>
             <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
-          </div>
+          </form>
+          
+          {/* Search status and clear button */}
+          {debouncedSearchTerm && (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
+              <span className="text-sm text-muted-foreground">
+                {loading ? "Searching..." : `Showing results for "${debouncedSearchTerm}"`}
+              </span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  setSearchTerm("")
+                  setDebouncedSearchTerm("")
+                  setCurrentPage(1)
+                }}
+                disabled={loading}
+                className="h-7 px-2 text-xs"
+              >
+                Clear Search
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -277,10 +314,29 @@ export default function CustomersPage({ params }: CustomersPageProps) {
           <CardTitle className="flex items-center justify-between">
             <span>All Customers</span>
             <div className="text-sm text-muted-foreground">
-              {loading ? "Loading..." : `${totalCustomers} customers found`}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {debouncedSearchTerm ? "Searching..." : "Loading..."}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span>{totalCustomers} customers found</span>
+                  {debouncedSearchTerm && (
+                    <Badge variant="outline" className="text-xs">
+                      Search: "{debouncedSearchTerm}"
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
           </CardTitle>
-          <CardDescription>View website-signed-up customers and their details.</CardDescription>
+          <CardDescription>
+            {debouncedSearchTerm 
+              ? `Search results for "${debouncedSearchTerm}". Use the API search to find specific customers.`
+              : "View website-signed-up customers and their details. Use search to find specific customers via API."
+            }
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -303,9 +359,14 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                   <AlertCircle className="h-8 w-8 text-muted-foreground" />
                 </div>
                 <div className="space-y-2">
-                  <p className="text-base font-medium text-muted-foreground">No customers found</p>
+                  <p className="text-base font-medium text-muted-foreground">
+                    {debouncedSearchTerm ? "No customers found for this search" : "No customers found"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    {searchTerm ? "Try adjusting your search terms" : "No customers have been registered yet"}
+                    {debouncedSearchTerm 
+                      ? "Try adjusting your search terms or clear the search to view all customers" 
+                      : "No customers have been registered yet"
+                    }
                   </p>
                 </div>
                 <Button variant="outline" onClick={handleRefresh} size="sm">
