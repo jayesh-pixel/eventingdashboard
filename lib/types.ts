@@ -407,3 +407,66 @@ export interface EventTourImage {
   image_path: string
   createdAt: string
 }
+
+// Promocode Types
+export enum PromocodeType {
+  FixedAmount = 1,
+  Percentage = 2
+}
+
+export enum PromocodeStatus {
+  Inactive = 0,
+  Active = 1,
+  Disabled = 2
+}
+
+export interface Promocode {
+  _id: string
+  PromoCodeName: string
+  TermsCondition?: string
+  PromocodeType: PromocodeType
+  Value: number
+  MinCheckoutAmount: number
+  ExpiryDate: string
+  OneTimeUseFlag: number // 1 = Yes, 0 = No
+  PromocodeValidFor?: string
+  status: PromocodeStatus
+  createdAt: string
+  updatedAt?: string
+  Events?: Array<{
+    event_id: string
+  }>
+  CustomerIds?: Array<{
+    customer_id: string
+  }>
+  CanBeUsed?: string
+  [key: string]: any
+}
+
+export interface PromocodesApiResponse {
+  success: boolean
+  error: boolean
+  message: string
+  data: {
+    PromocodeData: Promocode[]
+    totalPages: number
+    currentPage: number
+    totalPromocodes: number
+    hasNextPage?: boolean
+    hasPreviousPage?: boolean
+  }
+}
+
+export interface CreatePromocodeRequest {
+  PromoCodeName: string
+  TermsCondition?: string
+  PromocodeType: string
+  Value: number
+  MinCheckoutAmount: number
+  ExpiryDate: string
+  OneTimeUseFlag: boolean
+  PromocodeValidFor?: string
+  Events?: Array<{ event_id: string }>
+  CustomerIds?: Array<{ customer_id: string }>
+  CanBeUsed?: string
+}

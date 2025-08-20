@@ -232,6 +232,15 @@ export const websiteCustomer = {
 // Promocode API
 export const promocodeEndPoint = {
   GET_ALL_PAGINATED_PROMOCODES_DATA: BASE_URL + "/promocode/getallpaginatedData",
+  CREATE_PROMOCODE: BASE_URL + "/promocode/create",
+  GET_PROMOCODE_BY_ID: BASE_URL + "/promocode/getById",
+  UPDATE_PROMOCODE: BASE_URL + "/promocode/update", // Note: This endpoint might need to be verified
+  DELETE_PROMOCODE: BASE_URL + "/promocode/delete", // Note: This endpoint might need to be verified
+  ENABLE_PROMOCODE: BASE_URL + "/promocode/enablePromocode",
+  DISABLE_PROMOCODE: BASE_URL + "/promocode/disablePromocode",
+  SEARCH_PROMOCODE: BASE_URL + "/promocode/searchKeyword",
+  SEARCH_PROMOCODE_PAGINATED: BASE_URL + "/promocode/getPaginatedSearch",
+  GET_ALL_PROMOCODES: BASE_URL + "/promocode/getAll",
 }
 
 // Banner API

@@ -393,13 +393,19 @@ export default function CreateEvent({
       const startDate = new Date(item.EventStartDateTime || item.eventStartDateTime)
       const endDate = new Date(item.EventEndDateTime || item.eventEndDateTime)
 
+      // Validate the dates before processing
+      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+        console.warn('Invalid date found in event data:', item)
+        return null
+      }
+
       return {
         EventStartDate: startDate.toISOString().split('T')[0],
-        EventStartTime: startDate.toTimeString().slice(0, 5),
+        EventStartTime: startDate.toTimeString().slice(0, 8), // Include seconds in format HH:MM:SS
         EventEndDate: endDate.toISOString().split('T')[0],
-        EventEndTime: endDate.toTimeString().slice(0, 5)
+        EventEndTime: endDate.toTimeString().slice(0, 8) // Include seconds in format HH:MM:SS
       }
-    })
+    }).filter(Boolean) as EventDateTime[] // Remove any null entries from invalid dates
   }
   const transformExistingData = (existingData: any[], availableOptions: SelectOption[], type: string): SelectOption[] => {
     if (!existingData || !Array.isArray(existingData) || availableOptions.length === 0) {
@@ -949,9 +955,44 @@ export default function CreateEvent({
       return
     }
 
-    const startDateTime = new Date(`${tempEventDate.startDate}T${tempEventDate.startTime}:00`)
-    const endDateTime = new Date(`${tempEventDate.endDate}T${tempEventDate.endTime}:00`)
+    // Validate and normalize time format (ensure it doesn't already have seconds)
+    const normalizeTime = (time: string) => {
+      const parts = time.split(':')
+      if (parts.length === 2) {
+        return `${time}:00`
+      } else if (parts.length === 3) {
+        return time
+      } else {
+        throw new Error('Invalid time format')
+      }
+    }
+
+    let normalizedStartTime, normalizedEndTime
+    try {
+      normalizedStartTime = normalizeTime(tempEventDate.startTime)
+      normalizedEndTime = normalizeTime(tempEventDate.endTime)
+    } catch (error) {
+      toast({
+        title: "Invalid Time Format",
+        description: "Please enter time in HH:MM format",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const startDateTime = new Date(`${tempEventDate.startDate}T${normalizedStartTime}`)
+    const endDateTime = new Date(`${tempEventDate.endDate}T${normalizedEndTime}`)
     const currentDateTime = new Date()
+
+    // Validate that the dates are valid
+    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+      toast({
+        title: "Invalid Date/Time",
+        description: "Please enter valid date and time values",
+        variant: "destructive"
+      })
+      return
+    }
 
     if (startDateTime < currentDateTime) {
       toast({
@@ -985,9 +1026,9 @@ export default function CreateEvent({
 
     const newEvent: EventDateTime = {
       EventStartDate: tempEventDate.startDate,
-      EventStartTime: `${tempEventDate.startTime}:00`,
+      EventStartTime: normalizedStartTime,
       EventEndDate: tempEventDate.endDate,
-      EventEndTime: `${tempEventDate.endTime}:00`,
+      EventEndTime: normalizedEndTime,
     }
 
     setFieldValue("events", [...values.events, newEvent])
@@ -1216,21 +1257,56 @@ export default function CreateEvent({
       if (!editMode) {
         // CREATE MODE: Send full event date/time data
         if (values.events && values.events.length > 0) {
-          const firstEvent = values.events[0]
+          const eventDateTimeArray = []
           
-          // Convert back to datetime format for API
-          const startDateTime = new Date(`${firstEvent.EventStartDate}T${firstEvent.EventStartTime}:00.000Z`)
-          const endDateTime = new Date(`${firstEvent.EventEndDate}T${firstEvent.EventEndTime}:00.000Z`)
+          for (const event of values.events) {
+            // Validate the date and time values before creating Date objects
+            if (!event.EventStartDate || !event.EventStartTime || 
+                !event.EventEndDate || !event.EventEndTime) {
+              toast({
+                title: "Invalid Event Data",
+                description: "Event date and time information is incomplete",
+                variant: "destructive"
+              })
+              return
+            }
+            
+            // Convert back to datetime format for API - use local time construction
+            const startDateTimeString = `${event.EventStartDate}T${event.EventStartTime}`
+            const endDateTimeString = `${event.EventEndDate}T${event.EventEndTime}`
+            
+            // Create date objects and validate them
+            const startDateTime = new Date(startDateTimeString)
+            const endDateTime = new Date(endDateTimeString)
+            
+            // Check if the dates are valid
+            if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+              toast({
+                title: "Invalid Date/Time",
+                description: "The event date and time values are not valid",
+                variant: "destructive"
+              })
+              return
+            }
+            
+            // Add to EventDateTime array in the format expected by API
+            eventDateTimeArray.push({
+              EventStartDate: event.EventStartDate, // Keep as YYYY-MM-DD format
+              EventEndDate: event.EventEndDate,     // Keep as YYYY-MM-DD format
+              EventStartTime: event.EventStartTime, // Keep as HH:MM format
+              EventEndTime: event.EventEndTime      // Keep as HH:MM format
+            })
+          }
           
-          // For create mode, try the field names that work for new events
-          submitData.append("startDateTime", startDateTime.toISOString())
-          submitData.append("endDateTime", endDateTime.toISOString())
-          
-          // Also try separate date and time fields
-          submitData.append("eventStartDate", firstEvent.EventStartDate)
-          submitData.append("eventStartTime", firstEvent.EventStartTime)
-          submitData.append("eventEndDate", firstEvent.EventEndDate)
-          submitData.append("eventEndTime", firstEvent.EventEndTime)
+          // Send EventDateTime array that the API requires
+          submitData.append("EventDateTime", JSON.stringify(eventDateTimeArray))
+        } else {
+          toast({
+            title: "Missing Event Times",
+            description: "Please add at least one event date and time",
+            variant: "destructive"
+          })
+          return
         }
       }
       // EDIT MODE: Skip date/time fields (handled separately by API)

@@ -21,6 +21,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Select,
   SelectContent,
@@ -36,7 +37,7 @@ import { useToast } from "@/hooks/use-toast"
 import { promocodeEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
-import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus } from "@/lib/types"
+import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
 
 const statusColors: Record<number, string> = {
@@ -71,6 +72,23 @@ export default function PromocodesPage() {
   const [apiError, setApiError] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [selectedPromocode, setSelectedPromocode] = useState<Promocode | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  
+  // Form state for create/edit
+  const [formData, setFormData] = useState({
+    PromoCodeName: "",
+    TermsCondition: "",
+    PromocodeType: "1", // Fixed Amount by default
+    Value: "",
+    MinCheckoutAmount: "",
+    ExpiryDate: "",
+    OneTimeUseFlag: false,
+    PromocodeValidFor: "All",
+    CanBeUsed: "All"
+  })
   
   const itemsPerPage = 10
 
@@ -174,13 +192,236 @@ export default function PromocodesPage() {
     }).format(amount)
   }
 
-  const handleCreatePromocode = () => {
-    // TODO: Implement create promocode functionality
-    toast({
-      title: "Feature Coming Soon",
-      description: "Create promocode functionality will be available soon.",
+  const handleCreatePromocode = async () => {
+    if (!formData.PromoCodeName.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Promocode name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.Value || parseFloat(formData.Value) <= 0) {
+      toast({
+        title: "Validation Error", 
+        description: "Value must be greater than 0",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!formData.MinCheckoutAmount || parseFloat(formData.MinCheckoutAmount) < 0) {
+      toast({
+        title: "Validation Error",
+        description: "Minimum checkout amount must be 0 or greater",
+        variant: "destructive", 
+      })
+      return
+    }
+
+    if (!formData.ExpiryDate) {
+      toast({
+        title: "Validation Error",
+        description: "Expiry date is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const requestData: CreatePromocodeRequest = {
+        PromoCodeName: formData.PromoCodeName.trim(),
+        TermsCondition: formData.TermsCondition.trim(),
+        PromocodeType: formData.PromocodeType,
+        Value: parseFloat(formData.Value),
+        MinCheckoutAmount: parseFloat(formData.MinCheckoutAmount),
+        ExpiryDate: formData.ExpiryDate,
+        OneTimeUseFlag: formData.OneTimeUseFlag,
+        PromocodeValidFor: formData.PromocodeValidFor,
+        CanBeUsed: formData.CanBeUsed,
+        Events: [], // Can be extended to support specific events
+        CustomerIds: [] // Can be extended to support specific customers
+      }
+
+      const response = await fetch(promocodeEndPoint.CREATE_PROMOCODE, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestData),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Promocode created successfully",
+        })
+        setIsCreateDialogOpen(false)
+        resetForm()
+        await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
+      } else {
+        throw new Error(result.message || "Failed to create promocode")
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create promocode",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const resetForm = () => {
+    setFormData({
+      PromoCodeName: "",
+      TermsCondition: "",
+      PromocodeType: "1",
+      Value: "",
+      MinCheckoutAmount: "",
+      ExpiryDate: "",
+      OneTimeUseFlag: false,
+      PromocodeValidFor: "All",
+      CanBeUsed: "All"
     })
-    setIsCreateDialogOpen(false)
+    setSelectedPromocode(null)
+  }
+
+  const handleEdit = (promocode: Promocode) => {
+    setSelectedPromocode(promocode)
+    setFormData({
+      PromoCodeName: promocode.PromoCodeName,
+      TermsCondition: promocode.TermsCondition || "",
+      PromocodeType: promocode.PromocodeType.toString(),
+      Value: promocode.Value.toString(),
+      MinCheckoutAmount: promocode.MinCheckoutAmount.toString(),
+      ExpiryDate: promocode.ExpiryDate.split('T')[0], // Format date for input
+      OneTimeUseFlag: promocode.OneTimeUseFlag === 1,
+      PromocodeValidFor: promocode.PromocodeValidFor || "All",
+      CanBeUsed: promocode.CanBeUsed || "All"
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleUpdatePromocode = async () => {
+    if (!selectedPromocode) return
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      // Note: Update endpoint might need to be verified with backend team
+      // For now, we'll show a message that this functionality needs backend support
+      toast({
+        title: "Feature Not Available",
+        description: "Update promocode endpoint needs to be implemented in the backend",
+        variant: "destructive",
+      })
+      setIsEditDialogOpen(false)
+      resetForm()
+    } catch (error: any) {
+      toast({
+        title: "Error", 
+        description: error.message || "Failed to update promocode",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDelete = (promocode: Promocode) => {
+    setSelectedPromocode(promocode)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const handleDeletePromocode = async () => {
+    if (!selectedPromocode) return
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      // Note: Delete endpoint might need to be verified with backend team
+      // For now, we'll show a message that this functionality needs backend support
+      toast({
+        title: "Feature Not Available",
+        description: "Delete promocode endpoint needs to be implemented in the backend",
+        variant: "destructive",
+      })
+      setIsDeleteDialogOpen(false)
+      setSelectedPromocode(null)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete promocode",
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleToggleStatus = async (promocode: Promocode) => {
+    const isCurrentlyActive = promocode.status === PromocodeStatus.Active
+    const action = isCurrentlyActive ? 'disable' : 'enable'
+    const endpoint = isCurrentlyActive ? promocodeEndPoint.DISABLE_PROMOCODE : promocodeEndPoint.ENABLE_PROMOCODE
+
+    setSubmitting(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("Authentication required")
+      }
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          Promocode_id: promocode._id,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: `Promocode ${action}d successfully`,
+        })
+        await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
+      } else {
+        throw new Error(result.message || `Failed to ${action} promocode`)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || `Failed to ${action} promocode`,
+        variant: "destructive",
+      })
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -201,12 +442,128 @@ export default function PromocodesPage() {
             <DialogHeader>
               <DialogTitle>Create New Promocode</DialogTitle>
               <DialogDescription>
-                This feature will be available soon.
+                Create a new promotional code for your events
               </DialogDescription>
             </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="promocodeName">Promocode Name *</Label>
+                  <Input
+                    id="promocodeName"
+                    value={formData.PromoCodeName}
+                    onChange={(e) => setFormData({...formData, PromoCodeName: e.target.value})}
+                    placeholder="Enter promocode name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="promocodeType">Type *</Label>
+                  <Select 
+                    value={formData.PromocodeType} 
+                    onValueChange={(value) => setFormData({...formData, PromocodeType: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Fixed Amount</SelectItem>
+                      <SelectItem value="2">Percentage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="value">
+                    Value * {formData.PromocodeType === "2" && "(%)"} {formData.PromocodeType === "1" && "(₹)"}
+                  </Label>
+                  <Input
+                    id="value"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.Value}
+                    onChange={(e) => setFormData({...formData, Value: e.target.value})}
+                    placeholder="Enter value"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="minAmount">Minimum Checkout Amount (₹) *</Label>
+                  <Input
+                    id="minAmount"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.MinCheckoutAmount}
+                    onChange={(e) => setFormData({...formData, MinCheckoutAmount: e.target.value})}
+                    placeholder="Enter minimum amount"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="expiryDate">Expiry Date *</Label>
+                  <Input
+                    id="expiryDate"
+                    type="date"
+                    value={formData.ExpiryDate}
+                    onChange={(e) => setFormData({...formData, ExpiryDate: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="validFor">Valid For</Label>
+                  <Select 
+                    value={formData.PromocodeValidFor} 
+                    onValueChange={(value) => setFormData({...formData, PromocodeValidFor: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Events</SelectItem>
+                      <SelectItem value="Specific">Specific Events</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="terms">Terms & Conditions</Label>
+                <textarea
+                  id="terms"
+                  className="w-full min-h-[80px] px-3 py-2 border border-input bg-background rounded-md text-sm resize-none"
+                  value={formData.TermsCondition}
+                  onChange={(e) => setFormData({...formData, TermsCondition: e.target.value})}
+                  placeholder="Enter terms and conditions"
+                />
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="oneTimeUse"
+                  checked={formData.OneTimeUseFlag}
+                  onChange={(e) => setFormData({...formData, OneTimeUseFlag: e.target.checked})}
+                  className="rounded"
+                />
+                <Label htmlFor="oneTimeUse">One Time Use Only</Label>
+              </div>
+            </div>
             <DialogFooter>
-              <Button onClick={() => setIsCreateDialogOpen(false)}>
-                Close
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsCreateDialogOpen(false)
+                  resetForm()
+                }}
+              >
+                Cancel
+              </Button>
+              <Button onClick={handleCreatePromocode} disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Create Promocode
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -327,20 +684,27 @@ export default function PromocodesPage() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => toast({
-                              title: "Feature Coming Soon",
-                              description: "Edit functionality will be available soon.",
-                            })}
+                            onClick={() => handleEdit(promocode)}
+                            disabled={submitting}
                           >
                             Edit
                           </Button>
                           <Button 
                             variant="outline" 
-                            size="sm" 
-                            onClick={() => toast({
-                              title: "Feature Coming Soon",
-                              description: "Delete functionality will be available soon.",
-                            })}
+                            size="sm"
+                            onClick={() => handleToggleStatus(promocode)}
+                            disabled={submitting}
+                            className={promocode.status === PromocodeStatus.Active ? "text-orange-600" : "text-green-600"}
+                          >
+                            {submitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                            {promocode.status === PromocodeStatus.Active ? "Disable" : "Enable"}
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleDelete(promocode)}
+                            disabled={submitting}
+                            className="text-red-600"
                           >
                             Delete
                           </Button>
@@ -393,6 +757,170 @@ export default function PromocodesPage() {
           <DialogFooter>
             <Button onClick={() => setShowErrorDialog(false)}>Close</Button>
             <Button onClick={handleRefresh} variant="outline">Retry</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Promocode</DialogTitle>
+            <DialogDescription>
+              Update promocode details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editPromocodeName">Promocode Name *</Label>
+                <Input
+                  id="editPromocodeName"
+                  value={formData.PromoCodeName}
+                  onChange={(e) => setFormData({...formData, PromoCodeName: e.target.value})}
+                  placeholder="Enter promocode name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editPromocodeType">Type *</Label>
+                <Select 
+                  value={formData.PromocodeType} 
+                  onValueChange={(value) => setFormData({...formData, PromocodeType: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Fixed Amount</SelectItem>
+                    <SelectItem value="2">Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editValue">
+                  Value * {formData.PromocodeType === "2" && "(%)"} {formData.PromocodeType === "1" && "(₹)"}
+                </Label>
+                <Input
+                  id="editValue"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.Value}
+                  onChange={(e) => setFormData({...formData, Value: e.target.value})}
+                  placeholder="Enter value"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editMinAmount">Minimum Checkout Amount (₹) *</Label>
+                <Input
+                  id="editMinAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.MinCheckoutAmount}
+                  onChange={(e) => setFormData({...formData, MinCheckoutAmount: e.target.value})}
+                  placeholder="Enter minimum amount"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="editExpiryDate">Expiry Date *</Label>
+                <Input
+                  id="editExpiryDate"
+                  type="date"
+                  value={formData.ExpiryDate}
+                  onChange={(e) => setFormData({...formData, ExpiryDate: e.target.value})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editValidFor">Valid For</Label>
+                <Select 
+                  value={formData.PromocodeValidFor} 
+                  onValueChange={(value) => setFormData({...formData, PromocodeValidFor: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All Events</SelectItem>
+                    <SelectItem value="Specific">Specific Events</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="editTerms">Terms & Conditions</Label>
+              <textarea
+                id="editTerms"
+                className="w-full min-h-[80px] px-3 py-2 border border-input bg-background rounded-md text-sm resize-none"
+                value={formData.TermsCondition}
+                onChange={(e) => setFormData({...formData, TermsCondition: e.target.value})}
+                placeholder="Enter terms and conditions"
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="editOneTimeUse"
+                checked={formData.OneTimeUseFlag}
+                onChange={(e) => setFormData({...formData, OneTimeUseFlag: e.target.checked})}
+                className="rounded"
+              />
+              <Label htmlFor="editOneTimeUse">One Time Use Only</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsEditDialogOpen(false)
+                resetForm()
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleUpdatePromocode} disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Update Promocode
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Promocode</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete the promocode "{selectedPromocode?.PromoCodeName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setIsDeleteDialogOpen(false)
+                setSelectedPromocode(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeletePromocode} 
+              disabled={submitting}
+            >
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
