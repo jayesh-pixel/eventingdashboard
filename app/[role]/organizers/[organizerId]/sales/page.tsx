@@ -203,13 +203,21 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
 
       const data: TotalSalesDataResponse = await response.json()
       if (data.error) {
+        // Don't show error for "Not Found" cases - this is normal when no data exists
+        if (data.message?.toLowerCase().includes('not found')) {
+          setTotalSalesData(null)
+          return
+        }
         throw new Error(data.message || "Failed to fetch total sales data")
       }
 
       setTotalSalesData(data.data)
     } catch (error) {
       console.error("Error fetching total sales data:", error)
-      setApiError("Failed to fetch total sales data")
+      // Only set API error for actual errors, not for "not found" cases
+      if (error instanceof Error && !error.message.toLowerCase().includes('not found')) {
+        setApiError("Failed to fetch total sales data")
+      }
     }
   }
 
@@ -244,6 +252,14 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
 
       const data: SalesDataResponse = await response.json()
       if (data.error) {
+        // Don't show error for "Not Found" cases - this is normal when no data exists
+        if (data.message?.toLowerCase().includes('not found')) {
+          setSalesData([])
+          setOriginalSalesData([])
+          setTotalPages(1)
+          setCurrentPage(1)
+          return
+        }
         throw new Error(data.message || "Failed to fetch sales data")
       }
 
@@ -253,7 +269,10 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
       setCurrentPage(parseInt(data.data.currentPage) || page)
     } catch (error) {
       console.error("Error fetching sales data:", error)
-      setApiError("Failed to fetch sales data")
+      // Only set API error for actual errors, not for "not found" cases
+      if (error instanceof Error && !error.message.toLowerCase().includes('not found')) {
+        setApiError("Failed to fetch sales data")
+      }
       setSalesData([])
     } finally {
       setLoading(false)
@@ -528,7 +547,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
       </div>
 
       {/* API Error Alert */}
-      {apiError && (
+      {/* {apiError && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
@@ -547,7 +566,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
             </Button>
           </AlertDescription>
         </Alert>
-      )}
+      )} */}
 
       {/* Sales Summary Cards */}
       {totalSalesData && (
