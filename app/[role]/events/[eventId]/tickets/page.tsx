@@ -283,6 +283,33 @@ export default function TicketsPage() {
       currency: "INR",
     }).format(amount)
   }
+  // Normalize various backend status shapes to a consistent string
+  const normalizeStatus = (raw: any): string => {
+    if (raw === undefined || raw === null) return "Inactive"
+    // Booleans
+    if (raw === true) return "Active"
+    if (raw === false) return "Inactive"
+    // Numbers or numeric strings
+    if (raw === 1 || raw === "1") return "Active"
+    if (raw === 0 || raw === "0") return "Inactive"
+    // Common strings
+    const s = String(raw).toLowerCase()
+    if (["active", "enabled", "enable"].includes(s)) return "Active"
+    if (["inactive", "disabled", "disable"].includes(s)) return "Inactive"
+    // Fallback to capitalized raw string
+    return String(raw)
+  }
+
+  // Map backend promoter record into our Promoter shape
+  const mapToPromoter = (p: any): Promoter => {
+    return {
+      _id: p?._id ?? p?.promoter_id ?? p?.id ?? "",
+      FullName: p?.FullName ?? p?.PromoterName ?? p?.Username ?? p?.name ?? "Unknown Promoter",
+      Email: p?.Email ?? p?.email ?? "",
+      Phone1: p?.Phone1 ?? p?.phone ?? p?.Phone ?? "",
+      Status: normalizeStatus(p?.Status ?? p?.status ?? p?.PromoterStatus ?? p?.is_active),
+    }
+  }
   const getTicketTypeName = (type: number) => {
     switch (type) {
       case 1: return "Single Day"
@@ -309,7 +336,9 @@ export default function TicketsPage() {
       if (response.ok) {
         const data = await response.json()
         if (!data.error) {
-          setPromoters(data.data || [])
+          const list = Array.isArray(data.data) ? data.data : []
+          const normalized: Promoter[] = list.map(mapToPromoter)
+          setPromoters(normalized)
         }
       }
     } catch (error) {
@@ -686,23 +715,21 @@ export default function TicketsPage() {
       console.log("Current ticket state before toggle:", normalTickets.find(t => t._id === ticketId))
       
       // Set individual ticket loading state
-      setTicketLoadingStates(prev => ({ ...prev, [ticketId]: true }))      // Optimistic update - update the UI immediately
-      const optimisticUpdate = (tickets: any[]) => 
-        tickets.map(ticket => {
-          if (ticket._id === ticketId) {
-            return {
-              ...ticket,
-              EventTicketAvailability: currentIsSoldOut ? 1 : 0, // 1 = Available, 0 = Sold Out (CORRECT FIELD)
-              EventTicketStatus: currentIsSoldOut ? 0 : 1, // Keep for backward compatibility
-              IsSoldOut: !currentIsSoldOut,
-              AvailabilityStatus: currentIsSoldOut ? "Available" : "SoldOut"
-            }
+      setTicketLoadingStates(prev => ({ ...prev, [ticketId]: true }))
+      // Keep previous snapshot for rollback
+      const previousTickets = normalTickets
+      // Optimistic update - update only availability-related fields
+      setNormalTickets(prev => prev.map(ticket => {
+        if (ticket._id === ticketId) {
+          return {
+            ...ticket,
+            EventTicketAvailability: currentIsSoldOut ? 1 : 0, // 1 = Available, 0 = Sold Out
+            IsSoldOut: !currentIsSoldOut,
+            AvailabilityStatus: currentIsSoldOut ? "Available" : "SoldOut"
           }
-          return ticket
-        })
-      
-      // Apply optimistic update
-      setNormalTickets(prev => optimisticUpdate(prev))
+        }
+        return ticket
+      }))
       
       const authToken = getValidToken()
       if (!user || !authToken) return
@@ -745,14 +772,14 @@ export default function TicketsPage() {
         } else {
           console.error("API returned error:", data)
           // Revert optimistic update on error
-          setNormalTickets(prev => optimisticUpdate(prev))
+          setNormalTickets(previousTickets)
           throw new Error(data.message || "Failed to update availability")
         }
       } else {
         const errorText = await response.text()
         console.error("Toggle availability API call failed:", response.status, errorText)
         // Revert optimistic update on error
-        setNormalTickets(prev => optimisticUpdate(prev))
+        setNormalTickets(previousTickets)
         throw new Error("Failed to update availability")
       }
     } catch (error) {
@@ -1216,14 +1243,16 @@ export default function TicketsPage() {
     // Check availability based on the actual API response structure
     // EventTicketAvailability: 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
     const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                     extendedTicket.EventTicketStatus === 1 ||
-                     extendedTicket.IsSoldOut || 
-                     extendedTicket.AvailabilityStatus === "SoldOut" || 
-                     extendedTicket.AvailabilityStatus === "sold_out"
+                      extendedTicket.IsSoldOut === true || 
+                      extendedTicket.AvailabilityStatus === "SoldOut" || 
+                      extendedTicket.AvailabilityStatus === "sold_out"
     
     // Check status (Active/Disabled)
-    const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                    extendedTicket.TicketStatus !== 0
+    const isActive = (typeof extendedTicket.TicketStatus === 'number')
+      ? extendedTicket.TicketStatus !== 0
+      : (typeof extendedTicket.EventTicketStatus === 'number' 
+          ? extendedTicket.EventTicketStatus !== 0 
+          : true)
     
     const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesAvailability = availabilityFilter === "all" || 
@@ -1240,8 +1269,11 @@ export default function TicketsPage() {
     const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || ''
     
     // Check status (Active/Disabled) for bulk tickets
-    const isActive = extendedTicket.Status !== 0 && 
-                    extendedTicket.BulkTicketStatus !== 0
+    const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+      ? extendedTicket.BulkTicketStatus !== 0
+      : (typeof extendedTicket.Status === 'number' 
+          ? extendedTicket.Status !== 0 
+          : true)
     
     const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || 
@@ -1425,13 +1457,19 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               <Badge variant={(() => {
-                                const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                                               extendedTicket.TicketStatus !== 0
+                                const isActive = (typeof extendedTicket.TicketStatus === 'number')
+                                  ? extendedTicket.TicketStatus !== 0
+                                  : (typeof extendedTicket.EventTicketStatus === 'number' 
+                                      ? extendedTicket.EventTicketStatus !== 0 
+                                      : true)
                                 return isActive ? "default" : "secondary"
                               })()}>
                                 {(() => {
-                                  const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                                                 extendedTicket.TicketStatus !== 0
+                                  const isActive = (typeof extendedTicket.TicketStatus === 'number')
+                                    ? extendedTicket.TicketStatus !== 0
+                                    : (typeof extendedTicket.EventTicketStatus === 'number' 
+                                        ? extendedTicket.EventTicketStatus !== 0 
+                                        : true)
                                   return isActive ? "Active" : "Disabled"
                                 })()}
                               </Badge>
@@ -1441,40 +1479,36 @@ export default function TicketsPage() {
                                 <label className="relative inline-flex items-center cursor-pointer">
                                   <input
                                     type="checkbox"
-                                    className="sr-only"                                    checked={(() => {
-                                      // EventTicketAvailability: 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
+                                    className="sr-only peer"                                    checked={(() => {
+                                      // EventTicketAvailability: 1 = Available, 0 = Sold Out (CORRECT FIELD)
                                       const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                                                      extendedTicket.EventTicketStatus === 1 ||
-                                                      extendedTicket.IsSoldOut || 
-                                                      extendedTicket.AvailabilityStatus === "SoldOut" || 
-                                                      extendedTicket.AvailabilityStatus === "sold_out"
+                                                        extendedTicket.IsSoldOut === true || 
+                                                        extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                        extendedTicket.AvailabilityStatus === "sold_out"
                                       return !isSoldOut // Toggle is ON when available, OFF when sold out
                                     })()}
                                     onChange={() => {
                                       const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                                                      extendedTicket.EventTicketStatus === 1 ||
-                                                      extendedTicket.IsSoldOut || 
-                                                      extendedTicket.AvailabilityStatus === "SoldOut" || 
-                                                      extendedTicket.AvailabilityStatus === "sold_out"
+                                                        extendedTicket.IsSoldOut === true || 
+                                                        extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                        extendedTicket.AvailabilityStatus === "sold_out"
                                       handleToggleAvailability(ticket._id, isSoldOut)
                                     }}
                                     disabled={ticketLoadingStates[ticket._id] || false}
                                   />
-                                  <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                  <div className="relative w-11 h-6 bg-gray-200 rounded-full peer-focus:ring-2 peer-focus:ring-blue-300 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
                                 </label>                                <span className={`text-sm font-medium ${(() => {
                                   const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                                                  extendedTicket.EventTicketStatus === 1 ||
-                                                  extendedTicket.IsSoldOut || 
-                                                  extendedTicket.AvailabilityStatus === "SoldOut" || 
-                                                  extendedTicket.AvailabilityStatus === "sold_out"
+                                                    extendedTicket.IsSoldOut === true || 
+                                                    extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                    extendedTicket.AvailabilityStatus === "sold_out"
                                   return isSoldOut ? "text-red-600" : "text-green-600"
                                 })()}`}>
                                   {(() => {
                                     const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                                                    extendedTicket.EventTicketStatus === 1 ||
-                                                    extendedTicket.IsSoldOut || 
-                                                    extendedTicket.AvailabilityStatus === "SoldOut" || 
-                                                    extendedTicket.AvailabilityStatus === "sold_out"
+                                                      extendedTicket.IsSoldOut === true || 
+                                                      extendedTicket.AvailabilityStatus === "SoldOut" || 
+                                                      extendedTicket.AvailabilityStatus === "sold_out"
                                     return isSoldOut ? "Sold Out" : "Available"
                                   })()}
                                 </span>
@@ -1498,21 +1532,30 @@ export default function TicketsPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
-                                      const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                                                     extendedTicket.TicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
+                                        ? extendedTicket.TicketStatus !== 0
+                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
+                                            ? extendedTicket.EventTicketStatus !== 0 
+                                            : true)
                                       const ticketName = extendedTicket.Name || ticket.TicketName || 'ticket'
                                       // Pass the current status (1 if active, 0 if disabled) so the function can toggle it correctly
                                       handleToggleStatus(ticket._id, isActive ? 1 : 0, true, ticketName)
                                     }}
                                     className={(() => {
-                                      const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                                                       extendedTicket.TicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
+                                        ? extendedTicket.TicketStatus !== 0
+                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
+                                            ? extendedTicket.EventTicketStatus !== 0 
+                                            : true)
                                       return isActive ? "text-destructive" : "text-green-600"
                                     })()}
                                   >
                                     {(() => {
-                                      const isActive = extendedTicket.EventTicketStatus !== 0 && 
-                                                       extendedTicket.TicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
+                                        ? extendedTicket.TicketStatus !== 0
+                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
+                                            ? extendedTicket.EventTicketStatus !== 0 
+                                            : true)
                                       return isActive ? "Disable" : "Enable"
                                     })()}
                                   </DropdownMenuItem>
@@ -1617,13 +1660,19 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               <Badge variant={(() => {
-                                const isActive = extendedTicket.Status !== 0 && 
-                                               extendedTicket.BulkTicketStatus !== 0
+                                const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+                                  ? extendedTicket.BulkTicketStatus !== 0
+                                  : (typeof extendedTicket.Status === 'number' 
+                                      ? extendedTicket.Status !== 0 
+                                      : true)
                                 return isActive ? "default" : "secondary"
                               })()}>
                                 {(() => {
-                                  const isActive = extendedTicket.Status !== 0 && 
-                                                 extendedTicket.BulkTicketStatus !== 0
+                                  const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+                                    ? extendedTicket.BulkTicketStatus !== 0
+                                    : (typeof extendedTicket.Status === 'number' 
+                                        ? extendedTicket.Status !== 0 
+                                        : true)
                                   return isActive ? "Active" : "Disabled"
                                 })()}
                               </Badge>
@@ -1646,22 +1695,31 @@ export default function TicketsPage() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       const batchId = ticket.BatchId || ticket._id || ''
-                                      const isActive = extendedTicket.Status !== 0 && 
-                                                     extendedTicket.BulkTicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+                                        ? extendedTicket.BulkTicketStatus !== 0
+                                        : (typeof extendedTicket.Status === 'number' 
+                                            ? extendedTicket.Status !== 0 
+                                            : true)
                                       const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || 'bulk ticket'
                                       // Pass the current status (1 if active, 0 if disabled) so the function can toggle it correctly
                                       if (batchId) handleToggleStatus(batchId, isActive ? 1 : 0, false, ticketName)
                                     }}
                                     className={(() => {
-                                      const isActive = extendedTicket.Status !== 0 && 
-                                                       extendedTicket.BulkTicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+                                        ? extendedTicket.BulkTicketStatus !== 0
+                                        : (typeof extendedTicket.Status === 'number' 
+                                            ? extendedTicket.Status !== 0 
+                                            : true)
                                       return isActive ? "text-destructive" : "text-green-600"
                                     })()}
                                   >
                                     <X className="mr-2 h-4 w-4" />
                                     {(() => {
-                                      const isActive = extendedTicket.Status !== 0 && 
-                                                       extendedTicket.BulkTicketStatus !== 0
+                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
+                                        ? extendedTicket.BulkTicketStatus !== 0
+                                        : (typeof extendedTicket.Status === 'number' 
+                                            ? extendedTicket.Status !== 0 
+                                            : true)
                                       return isActive ? "Disable" : "Enable"
                                     })()}
                                   </DropdownMenuItem>
@@ -1719,15 +1777,6 @@ export default function TicketsPage() {
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                   />
                 </div>                <div className="grid grid-cols-1 gap-4">
-                  {/* Show ticket type as read-only info */}
-                  <div className="space-y-2">
-                    <Label>Ticket Type</Label>
-                    <div className="p-3 bg-muted rounded-md text-sm">
-                      {getTicketTypeName(normalFormData.TicketType)}
-                      {normalFormData.TicketType === 2 && " (Based on event configuration)"}
-                    </div>
-                  </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="visibilityLevel">Visibility</Label>
                     <Select
