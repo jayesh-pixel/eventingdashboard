@@ -1915,7 +1915,7 @@ export default function CreateEvent({
                 {/* Organizers Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Organizers *</CardTitle>
+                    <CardTitle>Organizers *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -1940,7 +1940,7 @@ export default function CreateEvent({
                 {/* Categories Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Categories *</CardTitle>
+                    <CardTitle>Categories *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -1964,7 +1964,7 @@ export default function CreateEvent({
                 {/* Artists Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Artists *</CardTitle>
+                    <CardTitle>Artists *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -1988,7 +1988,7 @@ export default function CreateEvent({
                 {/* Genres Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Genres *</CardTitle>
+                    <CardTitle>Genres *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2012,7 +2012,7 @@ export default function CreateEvent({
                 {/* Languages Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Languages *</CardTitle>
+                    <CardTitle>Languages *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2037,7 +2037,7 @@ export default function CreateEvent({
                 {/* Event Configuration */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Configuration</CardTitle>
+                    <CardTitle>Configuration</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {/* Event Visibility */}
@@ -2355,11 +2355,11 @@ export default function CreateEvent({
                 {/* Event Information */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Information</CardTitle>
+                    <CardTitle>Information</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-base font-semibold">Event Name *</Label>
+                      <Label className="text-base font-semibold"> Name *</Label>
                       <Field
                         as={Input}
                         name="eventname"
@@ -2369,7 +2369,7 @@ export default function CreateEvent({
                         <p className="text-sm text-red-600">{errors.eventname}</p>
                       )}
                     </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Event Description *</Label>
+                      <Label className="text-base font-semibold">Description *</Label>
                       <ReactQuillWrapper
                         value={values.eventDescription}
                         onChange={(content) => setFieldValue("eventDescription", content)}
@@ -2381,7 +2381,7 @@ export default function CreateEvent({
                         <p className="text-sm text-red-600">{errors.eventDescription}</p>
                       )}
                     </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Event Terms and Conditions *</Label>
+                      <Label className="text-base font-semibold">Terms and Conditions *</Label>
                       <ReactQuillWrapper
                         value={values.eventTermsandConditions}
                         onChange={(content) => setFieldValue("eventTermsandConditions", content)}
@@ -2395,7 +2395,7 @@ export default function CreateEvent({
                     </div>
 
                     <div className="space-y-2">
-                      <Label>Event Video URL (Optional)</Label>
+                      <Label>Video URL (Optional)</Label>
                       <Field
                         as={Input}
                         name="eventVideoUrl"
@@ -2468,7 +2468,7 @@ export default function CreateEvent({
                 {/* Date and Time Management */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Date & Time *</CardTitle>
+                    <CardTitle>Date & Time *</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       Add multiple dates for multi-day events. Each date can have different start/end times.
                     </p>
@@ -2554,7 +2554,7 @@ export default function CreateEvent({
                 {/* FAQ Management */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event FAQs</CardTitle>
+                    <CardTitle>FAQs</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       Add frequently asked questions and answers about your event
                     </p>

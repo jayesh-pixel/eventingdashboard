@@ -833,7 +833,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    router.push(`/${role}/events/${eventId}/booking-tickets`)
+    router.push(`/${role}/events/${eventId}/booking`)
   }
 
   const handlePromoterClick = (promoterData: any, eventId: string) => {

@@ -495,9 +495,31 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         body: JSON.stringify(requestPayload),
       })
 
+      // Treat 404 as no data (show empty state, not an error dialog)
+      if (response.status === 404) {
+        console.warn("Received 404 from bookings API – showing empty state")
+        setBookingsData([])
+        setOriginalData([])
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
-      }      const data = await response.json()
+      }
+
+      const data = await response.json()
+
+      // Some APIs respond with error flags but 200 status; treat these as no data
+      const hasErrorFlag = Boolean(
+        (data && (data.error === true || data.success === false || data.status === false)) ||
+        (data?.data && (data.data.error === true || data.data.success === false || data.data.status === false))
+      )
+      if (hasErrorFlag) {
+        console.warn("API returned an error flag – showing empty state")
+        setBookingsData([])
+        setOriginalData([])
+        return
+      }
 
       let bookingsArray = null
       
@@ -546,10 +568,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           setBookingsData(normalizedBookings)
         setOriginalData(normalizedBookings)
         
-        toast({
-          title: "Success",
-          description: `Loaded ${normalizedBookings.length} bookings successfully`,
-        })
+        if (normalizedBookings.length > 0) {
+          toast({
+            title: "Success",
+            description: `Loaded ${normalizedBookings.length} bookings successfully`,
+          })
+        }
       } else {
         console.error("❌ No valid bookings array found")
         throw new Error("No valid bookings array found in response")
@@ -968,16 +992,23 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   {/* Mobile Card View */}
                                  {/* Desktop Table View */}
                   <div className="w-full">
-                    <BookingsTable 
-                      bookings={currentBookings}
-                      role={role as UserRole}
-                      searchTerm={searchTerm}
-                      statusFilter={statusFilter}
-                      channelFilter={channelFilter}
-                      formatDate={formatDate}
-                      formatCurrency={formatCurrency}
-                      getStatusBadgeVariant={getStatusBadgeVariant}
-                    />
+                    {filteredBookings.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
+                        <AlertCircle className="h-10 w-10 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">No data found</p>
+                      </div>
+                    ) : (
+                      <BookingsTable 
+                        bookings={currentBookings}
+                        role={role as UserRole}
+                        searchTerm={searchTerm}
+                        statusFilter={statusFilter}
+                        channelFilter={channelFilter}
+                        formatDate={formatDate}
+                        formatCurrency={formatCurrency}
+                        getStatusBadgeVariant={getStatusBadgeVariant}
+                      />
+                    )}
                   </div>
 
                   {/* Pagination */}
