@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -40,6 +40,7 @@ import AddAddress from "@/components/add-address"
 import type { UserRole } from "@/lib/navigation"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
+import { useRouter } from "next/navigation"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
@@ -150,6 +151,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const { role } = resolvedParams
   const { toast } = useToast()
   const { user } = useAuth()
+  const router = useRouter()
 
   const [organizers, setOrganizers] = React.useState<Organizer[]>([])
   const [loading, setLoading] = React.useState(false)
@@ -1032,8 +1034,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEdit(org)}>
-                              <Eye className="mr-2 h-4 w-4" /> View & Edit                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => openSalesDialog(org)}>
-                              <DollarSign className="mr-2 h-4 w-4" /> Sales
+                              <Eye className="mr-2 h-4 w-4" /> View & Edit                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => router.push(`/${role}/organizers/${org._id}/sales`)}>
+                              <BarChart3 className="mr-2 h-4 w-4" /> Sales
                             </DropdownMenuItem>                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
                               {org.status === 0 ? (
                                 <>

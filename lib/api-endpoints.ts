@@ -117,6 +117,9 @@ export const organizerEndpoint = {
     BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
   ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",
   ORGANIZER_TOTAL_SALES_DATA_URL: BASE_URL + "/organizer/totalSalesData",
+  GET_ALL_ORGANIZER_PAYMENTS: BASE_URL + "/organizer/getAllPayments",
+  ADD_PAYMENT: BASE_URL + "/organizer/addPayment",
+  DELETE_PAYMENT: BASE_URL + "/organizer/deletePayment",
   ENABLE_ORGANIZER_URL: BASE_URL + "/organizer/enable",
   DISABLE_ORGANIZER_URL: BASE_URL + "/organizer/disable",
 }
