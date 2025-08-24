@@ -125,6 +125,11 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
     return status
   }
+
+  // Helper function to check if event is disabled
+  const isEventDisabled = (event: any): boolean => {
+    return event.EventIsEnableOrDisable === 2
+  }
   // Helper function to normalize events data
   const normalizeEventsData = (events: any[]): any[] => {
     console.log("🔍 NORMALIZING EVENTS DATA:")
@@ -171,6 +176,9 @@ export default function EventsPage({ params }: EventsPageProps) {
         
         // Status (with normalization)
         eventStatus: normalizeEventStatus(event.EventStatus || event.eventStatus || event.Status || event.status || 3),
+        
+        // Event enable/disable status
+        EventIsEnableOrDisable: event.EventIsEnableOrDisable || 1, // 1 = enabled, 2 = disabled
         
         // Event flags and settings
         featuredEvent: event.FeaturedEventFlag === 1,
@@ -908,7 +916,14 @@ export default function EventsPage({ params }: EventsPageProps) {
                   </TableRow>
                 ) : (
                   currentEvents.map((event) => (
-                    <TableRow key={event._id} className="hover:bg-muted/50 transition-colors">
+                    <TableRow 
+                      key={event._id} 
+                      className={`hover:bg-muted/50 transition-colors ${
+                        isEventDisabled(event) 
+                          ? "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500" 
+                          : ""
+                      }`}
+                    >
                       <TableCell className="font-medium">
                         <div>
                           <div className="font-semibold text-sm">{event.eventName}</div>
@@ -998,21 +1013,21 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 <DollarSign className="mr-2 h-4 w-4" />
                                 Booking
                               </DropdownMenuItem>
-                              {normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "Completed" ? (
-                                <DropdownMenuItem 
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => handleToggleEventStatus(event._id, "disable")}
-                                >
-                                  <X className="mr-2 h-4 w-4" />
-                                  Disable Event
-                                </DropdownMenuItem>
-                              ) : (
+                              {isEventDisabled(event) ? (
                                 <DropdownMenuItem 
                                   className="text-green-600 hover:text-green-700 hover:bg-green-50"
                                   onClick={() => handleToggleEventStatus(event._id, "enable")}
                                 >
                                   <CheckCircle className="mr-2 h-4 w-4" />
                                   Enable Event
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem 
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => handleToggleEventStatus(event._id, "disable")}
+                                >
+                                  <X className="mr-2 h-4 w-4" />
+                                  Disable Event
                                 </DropdownMenuItem>
                               )}
                             </DropdownMenuContent>
