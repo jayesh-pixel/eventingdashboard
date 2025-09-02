@@ -101,17 +101,28 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         throw new Error("No valid authentication token found")
       }
 
-      const body: any = {
-        page: page.toString(),
-        limit: ITEMS_PER_PAGE.toString(),
-      }
-      
-      // Add search parameter if search term is provided
+      let apiUrl: string
+      let body: any
+
+      // Use different endpoint and payload structure based on search
       if (search && search.trim()) {
-        body.search = search.trim()
+        // Use search endpoint
+        apiUrl = websiteCustomer.CUSTOMER_SEARCH_PAGINATED
+        body = {
+          search_keyword: search.trim(),
+          page: page.toString(),
+          limit: ITEMS_PER_PAGE.toString(),
+        }
+      } else {
+        // Use regular paginated endpoint
+        apiUrl = websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA
+        body = {
+          page: page.toString(),
+          limit: ITEMS_PER_PAGE.toString(),
+        }
       }
 
-      const response = await fetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
+      const response = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -126,11 +137,16 @@ export default function CustomersPage({ params }: CustomersPageProps) {
 
       const data: CustomersApiResponse = await response.json()
       
+      console.log('Customers API Response:', data) // Debug log
+      
       if (data.error) {
         throw new Error(data.message || "Failed to fetch customers")
       }
 
-      setCustomers(data.data.customerData || [])
+      // Handle both possible response structures
+      const customersArray = data.data.customersData || data.data.customerData || []
+      
+      setCustomers(customersArray)
       setTotalPages(data.data.totalPages || 1)
       setTotalCustomers(data.data.totalCustomers || 0)
       setCurrentPage(data.data.currentPage || 1)
@@ -439,8 +455,38 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                         className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                       />
                     </PaginationItem>
-                    {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                      const pageNum = i + 1
+                    
+                    {/* Show first page */}
+                    {currentPage > 3 && totalPages > 5 && (
+                      <>
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handlePageChange(1)
+                            }}
+                          >
+                            1
+                          </PaginationLink>
+                        </PaginationItem>
+                        {currentPage > 4 && <span className="px-2">...</span>}
+                      </>
+                    )}
+                    
+                    {/* Show pages around current page */}
+                    {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                      let pageNum
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      
                       return (
                         <PaginationItem key={pageNum}>
                           <PaginationLink
@@ -450,12 +496,32 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                               e.preventDefault()
                               handlePageChange(pageNum)
                             }}
+                            className={currentPage === pageNum ? "bg-primary text-primary-foreground font-semibold" : ""}
                           >
                             {pageNum}
                           </PaginationLink>
                         </PaginationItem>
                       )
                     })}
+                    
+                    {/* Show last page */}
+                    {currentPage < totalPages - 2 && totalPages > 5 && (
+                      <>
+                        {currentPage < totalPages - 3 && <span className="px-2">...</span>}
+                        <PaginationItem>
+                          <PaginationLink
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              handlePageChange(totalPages)
+                            }}
+                          >
+                            {totalPages}
+                          </PaginationLink>
+                        </PaginationItem>
+                      </>
+                    )}
+                    
                     <PaginationItem>
                       <PaginationNext
                         href="#"

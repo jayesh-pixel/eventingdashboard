@@ -161,7 +161,8 @@ export interface CustomersApiResponse {
     totalPages: number
     currentPage: number
     totalCustomers: number
-    customerData: Customer[]
+    customerData?: Customer[]  // Made optional for backward compatibility
+    customersData?: Customer[] // Added to handle new API structure
   }
 }
 
