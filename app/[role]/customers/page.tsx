@@ -399,7 +399,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                     <TableHead>Name</TableHead>
                     <TableHead className="hidden md:table-cell">Email</TableHead>
                     <TableHead className="hidden lg:table-cell">Phone</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
                     <TableHead className="hidden lg:table-cell">Registration Type</TableHead>
                     <TableHead className="hidden lg:table-cell">Registered</TableHead>
                     <TableHead>Actions</TableHead>
@@ -416,9 +415,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         {formatPhoneNumber(cust.MobileNumber)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {getStatusBadge(cust.status)}
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">
                         <Badge variant="outline">
