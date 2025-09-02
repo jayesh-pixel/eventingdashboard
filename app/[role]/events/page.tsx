@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
@@ -36,6 +37,7 @@ import {
   X,
   ArrowLeft,
   CheckCircle,
+  Filter,
 } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import {
@@ -59,6 +61,8 @@ import AddPromoterAndShow from "@/components/add-promoter-and-show"
 import MultipleOrganizersDisplay from "@/components/multiple-organizers-display"
 import PromoterIndicator from "@/components/promoter-indicator"
 import PromoterPopup from "@/components/promoter-popup"
+import OrganizerIndicator from "@/components/organizer-indicator"
+import OrganizerPopup from "@/components/organizer-popup"
 import {
   Dialog,
   DialogContent,
@@ -104,8 +108,12 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   // Filter state
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
-  const [selectedCity, setSelectedCity] = React.useState("")
-    // Date filter state
+  const [selectedCity, setSelectedCity] = React.useState("__all__")
+  const [selectedVenue, setSelectedVenue] = React.useState("__all__")
+  const [selectedOrganizer, setSelectedOrganizer] = React.useState("__all__")
+  const [selectedPromoter, setSelectedPromoter] = React.useState("__all__")
+  
+  // Date filter state
   const [startDate, setStartDate] = React.useState<string | null>(null)
   const [endDate, setEndDate] = React.useState<string | null>(null)
   const [isManual, setIsManual] = React.useState(false)
@@ -118,6 +126,10 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [selectedPromoterData, setSelectedPromoterData] = React.useState<any>(null)
   const [selectedEventId, setSelectedEventId] = React.useState<string>("")
 
+  // Organizer popup state
+  const [showOrganizerPopup, setShowOrganizerPopup] = React.useState(false)
+  const [selectedOrganizerData, setSelectedOrganizerData] = React.useState<any>(null)
+
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
     if (typeof status === "number") {
@@ -129,6 +141,27 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Helper function to check if event is disabled
   const isEventDisabled = (event: any): boolean => {
     return event.EventIsEnableOrDisable === 2
+  }
+
+  // Helper functions to get unique filter options
+  const getUniqueCities = (): string[] => {
+    const cities = originalData.map(event => event.city).filter(Boolean)
+    return [...new Set(cities)].sort()
+  }
+
+  const getUniqueVenues = (): string[] => {
+    const venues = originalData.map(event => event.venueName).filter(Boolean)
+    return [...new Set(venues)].sort()
+  }
+
+  const getUniqueOrganizers = (): string[] => {
+    const organizers = originalData.map(event => event.organizerName).filter(Boolean)
+    return [...new Set(organizers)].sort()
+  }
+
+  const getUniquePromoters = (): string[] => {
+    const promoters = originalData.map(event => event.promoterName).filter(Boolean)
+    return [...new Set(promoters)].sort()
   }
   // Helper function to normalize events data
   const normalizeEventsData = (events: any[]): any[] => {
@@ -166,7 +199,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         organizerId: event.PopUpOrganizerData?.[0]?.organizer_id || event.organizerId || event.OrganizerId,
         organizerName: event.PopUpOrganizerData?.[0]?.OrganizerName || event.organizerName || event.OrganizerName || "Unknown Organizer",
         
-        // Promoter info from PopUpPromoterData
+        // Promoter info from PopUpPromoterData (handle multiple promoters)
+        PopUpPromoterData: event.PopUpPromoterData || [],
         promoterData: event.PopUpPromoterData?.[0] || null,
         promoterId: event.PopUpPromoterData?.[0]?.promoter_id || event.promoterId,
         promoterName: event.PopUpPromoterData?.[0]?.PromoterName || event.promoterName,
@@ -580,7 +614,11 @@ export default function EventsPage({ params }: EventsPageProps) {
       if (start && end) {
         setStartDate(start.toISOString())
         setEndDate(end.toISOString())
-        dateFilterApiCall(start.toISOString(), end.toISOString())
+        
+        // For promoters, use API call. For others, use client-side filtering
+        if ((role as UserRole) === "promoter") {
+          dateFilterApiCall(start.toISOString(), end.toISOString())
+        }
       }
     }
   }
@@ -595,7 +633,15 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const handleManualSubmit = () => {
     if (startDate && endDate) {
-      dateFilterApiCall(startDate, endDate)
+      // For promoters, use API call. For others, the filtering is handled in useMemo
+      if ((role as UserRole) === "promoter") {
+        dateFilterApiCall(startDate, endDate)
+      } else {
+        toast({
+          title: "Success",
+          description: "Date filter applied successfully",
+        })
+      }
     }
   }
 
@@ -651,29 +697,63 @@ export default function EventsPage({ params }: EventsPageProps) {
   React.useEffect(() => {
     getAllEventData()
   }, [])
-  // Filter events based on tab
+  // Filter events based on tab and other filters
   const filteredEvents = React.useMemo(() => {
-    if (activeTab === "all") return allEventsData
+    let events = allEventsData
 
-    return allEventsData.filter((event) => {
-      const eventStatus = normalizeEventStatus(event.eventStatus)
-      switch (activeTab) {
-        case "published":
-          return eventStatus === "Published"
-        case "draft":
-          return eventStatus === "Draft"
-        case "review":
-          return eventStatus === "To Be Reviewed"
-        case "self":
-          
-          return event.organizerId === user?.user_id || event.promoterId === user?.user_id
-        case "rejected":
-          return eventStatus === "Rejected"
-        default:
-          return true
-      }
-    })
-  }, [allEventsData, activeTab, user?.user_id])
+    // Apply tab filter
+    if (activeTab !== "all") {
+      events = events.filter((event) => {
+        const eventStatus = normalizeEventStatus(event.eventStatus)
+        switch (activeTab) {
+          case "published":
+            return eventStatus === "Published"
+          case "draft":
+            return eventStatus === "Draft"
+          case "review":
+            return eventStatus === "To Be Reviewed"
+          case "self":
+            return event.organizerId === user?.user_id || event.promoterId === user?.user_id
+          case "rejected":
+            return eventStatus === "Rejected"
+          default:
+            return true
+        }
+      })
+    }
+
+    // Apply city filter
+    if (selectedCity && selectedCity !== "__all__") {
+      events = events.filter(event => event.city === selectedCity)
+    }
+
+    // Apply venue filter
+    if (selectedVenue && selectedVenue !== "__all__") {
+      events = events.filter(event => event.venueName === selectedVenue)
+    }
+
+    // Apply organizer filter
+    if (selectedOrganizer && selectedOrganizer !== "__all__") {
+      events = events.filter(event => event.organizerName === selectedOrganizer)
+    }
+
+    // Apply promoter filter
+    if (selectedPromoter && selectedPromoter !== "__all__") {
+      events = events.filter(event => event.promoterName === selectedPromoter)
+    }
+
+    // Apply date range filter (for table view)
+    if (startDate && endDate) {
+      const start = new Date(startDate)
+      const end = new Date(endDate)
+      events = events.filter(event => {
+        const eventDate = new Date(event.eventStartDate)
+        return eventDate >= start && eventDate <= end
+      })
+    }
+
+    return events
+  }, [allEventsData, activeTab, user?.user_id, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate])
 
   const totalPages = Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)
   const currentEvents = filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -824,6 +904,10 @@ export default function EventsPage({ params }: EventsPageProps) {
     setEndDate(null)
     setIsManual(false)
     setDateFilterOption("")
+    setSelectedCity("__all__")
+    setSelectedVenue("__all__")
+    setSelectedOrganizer("__all__")
+    setSelectedPromoter("__all__")
     setAllEventsData(originalData)
     toast({
       title: "Filters Reset",
@@ -849,6 +933,12 @@ export default function EventsPage({ params }: EventsPageProps) {
     setSelectedEventId(eventId)
     setShowPromoterPopup(true)
   }
+
+  const handleOrganizerClick = (organizerData: any) => {
+    setSelectedOrganizerData(organizerData)
+    setShowOrganizerPopup(true)
+  }
+  
   // Function to render tab-specific content with table
   const renderTabContent = () => {
     return (
@@ -879,8 +969,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <TableHead className="font-semibold text-foreground bg-muted/30">Start Date</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30">Organizer</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30">Promoter</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[120px]">Organizer</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[140px]">Promoter</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Venue</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">City</TableHead>
@@ -933,25 +1023,63 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <TableCell>{formatDateForDisplay(event.eventStartDate)}</TableCell>
                       <TableCell>{formatTime(event.eventStartDate)}</TableCell>
                       <TableCell>{event.categoryName}</TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-[120px]">
                         {(role as UserRole) === "superadmin" ? (
-                          <MultipleOrganizersDisplay 
-                            organizers={event.organizers || []}
-                            maxDisplay={2}
-                            size="sm"
-                          />
+                          <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
+                            {event.organizers && event.organizers.length > 0 ? (
+                              <>
+                                {event.organizers.slice(0, 2).map((organizer: any, index: number) => (
+                                  <OrganizerIndicator
+                                    key={organizer.organizer_id || index}
+                                    organizerData={organizer}
+                                    onClick={() => handleOrganizerClick(organizer)}
+                                    size="sm"
+                                  />
+                                ))}
+                                {event.organizers.length > 2 && (
+                                  <Badge variant="secondary" className="text-xs ml-1 flex-shrink-0">
+                                    +{event.organizers.length - 2}
+                                  </Badge>
+                                )}
+                              </>
+                            ) : (
+                              <OrganizerIndicator
+                                organizerData={{ OrganizerName: event.organizerName, organizer_id: event.organizerId }}
+                                onClick={() => handleOrganizerClick({ OrganizerName: event.organizerName, organizer_id: event.organizerId })}
+                                size="sm"
+                              />
+                            )}
+                          </div>
                         ) : (
                           event.organizerName
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-[140px]">
                         {(role as UserRole) === "superadmin" ? (
-                          <div className="flex items-center gap-2">
-                            <PromoterIndicator
-                              promoterData={event.promoterData}
-                              onClick={() => handlePromoterClick(event.promoterData, event._id)}
-                              size="sm"
-                            />
+                          <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
+                            {event.PopUpPromoterData && event.PopUpPromoterData.length > 0 ? (
+                              <>
+                                {event.PopUpPromoterData.slice(0, 2).map((promoter: any, index: number) => (
+                                  <PromoterIndicator
+                                    key={promoter.promoter_id || index}
+                                    promoterData={promoter}
+                                    onClick={() => handlePromoterClick(promoter, event._id)}
+                                    size="sm"
+                                  />
+                                ))}
+                                {event.PopUpPromoterData.length > 2 && (
+                                  <Badge variant="secondary" className="text-xs ml-1 flex-shrink-0">
+                                    +{event.PopUpPromoterData.length - 2}
+                                  </Badge>
+                                )}
+                              </>
+                            ) : event.promoterData ? (
+                              <PromoterIndicator
+                                promoterData={event.promoterData}
+                                onClick={() => handlePromoterClick(event.promoterData, event._id)}
+                                size="sm"
+                              />
+                            ) : null}
                             <AddPromoterAndShow 
                               eventData={event} 
                               onPromoterUpdate={() => getAllEventData()}
@@ -1163,99 +1291,225 @@ export default function EventsPage({ params }: EventsPageProps) {
               <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
             </div>
 
-            {/* Filters Row */}
-            {(role as UserRole) === "promoter" && (
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                {/* Date Filter Dropdown */}
-                <div className="flex-1 sm:flex-none">
-                  <select
-                    className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
-                    value={dateFilterOption}
-                    onChange={(e) => handleDateSelection(e.target.value)}
-                  >
-                    <option value="">📅 Select Date Filter</option>
-                    <option value="Today">📍 Today</option>
-                    <option value="Yesterday">⏮️ Yesterday</option>
-                    <option value="Last 7 Days">📊 Last 7 Days</option>
-                    <option value="Last 1 Month">📈 Last 1 Month</option>
-                    <option value="Manual">🔧 Manual Selection</option>
-                  </select>
-                </div>
+            {/* Comprehensive Filters Row */}
+            <div className="flex flex-col gap-4">
+              {/* Filter Controls */}
+              <div className="flex flex-col gap-4">
+                {/* Filters Container */}
+                <div className="flex flex-col lg:flex-row gap-3 lg:gap-4">
+                  {/* Filter Selects Row */}
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 flex-1">
+                    {/* Event Filters (for all roles except promoter) */}
+                    {(role as UserRole) !== "promoter" && (
+                      <>
+                        {/* City Filter */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <Select value={selectedCity} onValueChange={setSelectedCity}>
+                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                              <SelectValue placeholder="🏙️ Select City" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__all__">All Cities</SelectItem>
+                              {getUniqueCities().map((city) => (
+                                <SelectItem key={city} value={city}>
+                                  {city}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
 
-                {/* Manual Date Selection */}
-                {isManual && (
-                  <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">Start Date</label>
-                      <Input
-                        type="date"
-                        value={startDate ? startDate.split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange(e.target.value, "start")}
-                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <label className="text-xs font-medium text-muted-foreground">End Date</label>
-                      <Input
-                        type="date"
-                        value={endDate ? endDate.split('T')[0] : ''}
-                        onChange={(e) => handleManualDateChange(e.target.value, "end")}
-                        className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                      />
-                    </div>
-                    <div className="flex flex-col justify-end">
-                      <Button 
-                        onClick={handleManualSubmit} 
-                        size="sm" 
-                        className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
-                        disabled={!startDate || !endDate}
-                      >
-                        ✅ Apply Dates
-                      </Button>
-                    </div>
+                        {/* Venue Filter */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <Select value={selectedVenue} onValueChange={setSelectedVenue}>
+                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                              <SelectValue placeholder="🏢 Select Venue" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__all__">All Venues</SelectItem>
+                              {getUniqueVenues().map((venue) => (
+                                <SelectItem key={venue} value={venue}>
+                                  {venue}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Organizer Filter */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer}>
+                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                              <SelectValue placeholder="👨‍💼 Select Organizer" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__all__">All Organizers</SelectItem>
+                              {getUniqueOrganizers().map((organizer) => (
+                                <SelectItem key={organizer} value={organizer}>
+                                  {organizer}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Promoter Filter */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <Select value={selectedPromoter} onValueChange={setSelectedPromoter}>
+                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                              <SelectValue placeholder="📢 Select Promoter" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__all__">All Promoters</SelectItem>
+                              {getUniquePromoters().map((promoter) => (
+                                <SelectItem key={promoter} value={promoter}>
+                                  {promoter}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {/* Date Range Filter for Non-Promoters */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <select
+                            className="w-full block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
+                            value={dateFilterOption}
+                            onChange={(e) => handleDateSelection(e.target.value)}
+                          >
+                            <option value="">📅 Select Date Filter</option>
+                            <option value="Today">📍 Today</option>
+                            <option value="Yesterday">⏮️ Yesterday</option>
+                            <option value="Last 7 Days">📊 Last 7 Days</option>
+                            <option value="Last 1 Month">📈 Last 1 Month</option>
+                            <option value="Manual">🔧 Manual Selection</option>
+                          </select>
+                        </div>
+                      </>
+                    )}
+
+                    {/* Promoter-specific Date Filter */}
+                    {(role as UserRole) === "promoter" && (
+                      <div className="flex-1 sm:flex-none min-w-[160px]">
+                        <select
+                          className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
+                          value={dateFilterOption}
+                          onChange={(e) => handleDateSelection(e.target.value)}
+                        >
+                          <option value="">📅 Select Date Filter</option>
+                          <option value="Today">📍 Today</option>
+                          <option value="Yesterday">⏮️ Yesterday</option>
+                          <option value="Last 7 Days">📊 Last 7 Days</option>
+                          <option value="Last 1 Month">📈 Last 1 Month</option>
+                          <option value="Manual">🔧 Manual Selection</option>
+                        </select>
+                      </div>
+                    )}
                   </div>
-                )}
 
-                {/* Actions */}
-                <div className="flex gap-2 sm:ml-auto">
-                  {/* Reset Filters Button */}
-                  {(searchTerm || dateFilterOption) && (
+                  {/* Actions */}
+                  <div className="flex gap-2 flex-shrink-0">
+                    {/* Reset All Filters Button */}
+                    {(searchTerm || dateFilterOption || (selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__")) && (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={resetFilters} 
+                        className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all whitespace-nowrap"
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Reset All
+                      </Button>
+                    )}
+                    
+                    {/* Export Button */}
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      onClick={resetFilters} 
-                      className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
+                      className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all whitespace-nowrap"
                     >
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Reset
+                      <Download className="mr-2 h-4 w-4" /> Export
                     </Button>
-                  )}
-                            {(role as UserRole) !== "promoter" && (
-
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
-                  >
-                    <Download className="mr-2 h-4 w-4" /> Export
-                  </Button>
-                            )}
+                  </div>
                 </div>
               </div>
-            )}
 
-            {/* Non-promoter export button */}
-            {(role as UserRole) !== "promoter" && (
-              <div className="flex justify-end">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all"
-                >
-                  <Download className="mr-2 h-4 w-4" /> Export
-                </Button>
-              </div>
-            )}
+              {/* Manual Date Selection (for both promoter and non-promoter) */}
+              {isManual && (
+                <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">Start Date</label>
+                    <Input
+                      type="date"
+                      value={startDate ? startDate.split('T')[0] : ''}
+                      onChange={(e) => handleManualDateChange(e.target.value, "start")}
+                      className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-muted-foreground">End Date</label>
+                    <Input
+                      type="date"
+                      value={endDate ? endDate.split('T')[0] : ''}
+                      onChange={(e) => handleManualDateChange(e.target.value, "end")}
+                      className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                    />
+                  </div>
+                  <div className="flex flex-col justify-end">
+                    <Button 
+                      onClick={handleManualSubmit} 
+                      size="sm" 
+                      className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
+                      disabled={!startDate || !endDate}
+                    >
+                      ✅ Apply Dates
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Active Filters Display */}
+              {((selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__") || dateFilterOption) && (
+                <div className="flex flex-wrap gap-2 p-3 bg-muted/10 dark:bg-muted/5 rounded-lg border border-border/20">
+                  <span className="text-xs font-medium text-muted-foreground mr-2">Active Filters:</span>
+                  {selectedCity && selectedCity !== "__all__" && (
+                    <Badge variant="secondary" className="text-xs">
+                      City: {selectedCity}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedCity("__all__")} />
+                    </Badge>
+                  )}
+                  {selectedVenue && selectedVenue !== "__all__" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Venue: {selectedVenue}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedVenue("__all__")} />
+                    </Badge>
+                  )}
+                  {selectedOrganizer && selectedOrganizer !== "__all__" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Organizer: {selectedOrganizer}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedOrganizer("__all__")} />
+                    </Badge>
+                  )}
+                  {selectedPromoter && selectedPromoter !== "__all__" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Promoter: {selectedPromoter}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedPromoter("__all__")} />
+                    </Badge>
+                  )}
+                  {dateFilterOption && (
+                    <Badge variant="secondary" className="text-xs">
+                      Date: {dateFilterOption}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => {
+                        setDateFilterOption("")
+                        setStartDate(null)
+                        setEndDate(null)
+                        setIsManual(false)
+                      }} />
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>      {/* Enhanced Tabs */}
@@ -1388,6 +1642,13 @@ export default function EventsPage({ params }: EventsPageProps) {
         onClose={() => setShowPromoterPopup(false)}
         promoterData={selectedPromoterData}
         eventId={selectedEventId}
+      />
+
+      {/* Organizer Details Popup */}
+      <OrganizerPopup
+        isOpen={showOrganizerPopup}
+        onClose={() => setShowOrganizerPopup(false)}
+        organizerData={selectedOrganizerData}
       />
     </div>
   )

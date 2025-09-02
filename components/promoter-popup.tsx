@@ -95,29 +95,6 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
         </DialogHeader>
 
         <div className="space-y-3 py-1">
-          {/* Promoter ID */}
-          {promoterId && (
-            <div className="flex items-center justify-between p-2 bg-muted/30 rounded-md">
-              <div className="flex items-center gap-2">
-                <User className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs font-medium">ID:</span>
-                <code className="text-xs bg-background px-1.5 py-0.5 rounded font-mono">
-                  {promoterId.slice(0, 8)}...
-                </code>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={copyPromoterId}
-                className="h-6 w-6 p-0"
-              >
-                <Copy className="h-3 w-3" />
-              </Button>
-            </div>
-          )}
-
-          <Separator className="my-2" />
-
           {/* Contact Information */}
           <div className="space-y-2">
             <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wide">

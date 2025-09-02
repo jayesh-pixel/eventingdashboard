@@ -71,7 +71,7 @@ export default function PromoterIndicator({
   return (
     <button
       onClick={onClick}
-      className="group relative cursor-pointer transition-all duration-200 hover:scale-105"
+      className="group relative cursor-pointer transition-all duration-200 hover:scale-105 flex-shrink-0"
       title={`Click to view ${promoterName} details`}
     >
       <Avatar className={`${getAvatarSize()} ring-2 ring-offset-2 ring-transparent group-hover:ring-primary/50 transition-all duration-200`}>
