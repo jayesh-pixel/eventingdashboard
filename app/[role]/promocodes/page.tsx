@@ -34,11 +34,12 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Search, AlertCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { promocodeEndPoint } from "@/lib/api-endpoints"
+import { promocodeEndPoint, eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
+import { getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors: Record<number, string> = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -77,6 +78,11 @@ export default function PromocodesPage() {
   const [selectedPromocode, setSelectedPromocode] = useState<Promocode | null>(null)
   const [submitting, setSubmitting] = useState(false)
   
+  // Events state for selection
+  const [events, setEvents] = useState<any[]>([])
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([])
+  const [loadingEvents, setLoadingEvents] = useState(false)
+  
   // Form state for create/edit
   const [formData, setFormData] = useState({
     PromoCodeName: "",
@@ -91,6 +97,84 @@ export default function PromocodesPage() {
   })
   
   const itemsPerPage = 10
+
+  // Fetch events for selection
+  const fetchEvents = useCallback(async () => {
+    if (!user) return
+    
+    setLoadingEvents(true)
+    try {
+      const token = getValidToken()
+      if (!token) {
+        throw new Error("No valid authentication token found")
+      }
+
+      // Use the paginated endpoint with proper payload
+      const numericRole = getNumericAdminRole(user.AdminRole)
+      const requestPayload = {
+        AdminRole: numericRole,
+        user_id: user.user_id,
+        page: "1",
+        limit: "50", // Get more events for selection
+      }
+
+      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_PAGINATED, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestPayload),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      console.log("Events API Response:", data) // Debug log
+      
+      if (data.error) {
+        throw new Error(data.message || "Failed to fetch events")
+      }
+
+      // Extract events from the paginated response - handle different response structures
+      let eventsArray = []
+      if (data.data?.EventsData && Array.isArray(data.data.EventsData)) {
+        eventsArray = data.data.EventsData
+      } else if (data.data?.events && Array.isArray(data.data.events)) {
+        eventsArray = data.data.events
+      } else if (data.data && Array.isArray(data.data)) {
+        eventsArray = data.data
+      } else if (Array.isArray(data)) {
+        eventsArray = data
+      } else {
+        console.warn("Unexpected events API response structure:", data)
+        eventsArray = []
+      }
+      
+      console.log("Extracted events array:", eventsArray) // Debug log
+      setEvents(eventsArray)
+      
+    } catch (error) {
+      console.error("Error fetching events:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch events for selection",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingEvents(false)
+    }
+  }, [user, toast])
+
+  // Load events when dialog opens and Specific is selected
+  useEffect(() => {
+    if ((isCreateDialogOpen || isEditDialogOpen) && formData.PromocodeValidFor === "Specific") {
+      fetchEvents()
+    }
+  }, [isCreateDialogOpen, isEditDialogOpen, formData.PromocodeValidFor, fetchEvents])
 
   // Debounce search term
   useEffect(() => {
@@ -229,6 +313,15 @@ export default function PromocodesPage() {
       return
     }
 
+    if (formData.PromocodeValidFor === "Specific" && selectedEvents.length === 0) {
+      toast({
+        title: "Validation Error",
+        description: "Please select at least one event for specific promocode",
+        variant: "destructive",
+      })
+      return
+    }
+
     setSubmitting(true)
     try {
       const token = getValidToken()
@@ -246,7 +339,7 @@ export default function PromocodesPage() {
         OneTimeUseFlag: formData.OneTimeUseFlag,
         PromocodeValidFor: formData.PromocodeValidFor,
         CanBeUsed: formData.CanBeUsed,
-        Events: [], // Can be extended to support specific events
+        Events: formData.PromocodeValidFor === "Specific" ? selectedEvents.map(id => ({ event_id: id })) : [], // Include selected events
         CustomerIds: [] // Can be extended to support specific customers
       }
 
@@ -296,6 +389,7 @@ export default function PromocodesPage() {
       CanBeUsed: "All"
     })
     setSelectedPromocode(null)
+    setSelectedEvents([])
   }
 
   const handleEdit = (promocode: Promocode) => {
@@ -311,6 +405,8 @@ export default function PromocodesPage() {
       PromocodeValidFor: promocode.PromocodeValidFor || "All",
       CanBeUsed: promocode.CanBeUsed || "All"
     })
+    // Set selected events if available (you might need to adjust this based on your data structure)
+    setSelectedEvents(promocode.Events ? promocode.Events.map((e: any) => e.event_id || e._id) : [])
     setIsEditDialogOpen(true)
   }
 
@@ -516,7 +612,12 @@ export default function PromocodesPage() {
                   <Label htmlFor="validFor">Valid For</Label>
                   <Select 
                     value={formData.PromocodeValidFor} 
-                    onValueChange={(value) => setFormData({...formData, PromocodeValidFor: value})}
+                    onValueChange={(value) => {
+                      setFormData({...formData, PromocodeValidFor: value})
+                      if (value === "All") {
+                        setSelectedEvents([])
+                      }
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -528,6 +629,54 @@ export default function PromocodesPage() {
                   </Select>
                 </div>
               </div>
+
+              {/* Event Selection - Show only when Specific is selected */}
+              {formData.PromocodeValidFor === "Specific" && (
+                <div className="space-y-2">
+                  <Label>Select Events *</Label>
+                  {loadingEvents ? (
+                    <div className="flex items-center justify-center py-4 border rounded-md">
+                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      <span className="text-sm">Loading events...</span>
+                    </div>
+                  ) : (
+                    <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                      {!Array.isArray(events) || events.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
+                      ) : (
+                        <div className="space-y-1">
+                          {events.map((event) => (
+                            <div key={event._id || event.id} className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id={`event-${event._id || event.id}`}
+                                checked={selectedEvents.includes(event._id || event.id)}
+                                onChange={(e) => {
+                                  const eventId = event._id || event.id
+                                  if (e.target.checked) {
+                                    setSelectedEvents([...selectedEvents, eventId])
+                                  } else {
+                                    setSelectedEvents(selectedEvents.filter(id => id !== eventId))
+                                  }
+                                }}
+                                className="rounded"
+                              />
+                              <Label htmlFor={`event-${event._id || event.id}`} className="text-sm font-normal cursor-pointer">
+                                {event.eventName || event.EventName || 'Untitled Event'}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {selectedEvents.length > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      {selectedEvents.length} event(s) selected
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="terms">Terms & Conditions</Label>
@@ -841,7 +990,12 @@ export default function PromocodesPage() {
                 <Label htmlFor="editValidFor">Valid For</Label>
                 <Select 
                   value={formData.PromocodeValidFor} 
-                  onValueChange={(value) => setFormData({...formData, PromocodeValidFor: value})}
+                  onValueChange={(value) => {
+                    setFormData({...formData, PromocodeValidFor: value})
+                    if (value === "All") {
+                      setSelectedEvents([])
+                    }
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -853,6 +1007,53 @@ export default function PromocodesPage() {
                 </Select>
               </div>
             </div>
+
+            {/* Event Selection - Show only when Specific is selected */}
+            {formData.PromocodeValidFor === "Specific" && (
+              <div className="space-y-2">
+                <Label>Select Events *</Label>
+                {loadingEvents ? (
+                  <div className="flex items-center justify-center py-4 border rounded-md">
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    <span className="text-sm">Loading events...</span>
+                  </div>
+                ) : (
+                  <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                    {events.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
+                    ) : (
+                      <div className="space-y-1">
+                        {events.map((event) => (
+                          <div key={event._id} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              id={`edit-event-${event._id}`}
+                              checked={selectedEvents.includes(event._id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedEvents([...selectedEvents, event._id])
+                                } else {
+                                  setSelectedEvents(selectedEvents.filter(id => id !== event._id))
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-normal cursor-pointer">
+                              {event.eventName || event.EventName}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {selectedEvents.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedEvents.length} event(s) selected
+                  </p>
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="editTerms">Terms & Conditions</Label>
