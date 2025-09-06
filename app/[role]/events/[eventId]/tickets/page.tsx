@@ -903,7 +903,7 @@ export default function TicketsPage() {
         
         // Include selected promoters if visibility is set to "Promoters"
         if (normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0) {
-          payload.PromoterIds = selectedPromoters
+          payload.EventPromoters = selectedPromoters.map(promoterId => ({ promoter_id: promoterId }))
         }
       } else {
         payload = {
@@ -920,6 +920,10 @@ export default function TicketsPage() {
         }
       }
 
+      // Create AbortController for timeout handling
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 120000 : 30000) // 2 minutes for bulk, 30 seconds for normal
+
       const response = await fetch(endpoint, {
         method: "POST",
         headers: {
@@ -927,7 +931,10 @@ export default function TicketsPage() {
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify(payload),
+        signal: controller.signal,
       })
+      
+      clearTimeout(timeoutId) // Clear timeout on successful response
 
       if (response.ok) {
         const data = await response.json()
@@ -990,12 +997,24 @@ export default function TicketsPage() {
       }
     } catch (error) {
       console.error("Error creating ticket:", error)
+      
+      let errorMessage = "Failed to create ticket"
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          errorMessage = activeTab === "bulk" 
+            ? "Request timed out. Bulk ticket creation is taking longer than expected. Please check if the ticket was created successfully."
+            : "Request timed out. Please try again."
+        } else {
+          errorMessage = error.message || errorMessage
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to create ticket",
+        description: errorMessage,
         variant: "destructive",
       })
-    } finally {
+      } finally {
       if (activeTab === "bulk") {
         setBulkTicketCreating(false)
       } else {
@@ -1208,6 +1227,17 @@ export default function TicketsPage() {
     
     // Open promoter selection modal if "Promoters" is selected
     if (value === "3") {
+      // Check if event has assigned promoters first
+      if (!(eventData as any)?.EventPromoter || (eventData as any).EventPromoter.length === 0) {
+        toast({
+          title: "No Promoters Assigned",
+          description: "You need to assign promoters to this event first before creating promoter-only tickets. Please assign promoters from the events management page.",
+          variant: "destructive",
+        })
+        // Reset to "Everyone" visibility
+        setNormalFormData(prev => ({ ...prev, VisibilityLevel: 1 }))
+        return
+      }
       setPromoterSearchTerm("") // Clear search term
       setShowPromoterModal(true)
     }
@@ -1229,12 +1259,23 @@ export default function TicketsPage() {
     setSelectedTicket(ticket)
     setEditFormData(ticket)
     setShowEditModal(true)
-  }  // Filter promoters based on search
-  const filteredPromoters = promoters.filter(promoter =>
-    promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
-    (promoter.Email && promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
-    (promoter.Phone1 && promoter.Phone1.includes(promoterSearchTerm))
-  )
+  }  // Filter promoters based on search AND event assignment
+  const filteredPromoters = promoters.filter(promoter => {
+    // First check if promoter is assigned to this event
+    const isAssignedToEvent = (eventData as any)?.EventPromoter?.some(
+      (ep: any) => ep.promoter_id === promoter._id
+    )
+    
+    if (!isAssignedToEvent) return false
+    
+    // Then check if promoter matches search term
+    const matchesSearch = 
+      promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
+      (promoter.Email && promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
+      (promoter.Phone1 && promoter.Phone1.includes(promoterSearchTerm))
+    
+    return matchesSearch
+  })
 
   const filteredNormalTickets = normalTickets.filter(ticket => {
     const extendedTicket = ticket as ExtendedNormalTicket
@@ -2202,7 +2243,7 @@ export default function TicketsPage() {
           <DialogHeader>
             <DialogTitle>Select Promoters</DialogTitle>
             <DialogDescription>
-              Choose promoters who can access this ticket
+              Choose from promoters assigned to this event who can access this ticket
             </DialogDescription>
           </DialogHeader>
 
@@ -2221,7 +2262,10 @@ export default function TicketsPage() {
             <div className="max-h-[400px] overflow-y-auto space-y-2">
               {filteredPromoters.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  {promoterSearchTerm ? "No promoters found matching your search" : "No promoters found"}
+                  {promoterSearchTerm 
+                    ? "No assigned promoters found matching your search" 
+                    : "No promoters are currently assigned to this event. Please assign promoters to the event first."
+                  }
                 </div>
               ) : (
                 filteredPromoters.map((promoter) => (                  <div
