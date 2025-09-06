@@ -924,28 +924,73 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   />
                 </PaginationItem>
                 
-                {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                  const pageNum = i + 1
-                  return (
-                    <PaginationItem key={pageNum}>
+                {/* First page */}
+                {currentPage > 3 && (
+                  <>
+                    <PaginationItem>
                       <PaginationLink
                         href="#"
-                        isActive={currentPage === pageNum}
                         onClick={(e) => {
                           e.preventDefault()
-                          handlePageChange(pageNum)
+                          handlePageChange(1)
                         }}
                       >
-                        {pageNum}
+                        1
                       </PaginationLink>
                     </PaginationItem>
-                  )
-                })}
+                    {currentPage > 4 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                  </>
+                )}
                 
-                {totalPages > 5 && (
-                  <PaginationItem>
-                    <PaginationEllipsis />
-                  </PaginationItem>
+                {/* Pages around current page */}
+                {(() => {
+                  const startPage = Math.max(1, currentPage - 2)
+                  const endPage = Math.min(totalPages, currentPage + 2)
+                  const pages = []
+                  
+                  for (let i = startPage; i <= endPage; i++) {
+                    pages.push(
+                      <PaginationItem key={i}>
+                        <PaginationLink
+                          href="#"
+                          isActive={currentPage === i}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handlePageChange(i)
+                          }}
+                        >
+                          {i}
+                        </PaginationLink>
+                      </PaginationItem>
+                    )
+                  }
+                  return pages
+                })()}
+                
+                {/* Last page */}
+                {currentPage < totalPages - 2 && (
+                  <>
+                    {currentPage < totalPages - 3 && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                    <PaginationItem>
+                      <PaginationLink
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handlePageChange(totalPages)
+                        }}
+                      >
+                        {totalPages}
+                      </PaginationLink>
+                    </PaginationItem>
+                  </>
                 )}
                 
                 <PaginationItem>
