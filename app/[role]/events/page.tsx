@@ -38,6 +38,7 @@ import {
   ArrowLeft,
   CheckCircle,
   Filter,
+  Ticket,
 } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import {
@@ -1138,7 +1139,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
                                   className="hover:bg-accent cursor-pointer"
                                 >
-                                  <IndianRupee className="mr-2 h-4 w-4" />
+                                  <Ticket className="mr-2 h-4 w-4" />
                                   View & Add Tickets
                                 </DropdownMenuItem>
                               )}                              <DropdownMenuItem 

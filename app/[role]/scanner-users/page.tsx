@@ -973,7 +973,7 @@ export default function ScannerUsersPage() {
                   <TableHead>Username</TableHead>
                   <TableHead>User Type</TableHead>
                   <TableHead>Assignment</TableHead>
-                  <TableHead>Created At</TableHead>
+            
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
