@@ -271,6 +271,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         errors.password = "Password is required"
       } else if (formData.password.length < 6) {
         errors.password = "Password must be at least 6 characters"
+      } else if (formData.password.length > 10) {
+        errors.password = "Password must not exceed 10 characters (login limit)"
       }
     }
     
@@ -280,7 +282,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
   // Generate password function
   const handleGeneratePassword = () => {
-    const length = 8
+    const length = 8 // Keep it 8 characters to stay within 10 character limit
     const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
     let password = ""
     for (let i = 0; i < length; i++) {
@@ -1277,15 +1279,16 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Password */}
             {!editingOrganizer && (
               <div className="space-y-2">
-                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password *</Label>
+                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password * (6-10 characters)</Label>
                 <div className="relative">
                   <Input
                     id="organizerPassword"
                     type={formData.showPassword ? "text" : "password"}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Generate the Password"
+                    placeholder="Generate the Password (max 10 characters)"
                     className="pr-10"
+                    maxLength={10}
                   />
                   <button
                     type="button"
@@ -1310,7 +1313,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   onClick={handleGeneratePassword}
                   className="w-full"
                 >
-                  Generate Password
+                  Generate Password (8 chars)
                 </Button>
               </div>
             )}
