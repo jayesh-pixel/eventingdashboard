@@ -27,7 +27,7 @@ import {
   MapPin,
   Users,
   Clock,
-  DollarSign,
+  IndianRupee,
   Share2,
   Eye,
   BarChart3,
@@ -1138,14 +1138,14 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
                                   className="hover:bg-accent cursor-pointer"
                                 >
-                                  <DollarSign className="mr-2 h-4 w-4" />
+                                  <IndianRupee className="mr-2 h-4 w-4" />
                                   View & Add Tickets
                                 </DropdownMenuItem>
                               )}                              <DropdownMenuItem 
                                 onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
                                 className="hover:bg-accent cursor-pointer"
                               >
-                                <DollarSign className="mr-2 h-4 w-4" />
+                                <IndianRupee className="mr-2 h-4 w-4" />
                                 Booking
                               </DropdownMenuItem>
                               {isEventDisabled(event) ? (

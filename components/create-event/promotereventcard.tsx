@@ -8,7 +8,6 @@ import {
   MapPin,
   Users,
   Clock,
-  DollarSign,
   BarChart3,
   Star,
   IndianRupee,

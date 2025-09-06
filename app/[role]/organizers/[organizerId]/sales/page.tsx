@@ -34,7 +34,7 @@ import {
   Loader2,
   AlertCircle,
   Calendar,
-  DollarSign,
+  IndianRupee,
   FileText,
   Trash2,
   X,
@@ -800,7 +800,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
                   </div>
                   <div className="flex items-end">
                     <Button onClick={handleAddPayment} className="w-full">
-                      <DollarSign className="h-4 w-4 mr-2" />
+                      <IndianRupee className="h-4 w-4 mr-2" />
                       Save
                     </Button>
                   </div>

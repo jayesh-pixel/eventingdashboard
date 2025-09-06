@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Eye, KeyRound, DollarSign, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Eye, KeyRound, IndianRupee, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
