@@ -372,6 +372,9 @@ export default function CreateEvent({
     endTime: ""
   })
 
+  // State for editing existing event dates
+  const [editingEventIndex, setEditingEventIndex] = React.useState<number | null>(null)
+
   // FAQ handling state
   const [tempFAQ, setTempFAQ] = React.useState({
     Question: "",
@@ -1043,6 +1046,134 @@ export default function CreateEvent({
   const removeEventDateTime = (index: number, values: EventFormValues, setFieldValue: any) => {
     const updatedEvents = values.events.filter((_, i) => i !== index)
     setFieldValue("events", updatedEvents)
+    
+    // If we're deleting the event we're currently editing, cancel the edit
+    if (editingEventIndex === index) {
+      setEditingEventIndex(null)
+      setTempEventDate({ startDate: "", startTime: "", endDate: "", endTime: "" })
+    } else if (editingEventIndex !== null && editingEventIndex > index) {
+      // If we're deleting an event before the one we're editing, adjust the index
+      setEditingEventIndex(editingEventIndex - 1)
+    }
+  }
+
+  // Edit event date/time functions
+  const startEditEventDateTime = (index: number, event: EventDateTime) => {
+    setEditingEventIndex(index)
+    setTempEventDate({
+      startDate: event.EventStartDate,
+      startTime: event.EventStartTime,
+      endDate: event.EventEndDate,
+      endTime: event.EventEndTime
+    })
+  }
+
+  const cancelEditEventDateTime = () => {
+    setEditingEventIndex(null)
+    setTempEventDate({ startDate: "", startTime: "", endDate: "", endTime: "" })
+  }
+
+  const saveEditEventDateTime = (values: EventFormValues, setFieldValue: any) => {
+    if (!tempEventDate.startDate || !tempEventDate.startTime || !tempEventDate.endDate || !tempEventDate.endTime) {
+      toast({
+        title: "Missing Information",
+        description: "All date and time fields are required",
+        variant: "destructive"
+      })
+      return
+    }
+
+    // Validate and normalize time format (ensure it doesn't already have seconds)
+    const normalizeTime = (time: string) => {
+      const parts = time.split(':')
+      if (parts.length === 2) {
+        return `${time}:00`
+      } else if (parts.length === 3) {
+        return time
+      } else {
+        throw new Error('Invalid time format')
+      }
+    }
+
+    let normalizedStartTime, normalizedEndTime
+    try {
+      normalizedStartTime = normalizeTime(tempEventDate.startTime)
+      normalizedEndTime = normalizeTime(tempEventDate.endTime)
+    } catch (error) {
+      toast({
+        title: "Invalid Time Format",
+        description: "Please enter time in HH:MM format",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const startDateTime = new Date(`${tempEventDate.startDate}T${normalizedStartTime}`)
+    const endDateTime = new Date(`${tempEventDate.endDate}T${normalizedEndTime}`)
+    const currentDateTime = new Date()
+
+    // Validate that the dates are valid
+    if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+      toast({
+        title: "Invalid Date/Time",
+        description: "Please enter valid date and time values",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (startDateTime < currentDateTime) {
+      toast({
+        title: "Invalid Start Time",
+        description: "Event start time cannot be in the past",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (endDateTime < startDateTime) {
+      toast({
+        title: "Invalid End Time", 
+        description: "End date and time cannot be earlier than start date and time",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const eventDuration = endDateTime.getTime() - startDateTime.getTime()
+    const maxDuration = 24 * 60 * 60 * 1000 // 24 hours
+
+    if (eventDuration > maxDuration) {
+      toast({
+        title: "Duration Too Long",
+        description: "Event duration cannot exceed 24 hours",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const updatedEvent: EventDateTime = {
+      EventStartDate: tempEventDate.startDate,
+      EventStartTime: normalizedStartTime,
+      EventEndDate: tempEventDate.endDate,
+      EventEndTime: normalizedEndTime,
+    }
+
+    // Update the specific event in the array
+    const updatedEvents = [...values.events]
+    if (editingEventIndex !== null) {
+      updatedEvents[editingEventIndex] = updatedEvent
+      setFieldValue("events", updatedEvents)
+    }
+
+    // Reset edit state
+    setEditingEventIndex(null)
+    setTempEventDate({ startDate: "", startTime: "", endDate: "", endTime: "" })
+
+    toast({
+      title: "Success",
+      description: "Date and time updated successfully",
+    })
   }
 
   // FAQ handling
@@ -2468,9 +2599,19 @@ export default function CreateEvent({
                 {/* Date and Time Management */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Date & Time *</CardTitle>
+                    <CardTitle className="flex items-center space-x-2">
+                      <span>Date & Time *</span>
+                      {editingEventIndex !== null && (
+                        <span className="text-sm bg-primary text-primary-foreground px-2 py-1 rounded">
+                          Editing Event #{editingEventIndex + 1}
+                        </span>
+                      )}
+                    </CardTitle>
                     <p className="text-sm text-muted-foreground">
-                      Add multiple dates for multi-day events. Each date can have different start/end times.
+                      {editingEventIndex !== null 
+                        ? "Modify the date and time for the selected event, then click 'Save Changes'."
+                        : "Add multiple dates for multi-day events. Each date can have different start/end times."
+                      }
                     </p>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -2511,14 +2652,33 @@ export default function CreateEvent({
                       </div>
                     </div>
 
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        onClick={() => addEventDateTime(values, setFieldValue)}
-                        variant="outline"
-                      >
-                        Add Date & Time
-                      </Button>
+                    <div className="flex justify-end space-x-2">
+                      {editingEventIndex !== null ? (
+                        <>
+                          <Button
+                            type="button"
+                            onClick={() => saveEditEventDateTime(values, setFieldValue)}
+                            variant="default"
+                          >
+                            Save Changes
+                          </Button>
+                          <Button
+                            type="button"
+                            onClick={cancelEditEventDateTime}
+                            variant="outline"
+                          >
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          type="button"
+                          onClick={() => addEventDateTime(values, setFieldValue)}
+                          variant="outline"
+                        >
+                          Add Date & Time
+                        </Button>
+                      )}
                     </div>
 
                     {/* Display saved events */}
@@ -2527,20 +2687,41 @@ export default function CreateEvent({
                         <Label>Scheduled Events:</Label>
                         {values.events.map((event: EventDateTime, index: number) => {
                           // console.log("🗓️ Displaying event date:", event)
+                          const isBeingEdited = editingEventIndex === index
                           return (
-                          <div key={index} className="flex items-center justify-between p-3 border rounded">
+                          <div key={index} className={`flex items-center justify-between p-3 border rounded ${isBeingEdited ? 'border-primary bg-primary/5' : ''}`}>
                             <div className="text-sm">
                               <p><strong>Date:</strong> {new Date(event.EventStartDate).toLocaleDateString()} - {new Date(event.EventEndDate).toLocaleDateString()}</p>
                               <p><strong>Time:</strong> {event.EventStartTime} - {event.EventEndTime}</p>
+                              {isBeingEdited && (
+                                <p className="text-primary text-xs mt-1">
+                                  <Info className="h-3 w-3 inline mr-1" />
+                                  Editing this event - modify the date/time fields above
+                                </p>
+                              )}
                             </div>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => removeEventDateTime(index, values, setFieldValue)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex space-x-2">
+                              {!isBeingEdited && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => startEditEventDateTime(index, event)}
+                                  disabled={editingEventIndex !== null}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              )}
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => removeEventDateTime(index, values, setFieldValue)}
+                                disabled={editingEventIndex !== null}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                           )
                         })}
