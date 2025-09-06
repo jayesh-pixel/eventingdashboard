@@ -286,35 +286,39 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     setShowViewDialog(true)
   }  // CRUD Functions
   const handleCreatePromoter = async () => {
-    if (!formData.FullName || !formData.Username || !formData.Email || !formData.Password || !formData.Phone1 || !formData.CountryIsoCode) {
+    if (!formData.FullName || !formData.Username) {
       toast({
         title: "Error",
-        description: "Please fill all required fields including Country ISO Code",
+        description: "Please fill Full Name and Username (required fields)",
         variant: "destructive",
       })
       return
     }
 
-    // Validate phone number (must be exactly 10 digits)
-    const phoneRegex = /^\d{10}$/
-    if (!phoneRegex.test(formData.Phone1)) {
-      toast({
-        title: "Error",
-        description: "Phone number must be exactly 10 digits",
-        variant: "destructive",
-      })
-      return
+    // Validate phone number only if provided (must be exactly 10 digits)
+    if (formData.Phone1 && formData.Phone1.trim()) {
+      const phoneRegex = /^\d{10}$/
+      if (!phoneRegex.test(formData.Phone1)) {
+        toast({
+          title: "Error",
+          description: "Phone number must be exactly 10 digits",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.Email)) {
-      toast({
-        title: "Error",
-        description: "Please enter a valid email address",
-        variant: "destructive",
-      })
-      return
+    // Validate email format only if provided
+    if (formData.Email && formData.Email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(formData.Email)) {
+        toast({
+          title: "Error",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        })
+        return
+      }
     }
 
     setSubmitting(true)
@@ -413,27 +417,55 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       const payload: any = {
         FullName: formData.FullName,
         Username: formData.Username,
-        Email: formData.Email,
-        Password: formData.Password,
-        Phone1: formData.Phone1,
-        Country: formData.Country,
-        CountryIsoCode: formData.CountryIsoCode,
-        State: formData.State,
-        City: formData.City,
         SendMailFlag: 1,
         CreatedBy: 1,
         createduser_id: user?.user_id || "",
       }
 
+      // Add optional fields only if they have values
+      if (formData.Email && formData.Email.trim()) {
+        payload.Email = formData.Email.trim()
+      }
+      
+      if (formData.Password && formData.Password.trim()) {
+        payload.Password = formData.Password.trim()
+      }
+      
+      if (formData.Phone1 && formData.Phone1.trim()) {
+        payload.Phone1 = formData.Phone1.trim()
+      }
+      
+      if (formData.Country && formData.Country.trim()) {
+        payload.Country = formData.Country.trim()
+      }
+      
+      if (formData.CountryIsoCode && formData.CountryIsoCode.trim()) {
+        payload.CountryIsoCode = formData.CountryIsoCode.trim()
+      }
+      
+      if (formData.State && formData.State.trim()) {
+        payload.State = formData.State.trim()
+      }
+      
+      if (formData.City && formData.City.trim()) {
+        payload.City = formData.City.trim()
+      }
+
       // Add StateIsoCode if state is provided
-      if (formData.State) {
-        const stateIsoCode = formData.StateIsoCode || getStateIsoCode(formData.State, formData.CountryIsoCode)
+      if (formData.State && formData.State.trim()) {
+        const stateIsoCode = formData.StateIsoCode || getStateIsoCode(formData.State, formData.CountryIsoCode || 'IN')
         if (stateIsoCode) {
           payload.StateIsoCode = stateIsoCode
         }
-      }      // Add CityIsoCode - required by API, always include
-      const cityIsoCode = formData.CityIsoCode || getCityIsoCode(formData.City, formData.CountryIsoCode)
-      payload.CityIsoCode = cityIsoCode
+      }
+
+      // Add CityIsoCode if city is provided
+      if (formData.City && formData.City.trim()) {
+        const cityIsoCode = formData.CityIsoCode || getCityIsoCode(formData.City, formData.CountryIsoCode || 'IN')
+        if (cityIsoCode) {
+          payload.CityIsoCode = cityIsoCode
+        }
+      }
 
       const response = await fetch(promoterEndpoint.REGISTER_PROMOTER_URL, {
         method: "POST",
@@ -1126,24 +1158,24 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Email *</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
                 value={formData.Email}
                 onChange={(e) => setFormData(prev => ({ ...prev, Email: e.target.value }))}
-                placeholder="Enter email address"
+                placeholder="Enter email address (optional)"
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password *</Label>
+              <Label htmlFor="password">Password</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={formData.Password}
                   onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
-                  placeholder="Enter password"
+                  placeholder="Enter password (optional)"
                   className="pr-10"
                 />
                 <button
@@ -1168,7 +1200,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 Generate Password
               </Button>
             </div>            <div className="grid gap-2">
-              <Label htmlFor="phone">Phone * (10 digits)</Label>
+              <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
                 type="tel"
@@ -1177,7 +1209,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   const value = e.target.value.replace(/\D/g, '').slice(0, 10)
                   setFormData(prev => ({ ...prev, Phone1: value }))
                 }}
-                placeholder="Enter 10-digit phone number"
+                placeholder="Enter 10-digit phone number (optional)"
                 maxLength={10}
               />
               {formData.Phone1 && formData.Phone1.length !== 10 && (
@@ -1208,7 +1240,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               Cancel
             </Button>            <Button 
               onClick={handleCreatePromoter}
-              disabled={submitting || !formData.FullName || !formData.Username || !formData.Email || !formData.Password || !formData.Phone1 || !stateIsoCode || !cityIsoCode}
+              disabled={submitting || !formData.FullName || !formData.Username}
             >
               {submitting ? (
                 <>

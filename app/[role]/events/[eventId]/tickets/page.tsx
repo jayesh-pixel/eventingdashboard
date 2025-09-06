@@ -933,7 +933,7 @@ export default function TicketsPage() {
 
       // Create AbortController for timeout handling
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 120000 : 30000) // 2 minutes for bulk, 30 seconds for normal
+      const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 300000 : 30000) // 5 minutes for bulk, 30 seconds for normal
 
       const response = await fetch(endpoint, {
         method: "POST",

@@ -58,12 +58,10 @@ export const indianLanguages = [
 
 // Years/Age options
 export const yearsOptions = [
-  { value: "All Ages", label: "All Ages" },
-  { value: "0-5 years", label: "0-5 years" },
-  { value: "6-12 years", label: "6-12 years" },
-  { value: "13-17 years", label: "13-17 years" },
-  { value: "18-25 years", label: "18-25 years" },
-  { value: "26-35 years", label: "26-35 years" },
-  { value: "36-50 years", label: "36-50 years" },
-  { value: "50+ years", label: "50+ years" }
+  { value: "All age group", label: "All age group" },
+  { value: "18+", label: "18+" },
+  { value: "21+", label: "21+" },
+  { value: "25+", label: "25+" },
+  
+ 
 ]
