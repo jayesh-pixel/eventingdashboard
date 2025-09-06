@@ -81,6 +81,10 @@ interface ExtendedNormalTicket extends NormalTicket {
   EventTicketStatus?: number        // Different field, may be for internal status
   AvailabilityStatus?: string
   IsSoldOut?: boolean
+  // Visibility and promoter fields
+  EventTicketVisibility?: string | number
+  EventPromoters?: any[]
+  BookingMaxLimit?: number
   // Creation date fields with different naming conventions
   CreatedAt?: string
   createdAt: string
@@ -127,6 +131,12 @@ interface ExtendedBulkTicket {
   Price?: number
   CreatedAt?: string
   Status?: number
+  
+  // Add missing fields for compatibility
+  Description?: string
+  EventTicketVisibility?: string | number
+  EventPromoters?: any[]
+  BookingMaxLimit?: number
 }
 
 interface EventDateTime {
@@ -210,6 +220,7 @@ export default function TicketsPage() {
     action: 'enable' | 'disable'
   } | null>(null)
   const [selectedTicket, setSelectedTicket] = React.useState<ExtendedNormalTicket | ExtendedBulkTicket | null>(null)
+  const [selectedTicketType, setSelectedTicketType] = React.useState<'normal' | 'bulk' | null>(null)
   const [selectedPromoters, setSelectedPromoters] = React.useState<string[]>([])
   const [promoterSearchTerm, setPromoterSearchTerm] = React.useState("")
 
@@ -1029,17 +1040,47 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken || !selectedTicket) return
 
-      const isNormal = "TicketName" in selectedTicket
+      const isNormal = selectedTicketType === 'normal'
       const endpoint = isNormal
         ? ticketEndPoint.UPDATE_TICKET
         : ticketEndPoint.UPDATE_BULK_TICKET
 
-      const payload = {
-        _id: selectedTicket._id,
-        AdminRole: getNumericRole(role),
-        user_id: user.user_id,
-        ...editFormData
+      let payload: any
+      
+      if (isNormal) {
+        // Format payload according to swagger API specification for normal tickets
+        const normalTicket = selectedTicket as ExtendedNormalTicket
+        
+        payload = {
+          Event_id: eventId,
+          eventTicket_id: normalTicket._id,
+          EventTicketVisibility: editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility || normalTicket.EventTicketVisibility,
+          Description: editFormData.TicketDescription || editFormData.Description || normalTicket.Description,
+          Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
+          Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
+          BookingMaxLimit: parseInt(editFormData.BookingMaxLimit || normalTicket.BookingMaxLimit)
+        }
+        
+        // Only include EventPromoters if the ticket has promoter visibility or existing promoters
+        const hasPromoters = editFormData.EventPromoters && editFormData.EventPromoters.length > 0
+        const hasExistingPromoters = normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0
+        const isPromoterVisibility = (editFormData.VisibilityLevel === 3 || editFormData.VisibilityLevel === "3") || 
+                                   (normalTicket.EventTicketVisibility === "3" || normalTicket.EventTicketVisibility === 3)
+        
+        if (hasPromoters || (isPromoterVisibility && hasExistingPromoters)) {
+          payload.EventPromoters = editFormData.EventPromoters || normalTicket.EventPromoters
+        }
+      } else {
+        // For bulk tickets, use existing format
+        payload = {
+          _id: selectedTicket._id,
+          AdminRole: getNumericRole(role),
+          user_id: user.user_id,
+          ...editFormData
+        }
       }
+
+      console.log("Update ticket payload:", JSON.stringify(payload, null, 2))
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -1050,19 +1091,33 @@ export default function TicketsPage() {
         body: JSON.stringify(payload),
       })
 
+      console.log("Update ticket response status:", response.status)
+
       if (response.ok) {
+        const data = await response.json()
+        console.log("Update ticket response data:", JSON.stringify(data, null, 2))
+        
         toast({
           title: "Success",
-          description: "Ticket updated successfully",
+          description: data.message || "Ticket updated successfully",
         })
         setShowEditModal(false)
         setEditFormData({})
+        setSelectedTicketType(null)
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
           fetchNormalTickets()
         } else {
           fetchBulkTickets()
         }
+      } else {
+        const errorData = await response.json()
+        console.error("Update ticket API error:", errorData)
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to update ticket",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error updating ticket:", error)
@@ -1258,6 +1313,10 @@ export default function TicketsPage() {
   const handleOpenEditModal = (ticket: ExtendedNormalTicket | ExtendedBulkTicket) => {
     setSelectedTicket(ticket)
     setEditFormData(ticket)
+    
+    // Determine ticket type based on current active tab since tickets come from different tabs
+    setSelectedTicketType(activeTab as 'normal' | 'bulk')
+    
     setShowEditModal(true)
   }  // Filter promoters based on search AND event assignment
   const filteredPromoters = promoters.filter(promoter => {
@@ -2121,23 +2180,40 @@ export default function TicketsPage() {
           {selectedTicket && (
             <div className="grid gap-4">
               {/* Edit form fields based on ticket type */}
-              {"TicketName" in selectedTicket ? (
+              {selectedTicketType === 'normal' ? (
                 // Normal ticket edit form
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="editTicketName">Ticket Name</Label>
                     <Input
                       id="editTicketName"
-                      value={editFormData.TicketName || ""}
-                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketName: e.target.value }))}
+                      value={editFormData.TicketName || editFormData.Name || ""}
+                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketName: e.target.value, Name: e.target.value }))}
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="editVisibilityLevel">Visibility</Label>
+                    <Select
+                      value={editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString() || "1"}
+                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, VisibilityLevel: parseInt(value), EventTicketVisibility: parseInt(value) }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">All</SelectItem>
+                        <SelectItem value="2">All Customers</SelectItem>
+                        <SelectItem value="3">Promoters</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="editTicketType">Ticket Type</Label>
                     <Select
-                      value={editFormData.TicketType?.toString() || ""}
-                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, TicketType: parseInt(value) }))}
+                      value={editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || ""}
+                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, TicketType: parseInt(value), EventTicketType: parseInt(value) }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -2150,24 +2226,43 @@ export default function TicketsPage() {
                     </Select>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="editTicketDescription">Description</Label>
+                    <Textarea
+                      id="editTicketDescription"
+                      value={editFormData.TicketDescription || editFormData.Description || ""}
+                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketDescription: e.target.value, Description: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="editTicketPrice">Price (₹)</Label>
                       <Input
                         id="editTicketPrice"
                         type="number"
-                        value={editFormData.TicketPrice || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0 }))}
+                        value={editFormData.TicketPrice || editFormData.Price || ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="editMaxQuantity">Max Quantity</Label>
+                      <Label htmlFor="editMaxQuantity">Total Quantity</Label>
                       <Input
                         id="editMaxQuantity"
                         type="number"
-                        value={editFormData.TicketQuantity || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketQuantity: parseInt(e.target.value) || 0 }))}
+                        value={editFormData.TicketQuantity || editFormData.Quantity || editFormData.MaxQuantity || ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0, MaxQuantity: parseInt(e.target.value) || 0 }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="editBookingMaxLimit">Booking Max Limit</Label>
+                      <Input
+                        id="editBookingMaxLimit"
+                        type="number"
+                        value={editFormData.BookingMaxLimit || ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
                       />
                     </div>
                   </div>
@@ -2179,8 +2274,8 @@ export default function TicketsPage() {
                     <Label htmlFor="editBulkTicketName">Bulk Ticket Name</Label>
                     <Input
                       id="editBulkTicketName"
-                      value={editFormData.BulkTicketName || ""}
-                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketName: e.target.value }))}
+                      value={editFormData.BulkTicketName || editFormData.TicketName || ""}
+                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketName: e.target.value, TicketName: e.target.value }))}
                     />
                   </div>
 
@@ -2190,8 +2285,8 @@ export default function TicketsPage() {
                       <Input
                         id="editBulkTicketPrice"
                         type="number"
-                        value={editFormData.BulkTicketPrice || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketPrice: parseFloat(e.target.value) || 0 }))}
+                        value={editFormData.BulkTicketPrice || editFormData.Price || ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
                       />
                     </div>
 
@@ -2221,7 +2316,11 @@ export default function TicketsPage() {
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false)
+                    setSelectedTicketType(null)
+                    setEditFormData({})
+                  }}
                 >
                   Cancel
                 </Button>
