@@ -769,10 +769,8 @@ export default function GenresPage({ params }: GenresPageProps) {
                 <TableHead>Image</TableHead>
                 <TableHead>Genre Name</TableHead>
                 <TableHead className="hidden md:table-cell">Description</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden lg:table-cell">Created Date</TableHead>
                 <TableHead>
-                  <span className="sr-only">Actions</span>
+Actions
                 </TableHead>
               </TableRow>
             </TableHeader>
@@ -803,14 +801,7 @@ export default function GenresPage({ params }: GenresPageProps) {
                     <TableCell className="hidden md:table-cell max-w-xs truncate">
                       {genre.Description || "No description"}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusDisplay(genre.status).variant}>
-                        {getStatusDisplay(genre.status).text}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {new Date(genre.createdAt).toLocaleDateString()}
-                    </TableCell>
+    
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

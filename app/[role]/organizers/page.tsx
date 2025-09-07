@@ -1008,7 +1008,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <TableHead>City</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone no.</TableHead>
-                  <TableHead>Status</TableHead>
+        
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>              <TableBody>
@@ -1021,11 +1021,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                       <TableCell>{org.City || "N/A"}</TableCell>
                       <TableCell>{org.Email || "N/A"}</TableCell>
                       <TableCell>{org.Phone1 || "N/A"}</TableCell>
-                      <TableCell>
-                        <Badge variant={statusDisplay.variant}>
-                          {statusDisplay.text}
-                        </Badge>
-                      </TableCell>
+          
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

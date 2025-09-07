@@ -841,8 +841,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Priority</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead>Status</TableHead>
+        
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -880,14 +879,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                         <TableCell>{venue.City}</TableCell>
                         <TableCell>{venue.State}</TableCell>
                         <TableCell>{venue.Priority}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {formatDate(venue.createdAt)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={statusDisplay.variant}>
-                            {statusDisplay.text}
-                          </Badge>
-                        </TableCell>
+        
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

@@ -75,14 +75,12 @@ interface Artist {
   Description?: string
   Priority?: number
   Images?: ArtistImage[]
-  createdAt: string
   status?: number
 }
 
 interface ArtistImage {
   _id: string
   image_path: string
-  createdAt: string
 }
 
 interface ApiResponse {
@@ -784,7 +782,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                     <TableHead>Priority</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Images</TableHead>
-                    <TableHead>Created</TableHead>
+
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -814,11 +812,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                         {/* Artist Name */}
                         <div>
                           <div className="font-medium text-gray-900">{artist.Name}</div>
-                          {artist.status && (
-                            <Badge variant={artist.status === 1 ? "default" : "secondary"} className="text-xs">
-                              {artist.status === 1 ? "Active" : "Inactive"}
-                            </Badge>
-                          )}
+                
                         </div>
                       </div>
                     </TableCell>
@@ -870,11 +864,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <div className="text-sm text-muted-foreground">
-                          {formatDate(artist.createdAt)}
-                        </div>
-                      </TableCell>
+      
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

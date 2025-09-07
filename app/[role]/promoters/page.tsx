@@ -873,8 +873,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Location</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created Date</TableHead>
+  
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -889,11 +888,6 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                     <TableCell>
                       {[promoter.City, promoter.State, promoter.Country].filter(Boolean).join(", ")}
                     </TableCell>
-                    <TableCell>                      <Badge className={statusColors[promoter.status as keyof typeof statusColors]}>
-                        {statusLabels[promoter.status as keyof typeof statusLabels] || 'Unknown'}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{formatDate(promoter.createdAt)}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

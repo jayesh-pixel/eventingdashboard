@@ -973,8 +973,7 @@ export default function ScannerUsersPage() {
                   <TableHead>Username</TableHead>
                   <TableHead>User Type</TableHead>
                   <TableHead>Assignment</TableHead>
-            
-                  <TableHead>Status</TableHead>
+          
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>              <TableBody>
@@ -1000,12 +999,8 @@ export default function ScannerUsersPage() {
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{formatDate(user.createdAt)}</TableCell>
-                      <TableCell>
-                        <Badge className={statusColors[user.status as keyof typeof statusColors]}>
-                          {statusLabels[user.status as keyof typeof statusLabels] || 'Unknown'}
-                        </Badge>
-                      </TableCell>                      <TableCell>
+                
+                            <TableCell>
                         <div className="flex gap-2">
                           <Button 
                             variant="outline" 

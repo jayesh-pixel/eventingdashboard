@@ -690,8 +690,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   <TableHead>Image</TableHead>
                   <TableHead>Tour Name</TableHead>
                   <TableHead className="hidden md:table-cell">Description</TableHead>
-                  <TableHead className="hidden md:table-cell">Status</TableHead>
-                  <TableHead className="hidden md:table-cell">Created</TableHead>
+      
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -733,17 +732,8 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                           {tour.Description || "No description"}
                         </div>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <Badge variant={tour.status === 1 ? "default" : "secondary"}>
-                          {tour.status === 1 ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-4 w-4" />
-                          {formatDate(tour.createdAt)}
-                        </div>
-                      </TableCell>
+       
+               
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

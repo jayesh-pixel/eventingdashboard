@@ -53,7 +53,6 @@ interface Category {
     _id: string
   }>
   FilterationDateTime: string
-  createdAt: string
   status: number
   Priority: number
   __v?: number
@@ -77,7 +76,6 @@ const mockCategories: Category[] = [
     Description: "Music events including concerts, festivals, and performances",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Music", _id: "img001" }],
     FilterationDateTime: "2025-01-05T08:30:00.000Z",
-    createdAt: "05-01-2025 08:30:00",
     status: 1,
     Priority: 1,
     __v: 0,
@@ -88,7 +86,6 @@ const mockCategories: Category[] = [
     Description: "Tech events including conferences, workshops, and hackathons",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Tech", _id: "img002" }],
     FilterationDateTime: "2025-02-01T10:15:00.000Z",
-    createdAt: "01-02-2025 10:15:00",
     status: 1,
     Priority: 2,
     __v: 0,
@@ -99,7 +96,6 @@ const mockCategories: Category[] = [
     Description: "Art exhibitions, cultural festivals, and creative workshops",
     Images: [{ image_path: "/placeholder.svg?height=100&width=100&text=Art", _id: "img003" }],
     FilterationDateTime: "2025-03-10T09:45:00.000Z",
-    createdAt: "10-03-2025 09:45:00",
     status: 1,
     Priority: 3,
     __v: 0,
@@ -110,7 +106,7 @@ const mockCategories: Category[] = [
     Description: "Sports events, tournaments, and fitness activities",
     Images: [],
     FilterationDateTime: "2025-04-15T12:00:00.000Z",
-    createdAt: "15-04-2025 12:00:00",
+
     status: 0,
     Priority: 4,
     __v: 0,
@@ -789,8 +785,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 <TableHead>Category Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Priority</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created Date</TableHead>
+  
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -826,14 +821,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                     <TableCell>
                       {category.Priority || 0}
                     </TableCell>
-                    <TableCell>
-                      <Badge variant={getStatusDisplay(category.status).variant}>
-                        {getStatusDisplay(category.status).text}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {new Date(category.createdAt).toLocaleDateString()}
-                    </TableCell>
+          
+      
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>

@@ -933,7 +933,11 @@ export default function EventsPage({ params }: EventsPageProps) {
   
   const handleBookTicket = (eventId: string, arrangedEventDateTime?: any[]) => {
     // Navigate to booking page for this event with event date time data
-    router.push(`/${role}/events/${eventId}/booking`)
+    if ((role as UserRole) === "promoter") {
+      router.push(`/${role}/events/${eventId}/booking-tickets`)
+    } else {
+      router.push(`/${role}/events/${eventId}/booking`)
+    }
   }
 
   const handlePromoterClick = (promoterData: any, eventId: string) => {
@@ -1126,14 +1130,27 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 <MoreHorizontal className="h-4 w-4" />
                               </Button>
                             </DropdownMenuTrigger>                            <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>                              <DropdownMenuItem 
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuItem 
                                 onClick={() => handleViewEditEvent(event._id)}
                                 className="hover:bg-accent cursor-pointer"
                               >
                                 <Eye className="mr-2 h-4 w-4" />
                                 View & Edit
-                              </DropdownMenuItem>      
-                              
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  if ((role as UserRole) === "promoter") {
+                                    router.push(`/${role}/events/${event._id}/booking-tickets`)
+                                  } else {
+                                    router.push(`/${role}/events/${event._id}/booking`)
+                                  }
+                                }}
+                                className="hover:bg-accent cursor-pointer"
+                              >
+                                <IndianRupee className="mr-2 h-4 w-4" />
+                                Booking
+                              </DropdownMenuItem>
                               {(canAddEvent) && (
                                 <DropdownMenuItem 
                                   onClick={() => router.push(`/${role}/events/${event._id}/tickets`)}
@@ -1142,13 +1159,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   <Ticket className="mr-2 h-4 w-4" />
                                   View & Add Tickets
                                 </DropdownMenuItem>
-                              )}                              <DropdownMenuItem 
-                                onClick={() => handleBookTicket(event._id, event.arrangedEventDateTime)}
-                                className="hover:bg-accent cursor-pointer"
-                              >
-                                <IndianRupee className="mr-2 h-4 w-4" />
-                                Booking
-                              </DropdownMenuItem>
+                              )}
                               {isEventDisabled(event) ? (
                                 <DropdownMenuItem 
                                   className="text-green-600 hover:text-green-700 hover:bg-green-50"
