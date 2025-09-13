@@ -270,7 +270,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
 
   // Fetch all events data with improved error handling
-  const getAllEventData = async () => {
+  const getAllEventData = async (tab: string = "all") => {
     try {
       setLoading(true)
       setApiError(null)
@@ -293,11 +293,11 @@ export default function EventsPage({ params }: EventsPageProps) {
         return
       }
 
-      // Determine the correct API endpoint and payload based on role
+      // Determine the correct API endpoint and payload based on role and tab
       let apiEndpoint
       let requestPayload
-      
- 
+
+
       console.log("📊 ===== EVENTS API CALL DEBUG =====")
       console.log("🔍 DETAILED Role detection debug:")
       console.log("- role variable:", role)
@@ -309,13 +309,14 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log("- user.AdminRole:", user?.AdminRole)
       console.log("- user.role:", (user as any)?.role)
       console.log("- localStorage authUser:", localStorage.getItem("authUser"))
+      console.log("- tab:", tab)
       console.log("🎯 USER_ID BEING USED:", user.user_id)
       console.log("=====================================")
-      
+
       // Check if role is actually "promoter"
       const isPromoter = role === "promoter" || (role as string) === "promoter"
       console.log("- isPromoter calculation:", isPromoter)
-      
+
       if (isPromoter) {
         console.log("🎯 DEFINITELY Using PROMOTER endpoint")
         apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
@@ -327,9 +328,30 @@ export default function EventsPage({ params }: EventsPageProps) {
         console.log("Promoter payload JSON:", JSON.stringify(requestPayload))
       } else {
         console.log("🎯 DEFINITELY Using ADMIN PAGINATED endpoint")
-        // Use the paginated endpoint for admin roles with the correct payload structure
+        // Use specific paginated endpoints for different tabs
         const numericRole = getNumericAdminRole(user.AdminRole || (role as UserRole))
-        apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
+
+        // Select endpoint based on tab
+        switch (tab) {
+          case "published":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS
+            break
+          case "draft":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_DRAFT_EVENTS
+            break
+          case "review":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_REVIEW_EVENTS
+            break
+          case "self":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_SUPER_ADMIN_SELF_CREATED_EVENTS
+            break
+          case "rejected":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_REJECTED_EVENTS
+            break
+          default:
+            apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
+        }
+
         requestPayload = {
           AdminRole: numericRole,
           user_id: user.user_id,
@@ -697,32 +719,11 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   // Initial data fetch
   React.useEffect(() => {
-    getAllEventData()
+    getAllEventData(activeTab)
   }, [])
-  // Filter events based on tab and other filters
+  // Filter events based on filters (no tab filtering since we fetch specific data per tab)
   const filteredEvents = React.useMemo(() => {
     let events = allEventsData
-
-    // Apply tab filter
-    if (activeTab !== "all") {
-      events = events.filter((event) => {
-        const eventStatus = normalizeEventStatus(event.eventStatus)
-        switch (activeTab) {
-          case "published":
-            return eventStatus === "Published"
-          case "draft":
-            return eventStatus === "Draft"
-          case "review":
-            return eventStatus === "To Be Reviewed"
-          case "self":
-            return event.organizerId === user?.user_id || event.promoterId === user?.user_id
-          case "rejected":
-            return eventStatus === "Rejected"
-          default:
-            return true
-        }
-      })
-    }
 
     // Apply city filter
     if (selectedCity && selectedCity !== "__all__") {
@@ -762,7 +763,7 @@ export default function EventsPage({ params }: EventsPageProps) {
     })
 
     return events
-  }, [allEventsData, activeTab, user?.user_id, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate])
+  }, [allEventsData, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate])
 
   const totalPages = Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)
   const currentEvents = filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -774,6 +775,8 @@ export default function EventsPage({ params }: EventsPageProps) {
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
     setCurrentPage(1)
+    // Fetch data for the specific tab
+    getAllEventData(tab)
   }
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
   const handleCreateEvent = () => {
@@ -831,7 +834,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
 
       // Refresh the events data to get the updated status from the server
-      getAllEventData()
+      getAllEventData(activeTab)
 
     } catch (error) {
       console.error("Error toggling event status:", error)
@@ -1011,7 +1014,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             {activeTab === "rejected" && "No rejected events found."}
                           </p>
                         </div>
-                        <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
+                        <Button variant="outline" onClick={() => getAllEventData(activeTab)} disabled={loading} className="text-sm">
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Refresh Events
                         </Button>
@@ -1054,7 +1057,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                           <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
                             <AddPromoterAndShow 
                               eventData={event} 
-                              onPromoterUpdate={() => getAllEventData()}
+                              onPromoterUpdate={() => getAllEventData(activeTab)}
                             />
                           </div>
                         ) : ((role as UserRole) === "organizer") ? (
@@ -1062,7 +1065,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             <span className="text-sm">{event.promoterName || ""}</span>
                             <AddPromoterAndShow 
                               eventData={event} 
-                              onPromoterUpdate={() => getAllEventData()}
+                              onPromoterUpdate={() => getAllEventData(activeTab)}
                             />
                           </div>
                         ) : (
@@ -1494,7 +1497,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="all" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              All ({allEventsData.length})
+              All
             </TabsTrigger>
           )}
           {(role as UserRole) !== "promoter" && (
@@ -1502,7 +1505,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="published" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              Published ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Published").length})
+              Published
             </TabsTrigger>
           )}
           {(role as UserRole) !== "promoter" && (
@@ -1510,7 +1513,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="draft" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              Draft ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Draft").length})
+              Draft
             </TabsTrigger>
           )}
           {(role as UserRole) !== "promoter" && (
@@ -1518,7 +1521,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="review" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              To Be Reviewed ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "To Be Reviewed").length})
+              To Be Reviewed
             </TabsTrigger>
           )}
           {(role as UserRole) !== "promoter" && (
@@ -1526,7 +1529,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="self" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              Self ({allEventsData.filter((e) => e.organizerId === user?.user_id || e.promoterId === user?.user_id).length})
+              Self
             </TabsTrigger>
           )}
           {(role as UserRole) !== "promoter" && (
@@ -1534,7 +1537,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               value="rejected" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
-              Rejected ({allEventsData.filter((e) => normalizeEventStatus(e.eventStatus) === "Rejected").length})
+              Rejected
             </TabsTrigger>
           )}
         </TabsList>        <TabsContent value={activeTab} className="mt-4 sm:mt-6">
@@ -1554,7 +1557,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         Try adjusting your search terms or filters to find the events you're looking for
                       </p>
                     </div>
-                    <Button variant="outline" onClick={getAllEventData} disabled={loading} className="text-sm">
+                    <Button variant="outline" onClick={() => getAllEventData(activeTab)} disabled={loading} className="text-sm">
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh Events
                     </Button>                  </div>

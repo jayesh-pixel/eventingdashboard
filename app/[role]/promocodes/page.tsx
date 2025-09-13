@@ -637,14 +637,15 @@ export default function PromocodesPage() {
               Create Promocode
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle>Create New Promocode</DialogTitle>
               <DialogDescription>
                 Create a new promotional code for your events
               </DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
+            <div className="flex-1 overflow-y-auto py-4">
+              <div className="grid gap-4 pr-2">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="promocodeName">Promocode Name *</Label>
@@ -774,7 +775,7 @@ export default function PromocodesPage() {
                       <span className="text-sm">Loading events...</span>
                     </div>
                   ) : (
-                    <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                    <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                       {!Array.isArray(events) || events.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
                       ) : events.filter((event) => 
@@ -832,7 +833,7 @@ export default function PromocodesPage() {
                       <span className="text-sm">Loading customers...</span>
                     </div>
                   ) : (
-                    <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                    <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                       {!Array.isArray(customers) || customers.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No customers available</p>
                       ) : (
@@ -892,7 +893,8 @@ export default function PromocodesPage() {
                 <Label htmlFor="oneTimeUse">One Time Use Only</Label>
               </div>
             </div>
-            <DialogFooter>
+            </div>
+            <DialogFooter className="flex-shrink-0">
               <Button 
                 variant="outline" 
                 onClick={() => {
@@ -1104,14 +1106,14 @@ export default function PromocodesPage() {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Edit Promocode</DialogTitle>
             <DialogDescription>
               Update promocode details
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="flex-1 overflow-y-auto grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="editPromocodeName">Promocode Name *</Label>
@@ -1243,7 +1245,7 @@ export default function PromocodesPage() {
                     <span className="text-sm">Loading events...</span>
                   </div>
                 ) : (
-                  <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                  <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                     {events.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
                     ) : events.filter((event) => 
@@ -1300,7 +1302,7 @@ export default function PromocodesPage() {
                     <span className="text-sm">Loading customers...</span>
                   </div>
                 ) : (
-                  <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
+                  <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                     {customers.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-2">No customers available</p>
                     ) : (
@@ -1359,7 +1361,7 @@ export default function PromocodesPage() {
               <Label htmlFor="editOneTimeUse">One Time Use Only</Label>
             </div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="flex-shrink-0">
             <Button 
               variant="outline" 
               onClick={() => {

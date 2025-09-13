@@ -191,6 +191,12 @@ export const eventEndPoint = {
   GET_ALL_REJECTED_EVENTS_DATA: BASE_URL + "/events/getRejectedEvents",
   ENABLE_EVENT: BASE_URL + "/events/enableEvent",
   DISABLE_EVENT: BASE_URL + "/events/disableEvent",
+  // Paginated endpoints for different tabs
+  GET_PAGINATED_PUBLISH_EVENTS: BASE_URL + "/events/getPaginatedPublishEvents",
+  GET_PAGINATED_REVIEW_EVENTS: BASE_URL + "/events/getPaginatedReviewEvents",
+  GET_PAGINATED_DRAFT_EVENTS: BASE_URL + "/events/getPaginatedDraftEvents",
+  GET_PAGINATED_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getPaginatedSuperAdminSelfCreatedEvents",
+  GET_PAGINATED_REJECTED_EVENTS: BASE_URL + "/events/getPaginatedRejectedEvents",
 }
 
 // Ticket Management API Endpoints
