@@ -268,9 +268,84 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   // Handle image selection
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    setSelectedImages(files)
+    
+    // Validate each file
+    const validFiles: File[] = []
+    const errors: string[] = []
+    
+    const validateImageDimensions = (file: File): Promise<boolean> => {
+      return new Promise((resolve) => {
+        const img = new Image()
+        img.onload = () => {
+          // Check if dimensions are reasonable (not too small or too large)
+          const minWidth = 100
+          const minHeight = 100
+          const maxWidth = 2048
+          const maxHeight = 16384  // Allow up to ~16K height for the 8121 requirement
+          
+          if (img.naturalWidth < minWidth || img.naturalHeight < minHeight) {
+            errors.push(`${file.name}: Image dimensions too small (minimum ${minWidth}x${minHeight})`)
+            resolve(false)
+          } else if (img.naturalWidth > maxWidth || img.naturalHeight > maxHeight) {
+            errors.push(`${file.name}: Image dimensions too large (maximum ${maxWidth}x${maxHeight})`)
+            resolve(false)
+          } else {
+            resolve(true)
+          }
+        }
+        img.onerror = () => {
+          errors.push(`${file.name}: Unable to read image dimensions`)
+          resolve(false)
+        }
+        img.src = URL.createObjectURL(file)
+      })
+    }
+    
+    // Process files with validation
+    const processFiles = async () => {
+      for (const file of files) {
+        // Check file type
+        if (!file.type.match(/image\/(png|jpeg|jpg)/i)) {
+          errors.push(`${file.name}: Only PNG and JPG files are allowed`)
+          continue
+        }
+        
+        // Check file size (500 KB = 500 * 1024 bytes)
+        if (file.size > 500 * 1024) {
+          errors.push(`${file.name}: File size must be less than 500 KB`)
+          continue
+        }
+        
+        // Check dimensions
+        const isValidDimensions = await validateImageDimensions(file)
+        if (isValidDimensions) {
+          validFiles.push(file)
+        }
+      }
+      
+      // Show errors if any
+      if (errors.length > 0) {
+        toast({
+          title: "File Validation Error",
+          description: errors.join(". "),
+          variant: "destructive",
+        })
+      }
+      
+      // Set valid files
+      setSelectedImages(validFiles)
+      
+      // Show success message if files were validated
+      if (validFiles.length > 0 && errors.length === 0) {
+        toast({
+          title: "Files Selected",
+          description: `${validFiles.length} file(s) selected successfully`,
+        })
+      }
+    }
+    
+    processFiles()
   }
-
   // Upload images function
   const uploadImages = async (categoryId: string) => {
     if (selectedImages.length === 0) return
@@ -668,7 +743,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Categories Management</h1>
+        <h1 className="text-2xl font-semibold">Category Management</h1>
         <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
           <DialogTrigger asChild>
             <Button
@@ -714,15 +789,20 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   placeholder="Enter priority (0-10)"
                 />
               </div>
-              <div className="space-y-2">
+           <div className="space-y-2">
                 <Label>Add Images</Label>
-                <Input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  className="cursor-pointer"
-                />
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">
+                    Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                  </p>
+                  <Input
+                    type="file"
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg"
+                    onChange={handleImageSelect}
+                    className="cursor-pointer bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                  />
+                </div>
                 
                 {selectedImages.length > 0 && (
                   <div className="space-y-2">

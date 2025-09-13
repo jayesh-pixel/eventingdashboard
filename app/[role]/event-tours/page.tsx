@@ -563,6 +563,66 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     }
   }
 
+  const validateImageFile = (file: File): Promise<{ isValid: boolean; error?: string }> => {
+    return new Promise((resolve) => {
+      // Check file type
+      const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg']
+      if (!allowedTypes.includes(file.type)) {
+        resolve({ isValid: false, error: 'Only PNG or JPG files are allowed' })
+        return
+      }
+
+      // Check file size (500KB = 500 * 1024 bytes)
+      const maxSize = 500 * 1024
+      if (file.size > maxSize) {
+        resolve({ isValid: false, error: 'File size must be less than 500KB' })
+        return
+      }
+
+      // Check dimensions
+      const img = new window.Image()
+      img.onload = () => {
+        const { width, height } = img
+        if (width !== 640 || height !== 480) {
+          resolve({ isValid: false, error: 'Image dimensions must be 640x480 pixels' })
+        } else {
+          resolve({ isValid: true })
+        }
+      }
+      img.onerror = () => {
+        resolve({ isValid: false, error: 'Invalid image file' })
+      }
+      img.src = URL.createObjectURL(file)
+    })
+  }
+
+  const handleImageFileChangeWithValidation = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return
+
+    const files = Array.from(e.target.files)
+    const validFiles: File[] = []
+
+    for (const file of files) {
+      const validation = await validateImageFile(file)
+      if (validation.isValid) {
+        validFiles.push(file)
+      } else {
+        toast({
+          title: "Invalid Image",
+          description: `${file.name}: ${validation.error}`,
+          variant: "destructive",
+        })
+      }
+    }
+
+    setFormData({ ...formData, imageFiles: validFiles })
+
+    // Clear the input if no valid files
+    if (validFiles.length === 0) {
+      e.target.value = ''
+    }
+  }
+
   const removeImageFile = (index: number) => {
     const newFiles = formData.imageFiles.filter((_, i) => i !== index)
     setFormData({ ...formData, imageFiles: newFiles })
@@ -618,9 +678,13 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   id="imageFiles"
                   type="file"
                   multiple
-                  accept="image/*"
-                  onChange={handleImageFileChange}
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={handleImageFileChangeWithValidation}
+                  className="bg-background/50 dark:bg-muted/10 border-border/40"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Only PNG or JPG files. 500 KB max size. Dimensions: 640x480 pixels.
+                </p>
                 {formData.imageFiles.length > 0 && (
                   <div className="space-y-2">
                     <p className="text-sm text-muted-foreground">Selected files:</p>
@@ -897,9 +961,13 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 id="editImageFiles"
                 type="file"
                 multiple
-                accept="image/*"
-                onChange={handleImageFileChange}
+                accept="image/png,image/jpeg,image/jpg"
+                onChange={handleImageFileChangeWithValidation}
+                className="bg-background/50 dark:bg-muted/10 border-border/40"
               />
+              <p className="text-sm text-muted-foreground">
+                Only PNG or JPG files. 500 KB max size. Dimensions: 640x480 pixels.
+              </p>
               {formData.imageFiles.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">New files to upload:</p>

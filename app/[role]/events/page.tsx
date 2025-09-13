@@ -60,6 +60,7 @@ import { getValidToken } from "@/lib/token-utils"
 import PromoterEventCard from "@/components/create-event/promotereventcard"
 import AddPromoterAndShow from "@/components/add-promoter-and-show"
 import MultipleOrganizersDisplay from "@/components/multiple-organizers-display"
+import OrganizersCirclesOnly from "@/components/organizers-circles-only"
 import PromoterIndicator from "@/components/promoter-indicator"
 import PromoterPopup from "@/components/promoter-popup"
 import OrganizerIndicator from "@/components/organizer-indicator"
@@ -946,8 +947,9 @@ export default function EventsPage({ params }: EventsPageProps) {
     setShowPromoterPopup(true)
   }
 
-  const handleOrganizerClick = (organizerData: any) => {
-    setSelectedOrganizerData(organizerData)
+  const handleOrganizerClick = (organizersData: any, eventId: string) => {
+    setSelectedOrganizerData(organizersData)
+    setSelectedEventId(eventId)
     setShowOrganizerPopup(true)
   }
   
@@ -986,7 +988,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Venue</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">City</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30">Status</TableHead>
+
                   <TableHead className="font-semibold text-foreground bg-muted/30">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1037,61 +1039,19 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <TableCell>{event.categoryName}</TableCell>
                       <TableCell className="min-w-[120px]">
                         {(role as UserRole) === "superadmin" ? (
-                          <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
-                            {event.organizers && event.organizers.length > 0 ? (
-                              <>
-                                {event.organizers.slice(0, 2).map((organizer: any, index: number) => (
-                                  <OrganizerIndicator
-                                    key={organizer.organizer_id || index}
-                                    organizerData={organizer}
-                                    onClick={() => handleOrganizerClick(organizer)}
-                                    size="sm"
-                                  />
-                                ))}
-                                {event.organizers.length > 2 && (
-                                  <Badge variant="secondary" className="text-xs ml-1 flex-shrink-0">
-                                    +{event.organizers.length - 2}
-                                  </Badge>
-                                )}
-                              </>
-                            ) : (
-                              <OrganizerIndicator
-                                organizerData={{ OrganizerName: event.organizerName, organizer_id: event.organizerId }}
-                                onClick={() => handleOrganizerClick({ OrganizerName: event.organizerName, organizer_id: event.organizerId })}
-                                size="sm"
-                              />
-                            )}
-                          </div>
+                          <OrganizersCirclesOnly
+                            organizers={event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }]}
+                            maxDisplay={3}
+                            size="sm"
+                            onClick={() => handleOrganizerClick(event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }], event._id)}
+                          />
                         ) : (
-                          event.organizerName
+                          <div />
                         )}
                       </TableCell>
                       <TableCell className="min-w-[140px]">
                         {(role as UserRole) === "superadmin" ? (
                           <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
-                            {event.PopUpPromoterData && event.PopUpPromoterData.length > 0 ? (
-                              <>
-                                {event.PopUpPromoterData.slice(0, 2).map((promoter: any, index: number) => (
-                                  <PromoterIndicator
-                                    key={promoter.promoter_id || index}
-                                    promoterData={promoter}
-                                    onClick={() => handlePromoterClick(promoter, event._id)}
-                                    size="sm"
-                                  />
-                                ))}
-                                {event.PopUpPromoterData.length > 2 && (
-                                  <Badge variant="secondary" className="text-xs ml-1 flex-shrink-0">
-                                    +{event.PopUpPromoterData.length - 2}
-                                  </Badge>
-                                )}
-                              </>
-                            ) : event.promoterData ? (
-                              <PromoterIndicator
-                                promoterData={event.promoterData}
-                                onClick={() => handlePromoterClick(event.promoterData, event._id)}
-                                size="sm"
-                              />
-                            ) : null}
                             <AddPromoterAndShow 
                               eventData={event} 
                               onPromoterUpdate={() => getAllEventData()}
@@ -1116,11 +1076,6 @@ export default function EventsPage({ params }: EventsPageProps) {
                       </TableCell>
                       <TableCell>{event.venueName}</TableCell>
                       <TableCell>{event.city}</TableCell>
-                      <TableCell>
-                        <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
-                          {normalizeEventStatus(event.eventStatus)}
-                        </Badge>
-                      </TableCell>
                       <TableCell>
                         {(role as UserRole) !== "promoter" && (
                           <DropdownMenu>

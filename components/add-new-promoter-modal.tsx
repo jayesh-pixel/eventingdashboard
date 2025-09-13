@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { X, UserPlus, Loader2, Users } from "lucide-react"
+import { X, UserPlus, Loader2, Users, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { getValidToken } from "@/lib/token-utils"
 import { promoterEndpoint, eventEndPoint } from "@/lib/api-endpoints"
@@ -50,6 +51,7 @@ const AddNewPromoterModal = ({
   const [selectedPromoterIds, setSelectedPromoterIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
 
   useEffect(() => {
     if (open) {
@@ -186,6 +188,15 @@ const AddNewPromoterModal = ({
   const getSelectedPromotersCount = () => selectedPromoterIds.length
   const getInitialPromotersCount = () => (openModalPromoterData || []).length
 
+  // Filter promoters based on search term
+  const filteredPromoters = apiAllPromoterData.filter((promoter) => {
+    if (!searchTerm) return true
+    const name = (promoter.PromoterName || promoter.Username || "").toLowerCase()
+    const email = (promoter.email || "").toLowerCase()
+    const search = searchTerm.toLowerCase()
+    return name.includes(search) || email.includes(search)
+  })
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-hidden">
@@ -278,14 +289,26 @@ const AddNewPromoterModal = ({
                       <Users className="h-4 w-4 text-muted-foreground" />
                       <h3 className="text-sm font-semibold text-foreground">All Available Promoters</h3>
                     </div>
+                    
+                    {/* Search Input */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="Search promoters by name or email..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 bg-background/50 dark:bg-muted/10 border-border/40 focus:border-primary/60"
+                      />
+                    </div>
+                    
                     <div className="border rounded-md">
                       <div className="p-4 space-y-3">
-                        {apiAllPromoterData.length === 0 ? (
+                        {filteredPromoters.length === 0 ? (
                           <div className="text-center py-8 text-muted-foreground">
-                            No promoters available
+                            {searchTerm ? "No promoters found matching your search" : "No promoters available"}
                           </div>
                         ) : (
-                          apiAllPromoterData.map((promoter) => {
+                          filteredPromoters.map((promoter) => {
                             const isCurrentlyAssigned = (openModalPromoterData || []).some(
                               (currentPromoter) => currentPromoter.promoter_id === promoter._id
                             )
