@@ -972,6 +972,13 @@ export default function TicketsPage() {
             automaticTicketType = 2
           }
           
+          // Determine default visibility based on event privacy for reset
+          let defaultVisibility = 1 // Default to "All" for public events
+          if (eventData && (eventData as any).eventVisibility === 2) {
+            // For private events, default to "Promoters" as it's the only allowed option
+            defaultVisibility = 3
+          }
+          
           setNormalFormData({
             TicketName: "",
             TicketType: automaticTicketType,
@@ -981,7 +988,7 @@ export default function TicketsPage() {
             MaxQuantity: 0,
             BookingMaxLimit: 10, // Default to 10
             TicketStatus: 1,
-            VisibilityLevel: 1
+            VisibilityLevel: defaultVisibility
           })
           
           // Reset selected dates for multi-day events
@@ -1260,10 +1267,18 @@ export default function TicketsPage() {
         automaticTicketType = 2 // Multiple Day
       }
       
+      // Determine default visibility based on event privacy
+      let defaultVisibility = 1 // Default to "All" for public events
+      if (eventData && (eventData as any).eventVisibility === 2) {
+        // For private events, default to "Promoters" as it's the only allowed option
+        defaultVisibility = 3
+      }
+      
       setNormalFormData(prev => ({ 
         ...prev, 
         EventDateTime_id: firstDateTime._id,
-        TicketType: automaticTicketType
+        TicketType: automaticTicketType,
+        VisibilityLevel: defaultVisibility
       }))
       setBulkFormData(prev => ({ 
         ...prev, 
@@ -1887,11 +1902,22 @@ export default function TicketsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">All</SelectItem>
-                        <SelectItem value="2">All Customers</SelectItem>
+                        {/* Only show "All" and "All Customers" for public events */}
+                        {eventData && (eventData as any).eventVisibility !== 2 && (
+                          <>
+                            <SelectItem value="1">All</SelectItem>
+                            <SelectItem value="2">All Customers</SelectItem>
+                          </>
+                        )}
                         <SelectItem value="3">Promoters</SelectItem>
                       </SelectContent>
-                    </Select>                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
+                    </Select>
+                    {/* Show info message for private events */}
+                    {eventData && (eventData as any).eventVisibility === 2 && (
+                      <p className="text-xs text-muted-foreground">
+                        This is a private event. Tickets can only be visible to selected promoters.
+                      </p>
+                    )}                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
                       <div className="text-sm text-muted-foreground space-y-2">
                         <div className="flex items-center justify-between">
                           <span>{selectedPromoters.length} promoter(s) selected</span>
@@ -2206,11 +2232,22 @@ export default function TicketsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="1">All</SelectItem>
-                        <SelectItem value="2">All Customers</SelectItem>
+                        {/* Only show "All" and "All Customers" for public events */}
+                        {eventData && (eventData as any).eventVisibility !== 2 && (
+                          <>
+                            <SelectItem value="1">All</SelectItem>
+                            <SelectItem value="2">All Customers</SelectItem>
+                          </>
+                        )}
                         <SelectItem value="3">Promoters</SelectItem>
                       </SelectContent>
                     </Select>
+                    {/* Show info message for private events */}
+                    {eventData && (eventData as any).eventVisibility === 2 && (
+                      <p className="text-xs text-muted-foreground">
+                        This is a private event. Tickets can only be visible to selected promoters.
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
