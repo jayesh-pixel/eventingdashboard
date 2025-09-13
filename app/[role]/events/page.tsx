@@ -1629,7 +1629,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           <DialogHeader>
             <DialogTitle>Select Event Type</DialogTitle>
             <DialogDescription>
-              Choose between a standard event or an event tour
+              Choose between a standard event or an event tour. Standard Event is recommended for most cases.
             </DialogDescription>
           </DialogHeader><div className="flex flex-col gap-4 py-4">            <Button
               onClick={() => handleEventFormatSelection(0)}
@@ -1638,7 +1638,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             >
               <div>
                 <div className="font-semibold">Standard Event</div>
-                
+                <div className="text-sm text-muted-foreground">Create a standalone event</div>
               </div>
             </Button>
             <Button
@@ -1648,7 +1648,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             >
               <div>
                 <div className="font-semibold">Event Tour</div>
-             
+                <div className="text-sm text-muted-foreground">Create an event as part of a tour or campaign series</div>
               </div>
             </Button>
           </div>

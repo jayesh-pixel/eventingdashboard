@@ -557,7 +557,7 @@ export default function CreateEvent({
       eventTermsandConditions: "",
       eventVideoUrl: "",
       eventVisibility: "",
-      eventType: "",
+      eventType: "1",
       bookingphonenumber: "",
       whatsappnumber: "",
       locationType: "",
@@ -2050,7 +2050,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Organizers</Label>
+                      <Label>Select</Label>
                       <Select
                         isMulti
                         options={organizers}
@@ -2075,7 +2075,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Categories</Label>
+                      <Label>Select</Label>
                       <Select                        isMulti
                         options={categories}
                         value={values.categories}
@@ -2099,7 +2099,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Artists</Label>
+                      <Label>Select </Label>
                       <Select                        isMulti
                         options={artists}
                         value={values.artists}
@@ -2123,7 +2123,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Genres</Label>                      <Select
+                      <Label>Select </Label>                      <Select
                         isMulti
                         options={genres}
                         value={values.genres}
@@ -2147,7 +2147,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select Languages</Label>
+                      <Label>Select </Label>
                       <Select
                         isMulti
                         options={indianLanguages}
