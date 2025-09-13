@@ -82,6 +82,7 @@ export default function PromocodesPage() {
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
+  const [eventSearchTerm, setEventSearchTerm] = useState("")
   
   // Customers state for selection
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -489,6 +490,7 @@ export default function PromocodesPage() {
     setSelectedPromocode(null)
     setSelectedEvents([])
     setSelectedCustomers([])
+    setEventSearchTerm("")
   }
 
   const handleEdit = (promocode: Promocode) => {
@@ -754,6 +756,18 @@ export default function PromocodesPage() {
               {formData.PromocodeValidFor === "2" && (
                 <div className="space-y-2">
                   <Label>Select Events *</Label>
+                  
+                  {/* Event Search Input */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                    <Input
+                      placeholder="Search events..."
+                      value={eventSearchTerm}
+                      onChange={(e) => setEventSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                  
                   {loadingEvents ? (
                     <div className="flex items-center justify-center py-4 border rounded-md">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -763,9 +777,19 @@ export default function PromocodesPage() {
                     <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
                       {!Array.isArray(events) || events.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
+                      ) : events.filter((event) => 
+                          !eventSearchTerm || 
+                          (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
+                        ).length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
                       ) : (
                         <div className="space-y-1">
-                          {events.map((event) => (
+                          {events
+                            .filter((event) => 
+                              !eventSearchTerm || 
+                              (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
+                            )
+                            .map((event) => (
                             <div key={event._id || event.id} className="flex items-center space-x-2">
                               <input
                                 type="checkbox"
@@ -1201,6 +1225,18 @@ export default function PromocodesPage() {
             {formData.PromocodeValidFor === "2" && (
               <div className="space-y-2">
                 <Label>Select Events *</Label>
+                
+                {/* Event Search Input */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                  <Input
+                    placeholder="Search events..."
+                    value={eventSearchTerm}
+                    onChange={(e) => setEventSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                
                 {loadingEvents ? (
                   <div className="flex items-center justify-center py-4 border rounded-md">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1210,9 +1246,19 @@ export default function PromocodesPage() {
                   <div className="border rounded-md p-2 max-h-32 overflow-y-auto">
                     {events.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
+                    ) : events.filter((event) => 
+                        !eventSearchTerm || 
+                        (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
+                      ).length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
                     ) : (
                       <div className="space-y-1">
-                        {events.map((event) => (
+                        {events
+                          .filter((event) => 
+                            !eventSearchTerm || 
+                            (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
+                          )
+                          .map((event) => (
                           <div key={event._id} className="flex items-center space-x-2">
                             <input
                               type="checkbox"
