@@ -232,7 +232,7 @@ export default function TicketsPage() {
     EventDateTime_id: "",
     TicketPrice: 0,
     MaxQuantity: 0,
-    BookingMaxLimit: 0,
+    BookingMaxLimit: 10, // Default to 10
     TicketStatus: 1,
     VisibilityLevel: 1
   })
@@ -979,7 +979,7 @@ export default function TicketsPage() {
             EventDateTime_id: eventDateTimes.length > 0 ? eventDateTimes[0]._id : "",
             TicketPrice: 0,
             MaxQuantity: 0,
-            BookingMaxLimit: 0,
+            BookingMaxLimit: 10, // Default to 10
             TicketStatus: 1,
             VisibilityLevel: 1
           })
@@ -1994,7 +1994,7 @@ export default function TicketsPage() {
                     value={normalFormData.TicketDescription}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketDescription: e.target.value }))}
                   />
-                </div>                <div className="grid grid-cols-3 gap-4">
+                </div>                <div className={`grid gap-4 ${getNumericRole(role) === 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div className="space-y-2">
                     <Label htmlFor="ticketPrice">Price (₹)</Label>
                     <Input
@@ -2015,14 +2015,18 @@ export default function TicketsPage() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="bookingMaxLimit">Booking Max Limit</Label>
-                    <Input
-                      id="bookingMaxLimit"
-                      type="number"
-                      value={normalFormData.BookingMaxLimit}
-                      onChange={(e) => setNormalFormData(prev => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
-                    />                  </div>
+                  {/* Only show Booking Max Limit for superadmin */}
+                  {getNumericRole(role) === 1 && (
+                    <div className="space-y-2">
+                      <Label htmlFor="bookingMaxLimit">Booking Max Limit</Label>
+                      <Input
+                        id="bookingMaxLimit"
+                        type="number"
+                        value={normalFormData.BookingMaxLimit}
+                        onChange={(e) => setNormalFormData(prev => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
 
