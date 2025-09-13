@@ -89,6 +89,10 @@ export default function ScannerUsersPage() {
     selectedEvents: [] as string[],
     selectedOrganizers: [] as string[],
   })
+
+  // Search states for filtering
+  const [eventSearchTerm, setEventSearchTerm] = useState("")
+  const [organizerSearchTerm, setOrganizerSearchTerm] = useState("")
   const fetchEvents = async () => {
     try {
       setLoadingEvents(true)
@@ -478,6 +482,8 @@ export default function ScannerUsersPage() {
       selectedOrganizers: [],
     })
     setSelectedUser(null)
+    setEventSearchTerm("")
+    setOrganizerSearchTerm("")
   }
   const handleCreateScannerUser = () => {
     resetForm()
@@ -553,54 +559,87 @@ export default function ScannerUsersPage() {
               {formData.userType === "1" && (
                 <div className="space-y-2">
                   <Label>Event Names *</Label>
-                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                    {loadingEvents ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Loading events...
+                  <div className="border rounded-md overflow-hidden">
+                    {/* Search input for events */}
+                    <div className="p-3 border-b bg-gray-50">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          placeholder="Search events..."
+                          value={eventSearchTerm}
+                          onChange={(e) => setEventSearchTerm(e.target.value)}
+                          className="pl-10 bg-white"
+                        />
                       </div>
-                    ) : events.length === 0 ? (
-                      <div className="text-center py-4">
-                        <p className="text-muted-foreground text-sm mb-2">No published events available</p>
-                        <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {events.map((event) => (
-                          <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              id={`event-${event._id}`}
-                              checked={formData.selectedEvents.includes(event._id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormData({
-                                    ...formData,
-                                    selectedEvents: [...formData.selectedEvents, event._id]
-                                  })
-                                } else {
-                                  setFormData({
-                                    ...formData,
-                                    selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
-                                  })
-                                }
-                              }}
-                              className="rounded border-gray-300 mt-1"
-                            />
-                            <div className="flex-1">                              <Label htmlFor={`event-${event._id}`} className="text-sm font-medium cursor-pointer">
-                                {event.EventName || event.eventName || event.name || 'Unnamed Event'}
-                              </Label>
-                              <div className="text-xs text-muted-foreground mt-1">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                                  <span>📍 {event.VenueName || 'Venue TBA'}</span>
-                                  <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                    </div>
+                    
+                    <div className="p-3 max-h-40 overflow-y-auto">
+                      {loadingEvents ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Loading events...
+                        </div>
+                      ) : events.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-muted-foreground text-sm mb-2">No published events available</p>
+                          <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {events
+                            .filter((event) => {
+                              const eventName = event.EventName || event.eventName || event.name || 'Unnamed Event'
+                              const venueName = event.VenueName || ''
+                              return eventName.toLowerCase().includes(eventSearchTerm.toLowerCase()) ||
+                                     venueName.toLowerCase().includes(eventSearchTerm.toLowerCase())
+                            })
+                            .map((event) => (
+                            <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                              <input
+                                type="checkbox"
+                                id={`event-${event._id}`}
+                                checked={formData.selectedEvents.includes(event._id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({
+                                      ...formData,
+                                      selectedEvents: [...formData.selectedEvents, event._id]
+                                    })
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
+                                    })
+                                  }
+                                }}
+                                className="rounded border-gray-300 mt-1"
+                              />
+                              <div className="flex-1">
+                                <Label htmlFor={`event-${event._id}`} className="text-sm font-medium cursor-pointer">
+                                  {event.EventName || event.eventName || event.name || 'Unnamed Event'}
+                                </Label>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                    <span>📍 {event.VenueName || 'Venue TBA'}</span>
+                                    <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                          {events.filter((event) => {
+                            const eventName = event.EventName || event.eventName || event.name || 'Unnamed Event'
+                            const venueName = event.VenueName || ''
+                            return eventName.toLowerCase().includes(eventSearchTerm.toLowerCase()) ||
+                                   venueName.toLowerCase().includes(eventSearchTerm.toLowerCase())
+                          }).length === 0 && eventSearchTerm && (
+                            <div className="text-center py-4">
+                              <p className="text-muted-foreground text-sm">No events found matching "{eventSearchTerm}"</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {formData.selectedEvents.length > 0 && (
                     <p className="text-sm text-muted-foreground">
@@ -613,55 +652,96 @@ export default function ScannerUsersPage() {
               {formData.userType === "2" && (
                 <div className="space-y-2">
                   <Label>Organizer Assignment *</Label>
-                  <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                    {loadingOrganizers ? (
-                      <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        Loading organizers...
+                  <div className="border rounded-md overflow-hidden">
+                    {/* Search input for organizers */}
+                    <div className="p-3 border-b bg-gray-50">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                        <Input
+                          placeholder="Search organizers..."
+                          value={organizerSearchTerm}
+                          onChange={(e) => setOrganizerSearchTerm(e.target.value)}
+                          className="pl-10 bg-white"
+                        />
                       </div>
-                    ) : organizers.length === 0 ? (
-                      <div className="text-center py-4">
-                        <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
-                        <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {organizers.map((organizer) => (
-                          <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
-                            <input
-                              type="checkbox"
-                              id={`organizer-${organizer._id}`}
-                              checked={formData.selectedOrganizers.includes(organizer._id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setFormData({
-                                    ...formData,
-                                    selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
-                                  })
-                                } else {
-                                  setFormData({
-                                    ...formData,
-                                    selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
-                                  })
-                                }
-                              }}
-                              className="rounded border-gray-300 mt-1"
-                            />                            <div className="flex-1">
-                              <Label htmlFor={`organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
-                                {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
-                              </Label>
-                              <div className="text-xs text-muted-foreground mt-1">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                                  <span>📧 {organizer.Email || 'No email'}</span>
-                                  <span>📱 {organizer.Phone1 || 'No phone'}</span>
-                                  <span>🏢 {organizer.CompanyName || 'No company'}</span>
+                    </div>
+                    
+                    <div className="p-3 max-h-40 overflow-y-auto">
+                      {loadingOrganizers ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Loading organizers...
+                        </div>
+                      ) : organizers.length === 0 ? (
+                        <div className="text-center py-4">
+                          <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
+                          <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {organizers
+                            .filter((organizer) => {
+                              const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
+                              const email = organizer.Email || ''
+                              const phone = organizer.Phone1 || ''
+                              const company = organizer.CompanyName || ''
+                              return organizerName.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                     email.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                     phone.includes(organizerSearchTerm) ||
+                                     company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
+                            })
+                            .map((organizer) => (
+                            <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                              <input
+                                type="checkbox"
+                                id={`organizer-${organizer._id}`}
+                                checked={formData.selectedOrganizers.includes(organizer._id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFormData({
+                                      ...formData,
+                                      selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
+                                    })
+                                  } else {
+                                    setFormData({
+                                      ...formData,
+                                      selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
+                                    })
+                                  }
+                                }}
+                                className="rounded border-gray-300 mt-1"
+                              />
+                              <div className="flex-1">
+                                <Label htmlFor={`organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
+                                  {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
+                                </Label>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
+                                    <span>📧 {organizer.Email || 'No email'}</span>
+                                    <span>📱 {organizer.Phone1 || 'No phone'}</span>
+                                    <span>🏢 {organizer.CompanyName || 'No company'}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                          ))}
+                          {organizers.filter((organizer) => {
+                            const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
+                            const email = organizer.Email || ''
+                            const phone = organizer.Phone1 || ''
+                            const company = organizer.CompanyName || ''
+                            return organizerName.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                   email.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                   phone.includes(organizerSearchTerm) ||
+                                   company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
+                          }).length === 0 && organizerSearchTerm && (
+                            <div className="text-center py-4">
+                              <p className="text-muted-foreground text-sm">No organizers found matching "{organizerSearchTerm}"</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {formData.selectedOrganizers.length > 0 && (
                     <p className="text-sm text-muted-foreground">
@@ -757,40 +837,62 @@ export default function ScannerUsersPage() {
             {formData.userType === "1" && (
               <div className="space-y-2">
                 <Label>Event Names *</Label>
-                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                  {loadingEvents ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading events...
+                <div className="border rounded-md overflow-hidden">
+                  {/* Search input for events */}
+                  <div className="p-3 border-b bg-gray-50">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Input
+                        placeholder="Search events..."
+                        value={eventSearchTerm}
+                        onChange={(e) => setEventSearchTerm(e.target.value)}
+                        className="pl-10 bg-white"
+                      />
                     </div>
-                  ) : events.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-muted-foreground text-sm mb-2">No published events available</p>
-                      <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {events.map((event) => (
-                        <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            id={`edit-event-${event._id}`}
-                            checked={formData.selectedEvents.includes(event._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({
-                                  ...formData,
-                                  selectedEvents: [...formData.selectedEvents, event._id]
-                                })
-                              } else {
-                                setFormData({
-                                  ...formData,
-                                  selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
-                                })
-                              }
-                            }}
-                            className="rounded border-gray-300 mt-1"
-                          />                            <div className="flex-1">
+                  </div>
+                  
+                  <div className="p-3 max-h-40 overflow-y-auto">
+                    {loadingEvents ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading events...
+                      </div>
+                    ) : events.length === 0 ? (
+                      <div className="text-center py-4">
+                        <p className="text-muted-foreground text-sm mb-2">No published events available</p>
+                        <p className="text-xs text-muted-foreground">Please ensure events are published before creating scanner users</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {events
+                          .filter((event) => {
+                            const eventName = event.EventName || event.eventName || event.name || 'Unnamed Event'
+                            const venueName = event.VenueName || ''
+                            return eventName.toLowerCase().includes(eventSearchTerm.toLowerCase()) ||
+                                   venueName.toLowerCase().includes(eventSearchTerm.toLowerCase())
+                          })
+                          .map((event) => (
+                          <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              id={`edit-event-${event._id}`}
+                              checked={formData.selectedEvents.includes(event._id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({
+                                    ...formData,
+                                    selectedEvents: [...formData.selectedEvents, event._id]
+                                  })
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
+                                  })
+                                }
+                              }}
+                              className="rounded border-gray-300 mt-1"
+                            />
+                            <div className="flex-1">
                               <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-medium cursor-pointer">
                                 {event.EventName || event.eventName || event.name || 'Unnamed Event'}
                               </Label>
@@ -801,10 +903,21 @@ export default function ScannerUsersPage() {
                                 </div>
                               </div>
                             </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                          </div>
+                        ))}
+                        {events.filter((event) => {
+                          const eventName = event.EventName || event.eventName || event.name || 'Unnamed Event'
+                          const venueName = event.VenueName || ''
+                          return eventName.toLowerCase().includes(eventSearchTerm.toLowerCase()) ||
+                                 venueName.toLowerCase().includes(eventSearchTerm.toLowerCase())
+                        }).length === 0 && eventSearchTerm && (
+                          <div className="text-center py-4">
+                            <p className="text-muted-foreground text-sm">No events found matching "{eventSearchTerm}"</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {formData.selectedEvents.length > 0 && (
                   <p className="text-sm text-muted-foreground">
@@ -817,40 +930,66 @@ export default function ScannerUsersPage() {
             {formData.userType === "2" && (
               <div className="space-y-2">
                 <Label>Organizer Assignment *</Label>
-                <div className="border rounded-md p-3 max-h-40 overflow-y-auto">
-                  {loadingOrganizers ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Loading organizers...
+                <div className="border rounded-md overflow-hidden">
+                  {/* Search input for organizers */}
+                  <div className="p-3 border-b bg-gray-50">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <Input
+                        placeholder="Search organizers..."
+                        value={organizerSearchTerm}
+                        onChange={(e) => setOrganizerSearchTerm(e.target.value)}
+                        className="pl-10 bg-white"
+                      />
                     </div>
-                  ) : organizers.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
-                      <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {organizers.map((organizer) => (
-                        <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
-                          <input
-                            type="checkbox"
-                            id={`edit-organizer-${organizer._id}`}
-                            checked={formData.selectedOrganizers.includes(organizer._id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({
-                                  ...formData,
-                                  selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
-                                })
-                              } else {
-                                setFormData({
-                                  ...formData,
-                                  selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
-                                })
-                              }
-                            }}
-                            className="rounded border-gray-300 mt-1"
-                          />                            <div className="flex-1">
+                  </div>
+                  
+                  <div className="p-3 max-h-40 overflow-y-auto">
+                    {loadingOrganizers ? (
+                      <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Loading organizers...
+                      </div>
+                    ) : organizers.length === 0 ? (
+                      <div className="text-center py-4">
+                        <p className="text-muted-foreground text-sm mb-2">No organizers available</p>
+                        <p className="text-xs text-muted-foreground">Please ensure organizers are registered before creating organizer scanner users</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {organizers
+                          .filter((organizer) => {
+                            const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
+                            const email = organizer.Email || ''
+                            const phone = organizer.Phone1 || ''
+                            const company = organizer.CompanyName || ''
+                            return organizerName.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                   email.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                   phone.includes(organizerSearchTerm) ||
+                                   company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
+                          })
+                          .map((organizer) => (
+                          <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                            <input
+                              type="checkbox"
+                              id={`edit-organizer-${organizer._id}`}
+                              checked={formData.selectedOrganizers.includes(organizer._id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({
+                                    ...formData,
+                                    selectedOrganizers: [...formData.selectedOrganizers, organizer._id]
+                                  })
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    selectedOrganizers: formData.selectedOrganizers.filter(id => id !== organizer._id)
+                                  })
+                                }
+                              }}
+                              className="rounded border-gray-300 mt-1"
+                            />
+                            <div className="flex-1">
                               <Label htmlFor={`edit-organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
                                 {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
                               </Label>
@@ -862,10 +1001,25 @@ export default function ScannerUsersPage() {
                                 </div>
                               </div>
                             </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                          </div>
+                        ))}
+                        {organizers.filter((organizer) => {
+                          const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
+                          const email = organizer.Email || ''
+                          const phone = organizer.Phone1 || ''
+                          const company = organizer.CompanyName || ''
+                          return organizerName.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                 email.toLowerCase().includes(organizerSearchTerm.toLowerCase()) ||
+                                 phone.includes(organizerSearchTerm) ||
+                                 company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
+                        }).length === 0 && organizerSearchTerm && (
+                          <div className="text-center py-4">
+                            <p className="text-muted-foreground text-sm">No organizers found matching "{organizerSearchTerm}"</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 {formData.selectedOrganizers.length > 0 && (
                   <p className="text-sm text-muted-foreground">

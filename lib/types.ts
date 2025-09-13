@@ -471,3 +471,21 @@ export interface CreatePromocodeRequest {
   CustomerIds?: Array<{ customer_id: string }>
   CanBeUsed?: string
 }
+
+// Banner Types
+export interface Banner {
+  _id: string
+  Event_id: string
+  DesktopbannerImage: string
+  MobilebannerImage: string
+  status: number
+  createdAt: string
+  FilterationDateTime: string
+}
+
+export interface BannersApiResponse {
+  success: boolean
+  data: Banner[]
+  error?: boolean
+  message?: string
+}

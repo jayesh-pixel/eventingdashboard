@@ -114,6 +114,46 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   // Image upload state
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
+  const [imageValidationErrors, setImageValidationErrors] = React.useState<string[]>([])
+
+  // Image validation function
+  const validateImageFile = (file: File): Promise<string | null> => {
+    return new Promise((resolve) => {
+      // Check file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png']
+      if (!allowedTypes.includes(file.type)) {
+        resolve(`File "${file.name}" must be PNG or JPG format`)
+        return
+      }
+
+      // Check file size (500 KB = 500 * 1024 bytes)
+      const maxSize = 500 * 1024
+      if (file.size > maxSize) {
+        resolve(`File "${file.name}" must be smaller than 500 KB`)
+        return
+      }
+
+      // Check dimensions
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        if (img.width !== 1024 || img.height !== 812) {
+          resolve(`File "${file.name}" must be exactly 1024x812 pixels (current: ${img.width}x${img.height})`)
+        } else {
+          resolve(null) // Valid
+        }
+      }
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        resolve(`File "${file.name}" could not be read as an image`)
+      }
+
+      img.src = url
+    })
+  }
 
   // Debounce search term
   React.useEffect(() => {
@@ -530,12 +570,42 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     })
     setSelectedVenue(null)
     setSelectedImages([])
+    setImageValidationErrors([])
   }
 
   // Image upload functions
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
-    setSelectedImages(files)
+    const errors: string[] = []
+    const validFiles: File[] = []
+
+    // Validate each file
+    for (const file of files) {
+      const error = await validateImageFile(file)
+      if (error) {
+        errors.push(error)
+      } else {
+        validFiles.push(file)
+      }
+    }
+
+    // Update state
+    setImageValidationErrors(errors)
+    setSelectedImages(validFiles)
+
+    // Show toast for validation errors
+    if (errors.length > 0) {
+      toast({
+        title: "Image Validation Failed",
+        description: `${errors.length} file(s) failed validation. Check the requirements below.`,
+        variant: "destructive",
+      })
+    }
+
+    // Clear the input if there are errors so user can try again
+    if (errors.length > 0 && validFiles.length === 0) {
+      e.target.value = ''
+    }
   }
 
   const uploadImages = async (venueId: string) => {
@@ -760,17 +830,32 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               {/* Image Upload Section */}
               <div className="space-y-2">
                 <Label htmlFor="venueImages">Venue Images</Label>
+                <div className="text-xs text-muted-foreground mb-2">
+                  <div>• Only PNG or JPG files allowed</div>
+                  <div>• Maximum size: 500 KB</div>
+                  <div>• Dimensions: 1024x812 pixels</div>
+                </div>
                 <div className="flex items-center gap-4">
                   <Input
                     id="venueImages"
                     type="file"
-                    accept="image/*"
+                    accept="image/png,image/jpeg,image/jpg"
                     multiple
                     onChange={handleImageSelect}
                     className="flex-1"
                   />
                   <Upload className="h-4 w-4 text-muted-foreground" />
                 </div>
+                {imageValidationErrors.length > 0 && (
+                  <div className="text-sm text-red-600 bg-red-50 p-2 rounded border">
+                    <div className="font-medium mb-1">Validation Errors:</div>
+                    <ul className="list-disc list-inside space-y-1">
+                      {imageValidationErrors.map((error, index) => (
+                        <li key={index}>{error}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {selectedImages.length > 0 && (
                   <div className="text-sm text-muted-foreground">
                     Selected: {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}
@@ -1201,17 +1286,32 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             {/* Add New Images Section */}
             <div className="space-y-2">
               <Label htmlFor="editVenueImages">Add New Images</Label>
+              <div className="text-xs text-muted-foreground mb-2">
+                <div>• Only PNG or JPG files allowed</div>
+                <div>• Maximum size: 500 KB</div>
+                <div>• Dimensions: 1024x812 pixels</div>
+              </div>
               <div className="flex items-center gap-4">
                 <Input
                   id="editVenueImages"
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/jpg"
                   multiple
                   onChange={handleImageSelect}
                   className="flex-1"
                 />
                 <Upload className="h-4 w-4 text-muted-foreground" />
               </div>
+              {imageValidationErrors.length > 0 && (
+                <div className="text-sm text-red-600 bg-red-50 p-2 rounded border">
+                  <div className="font-medium mb-1">Validation Errors:</div>
+                  <ul className="list-disc list-inside space-y-1">
+                    {imageValidationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {selectedImages.length > 0 && (
                 <div className="text-sm text-muted-foreground">
                   Selected: {selectedImages.length} new image{selectedImages.length !== 1 ? 's' : ''}

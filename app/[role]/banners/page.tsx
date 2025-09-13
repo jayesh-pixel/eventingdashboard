@@ -14,6 +14,7 @@ import { eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { Banner, BannersApiResponse } from "@/lib/types"
+import { getNumericAdminRole } from "@/lib/api-constants"
 import {
   Dialog,
   DialogContent,
@@ -71,6 +72,11 @@ export default function BannersPage({ params }: BannersPageProps) {
   const [showEditDialog, setShowEditDialog] = React.useState(false)
   const [showDeleteDialog, setShowDeleteDialog] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
+
+  // Image upload state
+  const [selectedImages, setSelectedImages] = React.useState<File[]>([])
+  const [uploadingImages, setUploadingImages] = React.useState(false)
+  const [imageValidationErrors, setImageValidationErrors] = React.useState<string[]>([])
   
   // Events for dropdown
   const [events, setEvents] = React.useState<any[]>([])
@@ -97,18 +103,32 @@ export default function BannersPage({ params }: BannersPageProps) {
       const token = getValidToken()
       if (!token) return
 
+      if (!user) return
+
+      // Prepare request payload as required by API
+      const numericRole = getNumericAdminRole(user.AdminRole)
+      const requestPayload = {
+        AdminRole: numericRole,
+        user_id: user.user_id,
+        page: "1",
+        limit: "100", // Get more events for selection
+      }
+      
       const response = await fetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
-        method: "GET",
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify(requestPayload),
       })
 
       if (response.ok) {
         const result = await response.json()
         if (!result.error && result.data) {
           setEvents(result.data)
+        } else {
+          setEvents([])
         }
       }
     } catch (error) {
@@ -116,7 +136,7 @@ export default function BannersPage({ params }: BannersPageProps) {
     } finally {
       setLoadingEvents(false)
     }
-  }, [])
+  }, [user])
 
   // Fetch banners data
   const fetchBanners = React.useCallback(async () => {
@@ -182,6 +202,55 @@ export default function BannersPage({ params }: BannersPageProps) {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
+    })
+  }
+
+  // Image validation functions
+  const validateImageFile = (file: File, imageType: 'desktop' | 'mobile'): Promise<string | null> => {
+    return new Promise((resolve) => {
+      // Check file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml']
+      if (!allowedTypes.includes(file.type)) {
+        resolve(`File "${file.name}" must be JPG, PNG, or SVG format`)
+        return
+      }
+
+      // Check file size (2MB = 2 * 1024 * 1024 bytes)
+      const maxSize = 2 * 1024 * 1024
+      if (file.size > maxSize) {
+        resolve(`File "${file.name}" must be smaller than 2 MB`)
+        return
+      }
+
+      // Check dimensions
+      const img = new window.Image()
+      const url = URL.createObjectURL(file)
+
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const { width, height } = img
+
+        if (imageType === 'desktop') {
+          if (width !== 2000 || height !== 500) {
+            resolve(`Desktop image "${file.name}" must be exactly 2000x500 pixels (current: ${width}x${height})`)
+          } else {
+            resolve(null) // Valid
+          }
+        } else if (imageType === 'mobile') {
+          if (width !== 1920 || height !== 1080) {
+            resolve(`Mobile image "${file.name}" must be exactly 1920x1080 pixels (current: ${width}x${height})`)
+          } else {
+            resolve(null) // Valid
+          }
+        }
+      }
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url)
+        resolve(`File "${file.name}" could not be loaded as an image`)
+      }
+
+      img.src = url
     })
   }
 
@@ -384,6 +453,7 @@ export default function BannersPage({ params }: BannersPageProps) {
       mobileImage: null,
     })
     setSelectedBanner(null)
+    setImageValidationErrors([])
   }
 
   return (
@@ -662,7 +732,7 @@ export default function BannersPage({ params }: BannersPageProps) {
                   ) : (
                     events.map((event) => (
                       <SelectItem key={event._id} value={event._id}>
-                        {event.Event_Name || event.Event_Title || `Event ${event._id}`}
+                        {event.EventName || `Event ${event._id}`}
                       </SelectItem>
                     ))
                   )}
@@ -671,38 +741,78 @@ export default function BannersPage({ params }: BannersPageProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="desktopImage">Desktop Banner Image *</Label>
+              <p className="text-xs text-muted-foreground">
+                Required: JPG, PNG, or SVG • Max 2MB • Dimensions: 2000x500 pixels
+              </p>
               <Input
                 id="desktopImage"
                 type="file"
-                accept="image/*"
-                onChange={(e) => {
+                accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                onChange={async (e) => {
                   const file = e.target.files?.[0] || null
-                  setFormData(prev => ({ ...prev, desktopImage: file }))
+                  if (file) {
+                    setImageValidationErrors([])
+                    const error = await validateImageFile(file, 'desktop')
+                    if (error) {
+                      setImageValidationErrors([error])
+                      setFormData(prev => ({ ...prev, desktopImage: null }))
+                    } else {
+                      setFormData(prev => ({ ...prev, desktopImage: file }))
+                    }
+                  } else {
+                    setFormData(prev => ({ ...prev, desktopImage: null }))
+                  }
                 }}
               />
               {formData.desktopImage && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {formData.desktopImage.name}
+                <p className="text-sm text-green-600">
+                  ✓ Selected: {formData.desktopImage.name}
                 </p>
               )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="mobileImage">Mobile Banner Image *</Label>
+              <p className="text-xs text-muted-foreground">
+                Required: JPG, PNG, or SVG • Max 2MB • Dimensions: 1920x1080 pixels
+              </p>
               <Input
                 id="mobileImage"
                 type="file"
-                accept="image/*"
-                onChange={(e) => {
+                accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                onChange={async (e) => {
                   const file = e.target.files?.[0] || null
-                  setFormData(prev => ({ ...prev, mobileImage: file }))
+                  if (file) {
+                    setImageValidationErrors([])
+                    const error = await validateImageFile(file, 'mobile')
+                    if (error) {
+                      setImageValidationErrors([error])
+                      setFormData(prev => ({ ...prev, mobileImage: null }))
+                    } else {
+                      setFormData(prev => ({ ...prev, mobileImage: file }))
+                    }
+                  } else {
+                    setFormData(prev => ({ ...prev, mobileImage: null }))
+                  }
                 }}
               />
               {formData.mobileImage && (
-                <p className="text-sm text-muted-foreground">
-                  Selected: {formData.mobileImage.name}
+                <p className="text-sm text-green-600">
+                  ✓ Selected: {formData.mobileImage.name}
                 </p>
               )}
             </div>
+            {imageValidationErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <ul className="list-disc list-inside">
+                    {imageValidationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <DialogFooter>
             <Button 
@@ -761,7 +871,7 @@ export default function BannersPage({ params }: BannersPageProps) {
                   ) : (
                     events.map((event) => (
                       <SelectItem key={event._id} value={event._id}>
-                        {event.Event_Name || event.Event_Title || `Event ${event._id}`}
+                        {event.EventName || `Event ${event._id}`}
                       </SelectItem>
                     ))
                   )}
