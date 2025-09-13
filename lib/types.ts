@@ -465,7 +465,7 @@ export interface CreatePromocodeRequest {
   Value: number
   MinCheckoutAmount: number
   ExpiryDate: string
-  OneTimeUseFlag: boolean
+  OneTimeUseFlag: number // 0 = No, 1 = Yes
   PromocodeValidFor?: string
   Events?: Array<{ event_id: string }>
   CustomerIds?: Array<{ customer_id: string }>
