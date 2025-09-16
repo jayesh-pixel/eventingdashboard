@@ -780,7 +780,8 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
   const handleCreateEvent = () => {
-    setShowEventFormatModal(true)
+    // Navigate directly to standard event creation (regular event type)
+    router.push(`/${role}/events/create?type=regular`)
   }
   const handleEventFormatSelection = (format: number) => {
     setShowEventFormatModal(false)
@@ -1589,13 +1590,15 @@ export default function EventsPage({ params }: EventsPageProps) {
             <DialogDescription>
               Choose between a standard event or an event tour. Standard Event is recommended for most cases.
             </DialogDescription>
-          </DialogHeader><div className="flex flex-col gap-4 py-4">            <Button
+          </DialogHeader>
+          <div className="flex flex-col gap-4 py-4">
+            <Button
               onClick={() => handleEventFormatSelection(0)}
-              className="justify-start text-left h-auto p-4"
+              className="justify-start text-left h-auto p-4 border-primary bg-primary/5 hover:bg-primary/10"
               variant="outline"
             >
               <div>
-                <div className="font-semibold">Standard Event</div>
+                <div className="font-semibold text-primary">Standard Event (Recommended)</div>
                 <div className="text-sm text-muted-foreground">Create a standalone event</div>
               </div>
             </Button>
