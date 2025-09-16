@@ -64,7 +64,7 @@ export const venueEndPoint = {
   VENUE_SEARCH_BY_NAME: BASE_URL + "/venue/getVenueDataBySearchKeyword",
   VENUE_SEARCH_PAGINATED: BASE_URL + "/venue/getPaginatedSearch",
   // Real API URLs based on your working endpoint
-  VENUE_GET_ALL_PAGINATED_REAL: "https://node.eventingclub.in/venue/getAllPaginatedData",
+  VENUE_GET_ALL_PAGINATED_REAL: BASE_URL + "/venue/getAllPaginatedData",
 }
 
 // Event Tour API
@@ -238,7 +238,7 @@ export const websiteCustomer = {
   GET_ALL_CUSTOMER_DATA: BASE_URL + "/websitecustomers/getall",
   GET_ALL_PAGINATED_CUSTOMERS_DATA: BASE_URL + "/websitecustomers/getAllPaginatedCustomersData",
   CUSTOMER_SEARCH_PAGINATED: BASE_URL + "/websitecustomers/getCustomerDataBySearchKeywordPaginated",
-  GET_CUSTOMER_BOOKINGS: BASE_URL + "/eventticketsbooking/getCustomerBookingsById",
+  GET_CUSTOMER_BOOKINGS: BASE_URL + "/websitecustomers/getCustomerBookings",
 }
 
 // Promocode API

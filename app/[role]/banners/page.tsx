@@ -264,7 +264,7 @@ export default function BannersPage({ params }: BannersPageProps) {
       return imagePath
     }
     // Otherwise, prepend the base URL
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.eventingclub.in'
+    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || ''
     return `${baseUrl}/${imagePath}`  }
 
   // CRUD Functions

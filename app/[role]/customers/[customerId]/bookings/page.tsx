@@ -14,6 +14,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { Customer, CustomerBooking } from "@/lib/types"
 import { formatDate } from "@/lib/utils"
+import { websiteCustomer } from "@/lib/api-endpoints"
 
 interface CustomerBookingsPageProps {
   params: Promise<{ role: UserRole; customerId: string }> | { role: UserRole; customerId: string }
@@ -43,7 +44,7 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await fetch("https://node.eventingclub.in/websitecustomers/getCustomerById", {
+      const response = await fetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -60,11 +61,16 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
 
       const data = await response.json()
       
+      console.log("Customer info response:", data)
+      
       if (data.error) {
         throw new Error(data.message || "Failed to fetch customer info")
       }
 
-      setCustomerInfo(data.data)
+      // Find the specific customer from the customerData array
+      const customer = data.data?.customerData?.find((c: any) => c._id === customerId)
+      console.log("Found customer:", customer)
+      setCustomerInfo(customer || null)
       
     } catch (error) {
       console.error("Error fetching customer info:", error)
@@ -86,7 +92,7 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await fetch("https://node.eventingclub.in/websitecustomers/getCustomerBookings", {
+      const response = await fetch(websiteCustomer.GET_CUSTOMER_BOOKINGS, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -94,8 +100,8 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         },
         body: JSON.stringify({
           customer_id: customerId,
-          page: "1",
-          limit: "50" // Get more bookings for the dedicated page
+          page: 1,
+          limit: 50 // Get more bookings for the dedicated page
         })
       })
 
@@ -104,6 +110,8 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
       }
 
       const data = await response.json()
+      
+      console.log("Customer bookings response:", data)
       
       if (data.error) {
         throw new Error(data.message || "Failed to fetch customer bookings")
