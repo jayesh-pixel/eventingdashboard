@@ -1918,7 +1918,6 @@ export default function CreateEvent({
                 <Card>
                   <CardHeader>
                     <div className="flex items-center gap-2">
-                      <CardTitle>Upload Carousel Images *</CardTitle>
                       <Info className="h-4 w-4 text-muted-foreground" />
                     </div>
                     <p className="text-sm text-muted-foreground">
@@ -2046,7 +2045,6 @@ export default function CreateEvent({
                 {/* Organizers Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Organizers *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2071,7 +2069,6 @@ export default function CreateEvent({
                 {/* Categories Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Categories *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2095,7 +2092,6 @@ export default function CreateEvent({
                 {/* Artists Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Artists *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2119,7 +2115,6 @@ export default function CreateEvent({
                 {/* Genres Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Genres *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2143,7 +2138,6 @@ export default function CreateEvent({
                 {/* Languages Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Languages *</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2555,7 +2549,6 @@ export default function CreateEvent({
                 {eventSelectionFlag === 1 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Select Event Tour *</CardTitle>
                       <p className="text-sm text-muted-foreground">
                         Link this event to an existing tour/campaign series
                       </p>

@@ -188,13 +188,13 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZER_PAYMENTS, {
+      const response = await fetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ event_id: organizerId }),
+        body: JSON.stringify({ organizer_id: organizerId }),
       })
 
       if (!response.ok) {
@@ -233,14 +233,14 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZER_PAYMENTS, {
+      const response = await fetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          event_id: organizerId, // Using organizerId as event_id
+          organizer_id: organizerId,
           page: String(page),
           limit: String(ITEMS_PER_PAGE),
         }),
