@@ -2048,13 +2048,13 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select</Label>
+                      <Label>Select organizers</Label>
                       <Select
                         isMulti
                         options={organizers}
                         value={values.organizers}
                         onChange={(selected) => handleSelectChange(selected, "organizers", setFieldValue)}
-                        placeholder="Select organizers..."
+                        placeholder="Select "
                         isLoading={loadingOrganizers}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2072,12 +2072,12 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select</Label>
+                      <Label>Select categories</Label>
                       <Select                        isMulti
                         options={categories}
                         value={values.categories}
                         onChange={(selected) => handleSelectChange(selected, "categories", setFieldValue)}
-                        placeholder="Select categories..."
+                        placeholder="Select "
                         isLoading={loadingCategories}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2095,12 +2095,12 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select </Label>
+                      <Label>Select artists</Label>
                       <Select                        isMulti
                         options={artists}
                         value={values.artists}
                         onChange={(selected) => handleSelectChange(selected, "artists", setFieldValue)}
-                        placeholder="Select artists..."
+                        placeholder="Select "
                         isLoading={loadingArtists}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2118,12 +2118,13 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select </Label>                      <Select
+                      <Label>Select genres</Label>
+                      <Select
                         isMulti
                         options={genres}
                         value={values.genres}
                         onChange={(selected) => handleSelectChange(selected, "genres", setFieldValue)}
-                        placeholder="Select genres..."
+                        placeholder="Select "
                         isLoading={loadingGenres}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2141,13 +2142,13 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select </Label>
+                      <Label>Select languages</Label>
                       <Select
                         isMulti
                         options={indianLanguages}
                         value={values.languages}
                         onChange={(selected) => setFieldValue("languages", selected || [])}
-                        placeholder="Select languages..."
+                        placeholder="Select "
                         isLoading={loadingLanguages}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2306,7 +2307,7 @@ export default function CreateEvent({
                                   setFieldValue("venue_id", selected?.value || "")
                                 }
                               }}
-                              placeholder="Select venue..."
+                              placeholder="Select "
                               isLoading={loadingVenues}
                               className="basic-single"
                               classNamePrefix="select"
