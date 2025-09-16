@@ -63,9 +63,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
   const [showErrorDialog, setShowErrorDialog] = React.useState(false)
   const [selectedCustomer, setSelectedCustomer] = React.useState<Customer | null>(null)
   const [showDetailsDialog, setShowDetailsDialog] = React.useState(false)
-  const [customerBookings, setCustomerBookings] = React.useState<CustomerBooking[]>([])
-  const [loadingBookings, setLoadingBookings] = React.useState(false)
-  const [showBookingsDialog, setShowBookingsDialog] = React.useState(false)
 
   // Debounce search term for API calls
   React.useEffect(() => {
@@ -196,6 +193,11 @@ export default function CustomersPage({ params }: CustomersPageProps) {
   }
   
   const handleViewBookings = (customerId: string, customerName: string) => {
+    // Navigate to the dedicated bookings page
+    router.push(`/${role}/customers/${customerId}/bookings`)
+  }
+
+  const handleViewDetails = (customerId: string) => {
     const customer = customers.find(c => c._id === customerId)
     if (customer) {
       setSelectedCustomer(customer)
@@ -206,55 +208,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         description: "Customer not found",
         variant: "destructive"
       })
-    }
-  }
-
-  const fetchCustomerBookings = async (customerId: string) => {
-    try {
-      setLoadingBookings(true)
-      setCustomerBookings([])
-      
-      const authToken = getValidToken()
-      
-      if (!authToken) {
-        throw new Error("Authentication required")
-      }
-
-      const response = await fetch("https://node.eventingclub.in/websitecustomers/getCustomerBookings", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customer_id: customerId,
-          page: "1",
-          limit: "10"
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-      
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch customer bookings")
-      }
-
-      setCustomerBookings(data.data?.BookingsData || [])
-      
-    } catch (error) {
-      console.error("Error fetching customer bookings:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch customer bookings",
-        variant: "destructive"
-      })
-      setCustomerBookings([])
-    } finally {
-      setLoadingBookings(false)
     }
   }
 
@@ -429,7 +382,7 @@ export default function CustomersPage({ params }: CustomersPageProps) {
                           size="sm" 
                           onClick={() => handleViewBookings(cust._id, cust.CustomerName || "Unknown")}
                         >
-                          <Eye className="mr-2 h-4 w-4" /> View Details
+                          <Eye className="mr-2 h-4 w-4" /> View Bookings
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -536,110 +489,6 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         </CardContent>
       </Card>
 
-      {/* Customer Bookings Dialog */}
-      <Dialog open={showBookingsDialog} onOpenChange={setShowBookingsDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Customer Bookings</DialogTitle>
-            <DialogDescription>
-              {selectedCustomer ? `Booking history for ${selectedCustomer.CustomerName || "Customer"}` : "Customer booking history"}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="flex-1 overflow-auto">
-            {loadingBookings ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin mr-2" />
-                Loading bookings...
-              </div>
-            ) : customerBookings.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-muted-foreground">No bookings found for this customer</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground mb-4">
-                  Total Bookings: {customerBookings.length}
-                </div>
-                
-                <div className="space-y-3">
-                  {customerBookings.map((booking, index) => (
-                    <div key={index} className="border rounded-lg p-4 space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="font-mono text-xs">
-                            {booking.Booking_id}
-                          </Badge>
-                          <Badge variant="outline">
-                            {booking.EventTicketType}
-                          </Badge>
-                        </div>
-                        <div className="text-lg font-semibold text-green-600">
-                          ₹{booking.TotalAmount?.toLocaleString() || 'N/A'}
-                        </div>
-                      </div>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Event</label>
-                            <p className="text-sm font-medium">{booking.EventName}</p>
-                          </div>
-                          <div>
-                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Ticket</label>
-                            <p className="text-sm">{booking.TicketName}</p>
-                          </div>
-                          <div className="flex gap-4">
-                            <div>
-                              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Price</label>
-                              <p className="text-sm">₹{booking.TicketPrice}</p>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Quantity</label>
-                              <p className="text-sm">{booking.TicketQuantity}</p>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <div>
-                            <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Venue</label>
-                            <p className="text-sm">{booking.EventVenue}</p>
-                            <p className="text-xs text-muted-foreground">{booking.VenueCity}</p>
-                          </div>
-                          <div className="flex gap-4">
-                            <div>
-                              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Date</label>
-                              <p className="text-sm">{booking.EventDate}</p>
-                            </div>
-                            <div>
-                              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Time</label>
-                              <p className="text-sm">{booking.EventTime}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="flex justify-between items-center pt-4 border-t">
-            <Button variant="outline" onClick={() => {
-              setShowBookingsDialog(false)
-              setShowDetailsDialog(true)
-            }}>
-              Back to Details
-            </Button>
-            <Button variant="outline" onClick={() => setShowBookingsDialog(false)}>
-              Close
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
       {/* Customer Details Dialog */}
       <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
         <DialogContent className="max-w-2xl">
@@ -712,8 +561,7 @@ export default function CustomersPage({ params }: CustomersPageProps) {
             </Button>            <Button onClick={() => {
               if (selectedCustomer) {
                 setShowDetailsDialog(false)
-                fetchCustomerBookings(selectedCustomer._id)
-                setShowBookingsDialog(true)
+                router.push(`/${role}/customers/${selectedCustomer._id}/bookings`)
               }
             }}>
               View Bookings
