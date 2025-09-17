@@ -20,8 +20,7 @@ import {
 import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/hooks/use-toast"
-import { getNumericAdminRole } from "@/lib/api-constants"
-import { promoterEndpoint, promoterEndPointPannel, eventEndPoint } from "@/lib/api-endpoints"
+import { promoterEndpoint, promoterEndPointPannel, eventEndPoint, organizerEndpoint } from "@/lib/api-endpoints"
 import {
   Pagination,
   PaginationContent,
@@ -92,6 +91,13 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   // Transaction details modal state
   const [selectedTransaction, setSelectedTransaction] = React.useState<any>(null)
   const [isDetailsModalOpen, setIsDetailsModalOpen] = React.useState(false)
+
+  // Clear report data when report type changes
+  const handleReportTypeChange = (value: "Summary" | "Transaction" | "") => {
+    setReportType(value)
+    setReportData([]) // Clear existing data
+    setCurrentPage(1) // Reset pagination
+  }
   // Check authentication status on component mount
   React.useEffect(() => {
     if (!checkAuthentication()) {
@@ -220,36 +226,51 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     setReportData([])
 
     try {
+      console.log("🚨🚨🚨 REPORTS PAGE - SEARCH FUNCTION CALLED 🚨🚨🚨")
       console.log("Searching for events with:")
       console.log("- Event name:", eventNameInput)
       console.log("- Event date:", dateInput)
       console.log("- User role:", role)
 
       let apiEndpoint = ""
-      let requestPayload: any = {}      // Determine the correct search endpoint based on role
+      let requestPayload: any = {}      
+      
+      // Use the working promoter endpoint that we know exists
+      apiEndpoint = promoterEndPointPannel.GET_EVENTS_BY_NAME_AND_DATETIME
+      
+      console.log("🚨 DEBUG: Using promoter endpoint:", apiEndpoint)
+      console.log("🚨 DEBUG: Should be getEventsByNameandDateTime!")
+      
+      // Determine the correct AdminRole based on user role
+      let adminRole = 1 // Default to superadmin
       if ((role as UserRole) === "promoter") {
-        apiEndpoint = promoterEndPointPannel.GET_EVENTS_BY_NAME_AND_DATETIME
-        requestPayload = {
-          AdminRole: 4, // Promoter role ID
-          user_id: user!.user_id,
-          EventName: eventNameInput.trim(),
-          DateTime: dateInput ? new Date(dateInput).toISOString() : new Date().toISOString(),
-        }
-      } else {
-        // For superadmin/organizer - use the paginated events endpoint
-        apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
-        requestPayload = {
-          AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
-          user_id: user!.user_id,
-          page: "1",
-          limit: "50",
-        }
+        adminRole = 4 // Promoter role ID
+      } else if ((role as UserRole) === "organizer") {
+        adminRole = 2 // Organizer role ID  
+      }
+      
+      requestPayload = {
+        AdminRole: adminRole,
+        user_id: user!.user_id,
+        EventName: eventNameInput.trim(),
+        DateTime: dateInput ? new Date(dateInput).toISOString() : new Date().toISOString(),
       }
 
-      console.log("Using endpoint:", apiEndpoint)
+      console.log("Using HARDCODED endpoint:", apiEndpoint)
       console.log("Request payload:", requestPayload)
+      console.log("🔍 Payload verification:")
+      console.log("- AdminRole:", requestPayload.AdminRole, typeof requestPayload.AdminRole)
+      console.log("- user_id:", requestPayload.user_id, typeof requestPayload.user_id)
+      console.log("- EventName:", requestPayload.EventName, typeof requestPayload.EventName)
+      console.log("- DateTime:", requestPayload.DateTime, typeof requestPayload.DateTime)
 
       const authToken = localStorage.getItem("authToken")
+      
+      console.log("🚨 FINAL API CALL VERIFICATION:")
+      console.log("- Final endpoint URL:", apiEndpoint)
+      console.log("- Should contain 'getEventsByNameandDateTime':", apiEndpoint.includes('getEventsByNameandDateTime'))
+      console.log("- Should NOT contain 'getAllPaginated':", !apiEndpoint.includes('getAllPaginated'))
+      
       const response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
@@ -267,7 +288,9 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }
 
       const data = await response.json()
-      console.log("Search response data:", data)      // Check for API-level errors - but distinguish between real errors and "no data" responses
+      console.log("Search response data:", data)      
+      
+      // Check for API-level errors - but distinguish between real errors and "no data" responses
       if (data.error === true) {
         // Check if this is a "no data found" scenario rather than an actual error
         const isNoDataScenario = data.message && (
@@ -307,18 +330,15 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("- data.data is array:", !!(data && data.data && Array.isArray(data.data)))
       console.log("- data.data has _id:", !!(data && data.data && data.data._id))
 
-      // Handle API response structure
+      // Handle API response structure for the specific getEventsByNameandDateTime endpoint
       let eventsArray = []
       
-      if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
-        // Paginated endpoint response structure
-        eventsArray = data.data.EventsData
-      } else if (data && data.data && Array.isArray(data.data)) {
-        // Standard response structure
-        eventsArray = data.data
-      } else if (data && data.data && typeof data.data === 'object' && data.data._id) {
-        // Single event object response (for promoter search)
+      if (data && data.data && typeof data.data === 'object' && data.data._id) {
+        // Single event object response
         eventsArray = [data.data]
+      } else if (data && data.data && Array.isArray(data.data)) {
+        // Array response structure
+        eventsArray = data.data
       } else if (data && Array.isArray(data)) {
         // Direct array response
         eventsArray = data
@@ -330,14 +350,6 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           variant: "destructive"
         })
         return
-      }
-
-      // Filter events by name if needed (for non-promoter roles that don't support search)
-      if ((role as UserRole) !== "promoter") {
-        eventsArray = eventsArray.filter((event: any) => {
-          const eventName = event.EventName || event.eventName || event.Name || event.name || ""
-          return eventName.toLowerCase().includes(eventNameInput.toLowerCase().trim())
-        })
       }
 
       if (eventsArray.length > 0) {
@@ -450,29 +462,44 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           requestPayload = {
             promoter_id: user!.user_id,
             event_id: matchedEvent._id,
+            limit: "50",
+            page: "1"
           }
         } else if (reportType === "Transaction") {
           apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
           requestPayload = {
             promoter_id: user!.user_id,
             event_id: matchedEvent._id,
+            limit: "50",
+            page: "1"
           }
         }
       } else {
-        // For superadmin/organizer
+        // For superadmin/organizer - determine AdminRole based on role
+        let adminRole = 1 // Default to superadmin
+        if ((role as UserRole) === "organizer") {
+          adminRole = 2 // Organizer role ID  
+        }
+        
         if (reportType === "Summary") {
-          apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
+          apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
           requestPayload = {
-            AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
+            AdminRole: adminRole,
             user_id: user!.user_id,
             event_id: matchedEvent._id,
+            limit: "50",
+            page: "1"
           }
         } else if (reportType === "Transaction") {
-          apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
+          apiEndpoint = organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
           requestPayload = {
-            AdminRole: getNumericAdminRole(user!.AdminRole || (role as UserRole)),
+            AdminRole: adminRole,
             user_id: user!.user_id,
+
+
             event_id: matchedEvent._id,
+            limit: "50",
+            page: "1"
           }
         }
       }
@@ -486,8 +513,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         return
       }
 
+      console.log("🚨 REPORT GENERATION - ENDPOINT VERIFICATION 🚨")
       console.log("Using endpoint:", apiEndpoint)
       console.log("Request payload:", requestPayload)
+      console.log("🔍 Endpoint verification:")
+      console.log("- Full endpoint URL:", apiEndpoint)
+      console.log("- Should contain 'getEventSummaryBookingsDataforSuperAdminOrganizer' for Summary:", apiEndpoint.includes('getEventSummaryBookingsDataforSuperAdminOrganizer'))
+      console.log("- Should contain 'getAllLatestBookingsForSuperAdminOrganizer' for Transaction:", apiEndpoint.includes('getAllLatestBookingsForSuperAdminOrganizer'))
+      console.log("- Base URL from env:", process.env.NEXT_PUBLIC_API_BASE_URL)
+      console.log("🔍 Payload verification:")
+      console.log("- AdminRole:", requestPayload.AdminRole, typeof requestPayload.AdminRole)
+      console.log("- user_id:", requestPayload.user_id, typeof requestPayload.user_id)
+      console.log("- event_id:", requestPayload.event_id, typeof requestPayload.event_id)
+      console.log("- limit:", requestPayload.limit, typeof requestPayload.limit)
+      console.log("- page:", requestPayload.page, typeof requestPayload.page)
 
       const authToken = localStorage.getItem("authToken")
       const response = await fetch(apiEndpoint, {
@@ -507,7 +546,24 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       }
 
       const data = await response.json()
-      console.log("Report response data:", data)      // Check for API-level errors - but distinguish between real errors and "no data" responses
+      console.log("📋 FULL REPORT RESPONSE DATA:", data)
+      
+      // Detailed analysis of response structure for debugging
+      console.log("🔍 RESPONSE STRUCTURE ANALYSIS:")
+      console.log("- data exists:", !!data)
+      console.log("- data.error:", data.error)
+      console.log("- data.message:", data.message)
+      console.log("- data.data exists:", !!(data && data.data))
+      console.log("- data.TicketsData exists:", !!(data && data.TicketsData))
+      if (data && data.data) {
+        console.log("- data.data.TicketsData exists:", !!(data.data.TicketsData))
+        console.log("- data.data.TicketsData length:", data.data.TicketsData ? data.data.TicketsData.length : 'N/A')
+        console.log("- data.data.TicketNamesArray exists:", !!(data.data.TicketNamesArray))
+        console.log("- data.data.EventDateTimeData exists:", !!(data.data.EventDateTimeData))
+        if (data.data.TicketsData && data.data.TicketsData.length > 0) {
+          console.log("- First TicketsData item:", data.data.TicketsData[0])
+        }
+      }      // Check for API-level errors - but distinguish between real errors and "no data" responses
       if (data.error === true) {
         // Check if this is a "no data found" scenario rather than an actual error
         const isNoDataScenario = data.message && (
@@ -543,16 +599,23 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       let reportArray = []
       
       if (reportType === "Summary") {
+        console.log("🔄 PROCESSING SUMMARY REPORT DATA...")
         // For summary reports, check multiple possible data sources
         if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
           reportArray = data.data.TicketsData
-          console.log("📊 Using TicketsData array:", reportArray.length, "items")
+          console.log("📊 PATH 1: Using data.data.TicketsData array:", reportArray.length, "items")
         } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
           reportArray = data.TicketsData
-          console.log("📊 Using TicketsData array (direct):", reportArray.length, "items")
+          console.log("📊 PATH 2: Using data.TicketsData array (direct):", reportArray.length, "items")
+        } else if (data && data.data && Array.isArray(data.data)) {
+          reportArray = data.data
+          console.log("📊 PATH 3: Using data.data array directly:", reportArray.length, "items")
+        } else if (data && Array.isArray(data)) {
+          reportArray = data
+          console.log("📊 PATH 4: Using data array directly:", reportArray.length, "items")
         } else if (data && data.data && data.data.TicketNamesArray && Array.isArray(data.data.TicketNamesArray)) {
           // Handle case where TicketsData is empty but we have TicketNamesArray
-          console.log("📊 TicketsData is empty, creating placeholder data from TicketNamesArray")
+          console.log("📊 PATH 5: TicketsData is empty, creating placeholder data from TicketNamesArray")
           reportArray = data.data.TicketNamesArray.map((ticketName: string) => ({
             TicketName: ticketName,
             Quantity: 0,
@@ -563,15 +626,21 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           console.log("📊 Created placeholder summary data:", reportArray)
         } else {
           // No data found - this is normal, not an error
-          console.log("📊 No ticket data found - this may be normal for events without bookings")
+          console.log("📊 PATH 6: No ticket data found - this may be normal for events without bookings")
           reportArray = []
         }
       } else {
-        // For transaction reports, use the standard structure
-        if (data && data.data && Array.isArray(data.data)) {
+        // For transaction reports, handle the latestBookingData structure
+        console.log("🔄 PROCESSING TRANSACTION REPORT DATA...")
+        if (data && data.data && data.data.latestBookingData && Array.isArray(data.data.latestBookingData)) {
+          reportArray = data.data.latestBookingData
+          console.log("📊 PATH 1: Using data.data.latestBookingData array:", reportArray.length, "items")
+        } else if (data && data.data && Array.isArray(data.data)) {
           reportArray = data.data
+          console.log("📊 PATH 2: Using data.data array:", reportArray.length, "items")
         } else if (data && Array.isArray(data)) {
           reportArray = data
+          console.log("📊 PATH 3: Using data array directly:", reportArray.length, "items")
         } else {
           // No transaction data found - this is normal, not an error
           console.log("📊 No transaction data found - this may be normal for events without bookings")
@@ -581,11 +650,41 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
       // Normalize the data based on report type
       if (reportType === "Summary") {
+        // Log the raw reportArray for debugging
+        console.log("🎫 RAW REPORT ARRAY FOR SUMMARY:", reportArray)
+        if (reportArray.length > 0) {
+          console.log("🎫 FIRST ITEM STRUCTURE:", reportArray[0])
+          console.log("🎫 AVAILABLE FIELDS:", Object.keys(reportArray[0]))
+        }
+        
         // Transform API data to summary format using the TicketsData structure
-        const summaryData = reportArray.map((item: any) => {
-          const quantitySold = Number(item.Quantity || item.quantity || item.quantity_sold || 0)
-          const ticketPrice = Number(item.TicketPrice || item.ticketPrice || item.ticket_price || 0)
-          const totalRevenue = Number(item.TotalAmount || item.totalAmount || item.total_amount || (quantitySold * ticketPrice))
+        const summaryData = reportArray.map((item: any, index: number) => {
+          console.log(`🎫 PROCESSING ITEM ${index}:`, item)
+          
+          const quantitySold = Number(item.Quantity || item.quantity || item.quantity_sold || item.QuantitySold || item.TotalQuantity || 0)
+          const ticketPrice = Number(item.TicketPrice || item.ticketPrice || item.ticket_price || item.Price || 0)
+          const totalRevenue = Number(item.TotalAmount || item.totalAmount || item.total_amount || item.TotalRevenue || (quantitySold * ticketPrice))
+          
+          console.log(`🎫 EXTRACTED VALUES FOR ITEM ${index}:`)
+          console.log("- quantitySold:", quantitySold, "from fields:", { 
+            Quantity: item.Quantity, 
+            quantity: item.quantity, 
+            quantity_sold: item.quantity_sold,
+            QuantitySold: item.QuantitySold,
+            TotalQuantity: item.TotalQuantity
+          })
+          console.log("- ticketPrice:", ticketPrice, "from fields:", { 
+            TicketPrice: item.TicketPrice, 
+            ticketPrice: item.ticketPrice, 
+            ticket_price: item.ticket_price,
+            Price: item.Price
+          })
+          console.log("- totalRevenue:", totalRevenue, "from fields:", { 
+            TotalAmount: item.TotalAmount, 
+            totalAmount: item.totalAmount, 
+            total_amount: item.total_amount,
+            TotalRevenue: item.TotalRevenue
+          })
           
           return {
             ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
@@ -619,22 +718,27 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           )
         }
       } else if (reportType === "Transaction") {
-        // Transform API data to transaction format
+        // Transform API data to transaction format using the correct field names
+        console.log("🎫 RAW TRANSACTION ARRAY:", reportArray)
+        if (reportArray.length > 0) {
+          console.log("🎫 FIRST TRANSACTION ITEM:", reportArray[0])
+        }
+        
         const transactionData = reportArray.map((item: any) => ({
-          bookingId: item.bookingId || item.booking_id || item.Booking_id || item._id || "N/A",
-          phoneNumber: item.phoneNumber || item.phone_number || item.PhoneNumber || item.mobile || "N/A",
-          email: item.email || item.Email || item.customer_email || item.customerEmail || "N/A",
-          bookingDate: item.bookingDate || item.booking_date || item.BookingDateTime || item.date || item.created_at || new Date().toISOString(),
-          eventName: item.eventName || item.event_name || item.EventName || "N/A",
-          ticketDate: item.ticketDate || item.ticket_date || item.TicketDate || null,
-          quantity: Number(item.quantity || item.Quantity || item.TicketQuantity || 0),
-          ticketName: item.ticketName || item.ticket_name || item.TicketName || "N/A",
-          ticketType: item.ticketType || item.ticket_type || item.TicketType || "Standard",
-          ticketPrice: Number(item.ticketPrice || item.ticket_price || item.TicketPrice || 0),
-          amount: Number(item.amount || item.Amount || item.TotalAmount || item.total_amount || 0),
+          bookingId: item.Booking_id || item.bookingId || item.booking_id || item._id || "N/A",
+          customerName: item.CustomerName || item.customerName || item.customer_name || "N/A",
+          phoneNumber: item.PhoneNumber || item.phoneNumber || item.phone_number || "N/A",
+          email: item.Email || item.email || item.customer_email || "N/A",
+          bookingDate: item.BookingDateTime || item.bookingDate || item.booking_date || item.date || "N/A",
+          eventName: item.EventName || item.eventName || item.event_name || "N/A",
+          ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || "N/A",
+          quantity: Number(item.TicketQuantity || item.quantity || item.Quantity || 0),
+          ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
+          ticketType: item.EventTicketType || item.ticketType || item.ticket_type || "Standard",
+          ticketPrice: Number(item.TicketPrice || item.ticketPrice || item.ticket_price || 0),
+          amount: Number(item.TotalAmount || item.amount || item.Amount || 0),
           remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
-          status: item.status || item.Status || item.booking_status || item.bookingStatus || "N/A",
-          customerName: item.customerName || item.customer_name || item.CustomerName || "N/A", // Keep for backward compatibility
+          status: item.status === 1 ? "Confirmed" : item.status === 2 ? "Cancelled" : item.status || "Unknown",
         }))
           setReportData(transactionData)
         
@@ -742,7 +846,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                 <Label htmlFor="reportType">Report Type</Label>
                 <Select
                   value={reportType}
-                  onValueChange={(value: "Summary" | "Transaction" | "") => setReportType(value)}
+                  onValueChange={handleReportTypeChange}
                 >
                   <SelectTrigger id="reportType">
                     <SelectValue placeholder="Select report type" />

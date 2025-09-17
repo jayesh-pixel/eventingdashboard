@@ -148,14 +148,6 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       })
     }
 
-    if ((role as UserRole) === "superadmin") {
-      tabs.push({
-        value: "bulk",
-        label: "Bulk",
-        count: bookingsData.filter((b) => b.bookingChannel === "Bulk").length
-      })
-    }
-
     return tabs
   }
 
@@ -456,7 +448,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   // Fetch bookings data
-  const fetchBookingsData = async () => {    try {
+  const fetchBookingsData = async (filters?: {
+    searchTerm?: string
+    statusFilter?: string
+    channelFilter?: string
+    cityFilter?: string
+    venueFilter?: string
+    eventNameFilter?: string
+  }) => {
+    try {
       setLoading(true)
 
       const authToken = localStorage.getItem("authToken")
@@ -476,15 +476,62 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         requestPayload = {
           promoter_id: user.user_id
         }
+        
+        // Add filter parameters for promoter endpoint
+        if (filters?.searchTerm) {
+          requestPayload.search = filters.searchTerm
+        }
       } else {
-        apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+        // For superadmin/organizer, use different endpoints based on active tab
+        const adminRole = getNumericAdminRole(user.AdminRole || (role as UserRole))
+        
+        switch (activeTab) {
+          case "promoter":
+            apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+            console.log("🎤 Using promoter booking endpoint for tab:", activeTab)
+            break
+          case "online":
+            apiEndpoint = organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+            console.log("💻 Using online booking endpoint for tab:", activeTab)
+            break
+          case "all":
+          default:
+            apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+            console.log("📊 Using all bookings endpoint for tab:", activeTab)
+            break
+        }
+        
         requestPayload = {
-          AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
+          AdminRole: adminRole,
           user_id: user.user_id,
           page: currentPage.toString(),
-          limit: ITEMS_PER_PAGE.toString(),
+          limit: "50", // Increased limit to get more data
+        }
+        
+        // Add filter parameters to the payload
+        if (filters?.searchTerm) {
+          requestPayload.search = filters.searchTerm
+        }
+        if (filters?.statusFilter && filters.statusFilter !== "all") {
+          requestPayload.status = filters.statusFilter
+        }
+        if (filters?.cityFilter && filters.cityFilter !== "all") {
+          requestPayload.city = filters.cityFilter
+        }
+        if (filters?.venueFilter && filters.venueFilter !== "all") {
+          requestPayload.venue = filters.venueFilter
+        }
+        if (filters?.eventNameFilter && filters.eventNameFilter !== "all") {
+          requestPayload.eventName = filters.eventNameFilter
         }
       }
+
+      console.log("🚀 BOOKING API CALL:")
+      console.log("- Active tab:", activeTab)
+      console.log("- Endpoint:", apiEndpoint)
+      console.log("- Payload:", requestPayload)
+      console.log("- Applied filters:", filters || "none")
+      console.log("- Full URL being called:", apiEndpoint)
 
       const response = await fetch(apiEndpoint, {
         method: "POST",
@@ -508,6 +555,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       }
 
       const data = await response.json()
+      console.log("🎯 BOOKING API RESPONSE SUCCESS:")
+      console.log("- Response status:", response.status)
+      console.log("- Response size:", JSON.stringify(data).length, "characters")
+      console.log("- Response keys:", Object.keys(data || {}))
 
       // Some APIs respond with error flags but 200 status; treat these as no data
       const hasErrorFlag = Boolean(
@@ -560,24 +611,36 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         console.error("❌ Could not find bookings array in response structure")
       }      if (bookingsArray && Array.isArray(bookingsArray)) {
         console.log("🔄 Processing", bookingsArray.length, "raw bookings")
-        console.log("📝 Sample raw booking:", JSON.stringify(bookingsArray[0], null, 2))
+        console.log("📝 Sample raw booking:", bookingsArray[0] ? JSON.stringify(bookingsArray[0], null, 2) : "No bookings available")
         
         const normalizedBookings = normalizeBookingData(bookingsArray)
         console.log("✅ Normalized", normalizedBookings.length, "bookings")
-        console.log("📋 Sample normalized booking:", JSON.stringify(normalizedBookings[0], null, 2))
-          setBookingsData(normalizedBookings)
+        console.log("📋 Sample normalized booking:", normalizedBookings[0] ? JSON.stringify(normalizedBookings[0], null, 2) : "No normalized bookings")
+          
+        setBookingsData(normalizedBookings)
         setOriginalData(normalizedBookings)
+        
+        console.log("📊 FINAL STATE UPDATE:")
+        console.log("- bookingsData will be set to", normalizedBookings.length, "items")
+        console.log("- originalData will be set to", normalizedBookings.length, "items")
         
         if (normalizedBookings.length > 0) {
           toast({
             title: "Success",
             description: `Loaded ${normalizedBookings.length} bookings successfully`,
           })
+        } else {
+          console.warn("⚠️ No bookings found after normalization")
+          toast({
+            title: "No Data",
+            description: "No bookings found",
+          })
         }
       } else {
         console.error("❌ No valid bookings array found")
         throw new Error("No valid bookings array found in response")
-      }    } catch (error) {
+      }
+    } catch (error) {
       showErrorPopup("Could not fetch bookings from server")
       setBookingsData([])
       setOriginalData([])
@@ -594,100 +657,66 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
     return () => clearTimeout(delay)
   }, [searchTerm])
-  // Filter bookings based on search term
+
+  // Filter bookings using API calls instead of client-side filtering
   React.useEffect(() => {
-    if (debouncedSearchTerm === "" && statusFilter === "all" && channelFilter === "all" && 
-        cityFilter === "all" && venueFilter === "all" && eventNameFilter === "all") {
-      setBookingsData(originalData)
+    if (!user) return
+
+    const hasActiveFilters = 
+      debouncedSearchTerm !== "" || 
+      statusFilter !== "all" || 
+      channelFilter !== "all" || 
+      cityFilter !== "all" || 
+      venueFilter !== "all" || 
+      eventNameFilter !== "all"
+
+    // If no filters are active, fetch data without filters
+    if (!hasActiveFilters) {
+      fetchBookingsData()
       return
     }
 
-    let filtered = originalData
-
-    if (debouncedSearchTerm !== "") {
-      const searchLower = debouncedSearchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (booking) =>
-          booking.eventName.toLowerCase().includes(searchLower) ||
-          booking.customerName.toLowerCase().includes(searchLower) ||
-          booking.customerEmail.toLowerCase().includes(searchLower) ||
-          booking._id.toLowerCase().includes(searchLower) ||
-          (booking.phoneNumber && booking.phoneNumber.toLowerCase().includes(searchLower)) ||
-          (booking.promoterName && booking.promoterName.toLowerCase().includes(searchLower)) ||
-          (booking.city && booking.city.toLowerCase().includes(searchLower)) ||
-          (booking.venue && booking.venue.toLowerCase().includes(searchLower)) ||
-          (booking.ticketName && booking.ticketName.toLowerCase().includes(searchLower))
-      )
+    // Prepare filter object for API call
+    const filters = {
+      searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
+      statusFilter: statusFilter !== "all" ? statusFilter : undefined,
+      channelFilter: channelFilter !== "all" ? channelFilter : undefined,
+      cityFilter: cityFilter !== "all" ? cityFilter : undefined,
+      venueFilter: venueFilter !== "all" ? venueFilter : undefined,
+      eventNameFilter: eventNameFilter !== "all" ? eventNameFilter : undefined
     }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.bookingStatus === statusFilter)
-    }
-
-    if (channelFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.bookingChannel === channelFilter)
-    }
-
-    if (cityFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.city === cityFilter)
-    }
-
-    if (venueFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.venue === venueFilter)
-    }
-
-    if (eventNameFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.eventName === eventNameFilter)
-    }
-
-    setBookingsData(filtered)
-    setCurrentPage(1)
-  }, [debouncedSearchTerm, statusFilter, channelFilter, cityFilter, venueFilter, eventNameFilter, originalData])
-
-  // Initial data fetch
-  React.useEffect(() => {
-    fetchBookingsData()
-  }, [user])
-  // Filter bookings based on tab and role
-  const filteredBookings = React.useMemo(() => {
-    let filtered = bookingsData
+    console.log("🔍 Applying filters via API:", filters)
     
-    console.log("🔍 Filtering bookings:", {
+    // Call API with filters
+    fetchBookingsData(filters)
+    
+    // Reset to first page when filters change
+    setCurrentPage(1)
+  }, [debouncedSearchTerm, statusFilter, channelFilter, cityFilter, venueFilter, eventNameFilter, user])
+
+  // Initial data fetch - refetch when user or activeTab changes
+  React.useEffect(() => {
+    if (user) {
+      // Fetch data without filters initially
+      fetchBookingsData()
+    }
+  }, [user, activeTab])
+  // Filter bookings based on tab and role  
+  const filteredBookings = React.useMemo(() => {
+    // The bookingsData already contains the filtered results from the API
+    
+    console.log("� Using API-filtered bookings:", {
       bookingsDataLength: bookingsData.length,
       activeTab,
-      role,
-      searchTerm: debouncedSearchTerm,
-      statusFilter,
-      channelFilter
+      role
     })
 
-    if ((role as UserRole) === "promoter") {
-      console.log("👤 Promoter role - returning all bookings")
-      return filtered
-    }    switch (activeTab) {
-      case "all":
-        console.log("📊 All tab - returning", filtered.length, "bookings")
-        return filtered
-      case "my-bookings":
-        console.log("👤 My Bookings tab - returning", filtered.length, "bookings")
-        return filtered
-      case "promoter":
-        const promoterBookings = filtered.filter((booking) => booking.bookingChannel === "Promoter")
-        console.log("🎤 Promoter tab - returning", promoterBookings.length, "bookings")
-        return promoterBookings
-      case "online":
-        const onlineBookings = filtered.filter((booking) => booking.bookingChannel === "Online")
-        console.log("💻 Online tab - returning", onlineBookings.length, "bookings")
-        return onlineBookings
-      case "bulk":
-        const bulkBookings = filtered.filter((booking) => booking.bookingChannel === "Bulk")
-        console.log("📦 Bulk tab - returning", bulkBookings.length, "bookings")
-        return bulkBookings
-      default:
-        console.log("❓ Unknown tab - returning", filtered.length, "bookings")
-        return filtered
-    }
-  }, [bookingsData, activeTab, role, debouncedSearchTerm, statusFilter, channelFilter])
+    // Since we're now fetching data from tab-specific endpoints,
+    // we don't need to filter by channel anymore - the API returns the right data
+    console.log(`� Tab '${activeTab}' - returning ${Filter.length} bookings (from specific API endpoint)`)
+    return bookingsData
+  }, [bookingsData, activeTab, role])
 
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
   const currentBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
@@ -948,7 +977,6 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                           <SelectItem value="all">All Channels</SelectItem>
                           <SelectItem value="Online">Online</SelectItem>
                           <SelectItem value="Promoter">Promoter</SelectItem>
-                          <SelectItem value="Bulk">Bulk</SelectItem>
                         </SelectContent>
                       </Select>
                     )}
@@ -981,9 +1009,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         ? "My Bookings"
                         : activeTab === "promoter"
                           ? "Promoter Bookings"
-                          : activeTab === "online"
-                            ? "Online Bookings"
-                            : "Bulk Bookings"}
+                          : "Online Bookings"}
                   </CardTitle>                  <CardDescription>
                     {filteredBookings.length} booking(s) found
                   </CardDescription>
@@ -1122,7 +1148,6 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         <SelectItem value="all">All Channels</SelectItem>
                         <SelectItem value="Online">Online</SelectItem>
                         <SelectItem value="Promoter">Promoter</SelectItem>
-                        <SelectItem value="Bulk">Bulk</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

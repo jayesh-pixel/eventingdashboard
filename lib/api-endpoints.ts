@@ -107,11 +107,15 @@ export const organizerEndpoint = {
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
     BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventTransactionBookingsDataforSuperAdminOrganizer",
-  GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
+  GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
+    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDataforSuperAdminOrganizer",
   GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
+  GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    BASE_URL + "/eventticketsbooking/getPromoterLatestBookingsForSuperAdminOrganizer",
+  GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    BASE_URL + "/eventticketsbooking/getOnlineLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
