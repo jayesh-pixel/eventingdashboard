@@ -165,12 +165,13 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       setApiError(null)
 
       const authToken = getValidToken()
-      if (!user || !authToken) {
-        console.warn("No user or auth token available, using mock data")
+      if (!authToken) {
+        console.warn("No auth token available, using mock data")
         setCategories(mockCategories)
         setUseMockData(true)
         setTotalPages(1)
         setTotalCategories(mockCategories.length)
+        setLoading(false)
         return
       }
 
@@ -203,13 +204,12 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         throw new Error(data.message || "Failed to fetch categories")
       }
 
-      // Set the data from API - DO NOT update currentPage here to avoid infinite loop
+      // Set the data from API
       setCategories(data.data.CategoryData || [])
       setTotalPages(data.data.totalPages || 1)
       setTotalCategories(data.data.totalCategories || 0)
       setUseMockData(false)
 
-      // Remove the toast from the success case to avoid dependency issues
       console.log("Categories fetched successfully:", data.message)
     } catch (error) {
       console.error("Categories fetch failed:", error)
@@ -220,21 +220,14 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       setUseMockData(true)
       setTotalPages(1)
       setTotalCategories(mockCategories.length)
-      
-      toast({
-        title: "API Error",
-        description: "Could not fetch categories from server. Using sample data instead.",
-        variant: "destructive",
-      })
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [])
   // Initial data fetch
   React.useEffect(() => {
     fetchCategories(currentPage)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage])
+  }, [fetchCategories, currentPage])
 
   // Helper function to get category image
   const getCategoryImage = (category: Category): string => {
