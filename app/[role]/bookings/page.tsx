@@ -641,7 +641,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         throw new Error("No valid bookings array found in response")
       }
     } catch (error) {
-      showErrorPopup("Could not fetch bookings from server")
+      console.error("Error fetching bookings:", error)
       setBookingsData([])
       setOriginalData([])
     } finally {

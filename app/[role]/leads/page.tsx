@@ -11,32 +11,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Search, AlertCircle, Loader2, Mail, Phone, Building2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { leadsEndpoint } from "@/lib/api-endpoints"
-import { Lead, LeadsApiResponse, LeadStatus } from "@/lib/types"
+import { Lead, LeadsApiResponse } from "@/lib/types"
 import { apiClient } from "@/lib/api-client"
-
-const statusColors = {
-  0: "bg-gray-100 text-gray-800",    // Inactive
-  1: "bg-blue-100 text-blue-800",   // Active/New
-  2: "bg-green-100 text-green-800"  // Contacted
-} as const
-
-const statusLabels = {
-  0: "Inactive",
-  1: "New", 
-  2: "Contacted"
-} as const
 
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
@@ -44,12 +24,11 @@ export default function LeadsPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalLeads, setTotalLeads] = useState(0)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
   const itemsPerPage = 10
-  const fetchLeads = async (page: number = 1, search: string = "", status: string = "all") => {
+  const fetchLeads = async (page: number = 1, search: string = "") => {
     try {
       setLoading(true)
       setError(null)
@@ -67,10 +46,6 @@ export default function LeadsPage() {
       
       if (search.trim()) {
         requestBody.search = search.trim()
-      }
-      
-      if (status !== "all") {
-        requestBody.status = status
       }
 
       console.log('Making API request to:', leadsEndpoint.GET_ALL_PAGINATED)
@@ -123,23 +98,18 @@ export default function LeadsPage() {
   }
 
   useEffect(() => {
-    fetchLeads(1, searchTerm, statusFilter)
-  }, [searchTerm, statusFilter])
+    fetchLeads(1, searchTerm)
+  }, [searchTerm])
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) {
       setCurrentPage(newPage)
-      fetchLeads(newPage, searchTerm, statusFilter)
+      fetchLeads(newPage, searchTerm)
     }
   }
 
   const handleSearch = (value: string) => {
     setSearchTerm(value)
-    setCurrentPage(1)
-  }
-
-  const handleStatusFilter = (value: string) => {
-    setStatusFilter(value)
     setCurrentPage(1)
   }
 
@@ -190,17 +160,6 @@ export default function LeadsPage() {
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={handleStatusFilter}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="1">New</SelectItem>
-            <SelectItem value="2">Contacted</SelectItem>
-            <SelectItem value="0">Inactive</SelectItem>
-          </SelectContent>
-        </Select>
       </div>
 
       {error && (
@@ -245,7 +204,6 @@ export default function LeadsPage() {
                     <TableHead>Position</TableHead>
                     <TableHead>City</TableHead>
                     <TableHead>Received At</TableHead>
-                    <TableHead>Status</TableHead>
                     {/* <TableHead>Actions</TableHead> */}
                   </TableRow>
                 </TableHeader>
@@ -276,11 +234,11 @@ export default function LeadsPage() {
                       <TableCell>{lead.Position}</TableCell>
                       <TableCell>{lead.City}</TableCell>
                       <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                      <TableCell>
+                      {/* <TableCell>
                         <Badge className={statusColors[lead.status as keyof typeof statusColors]}>
                           {statusLabels[lead.status as keyof typeof statusLabels] || 'Unknown'}
                         </Badge>
-                      </TableCell>
+                      </TableCell> */}
                       {/* <TableCell>
                         <div className="flex gap-2">
                           <Button 

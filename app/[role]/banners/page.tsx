@@ -530,7 +530,6 @@ export default function BannersPage({ params }: BannersPageProps) {
                   <TableHead>Mobile Image</TableHead>
                   <TableHead>Event ID</TableHead>
                   <TableHead>Created Date</TableHead>
-                  <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -569,11 +568,6 @@ export default function BannersPage({ params }: BannersPageProps) {
                       {banner.Event_id}
                     </TableCell>
                     <TableCell>{formatDate(banner.createdAt)}</TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[banner.status as keyof typeof statusColors]}>
-                        {statusLabels[banner.status as keyof typeof statusLabels] || 'Unknown'}
-                      </Badge>
-                    </TableCell>
                     <TableCell>
                       <div className="flex gap-2">
                         <Button 

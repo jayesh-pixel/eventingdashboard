@@ -489,3 +489,23 @@ export interface BannersApiResponse {
   error?: boolean
   message?: string
 }
+
+// Lead Types
+export interface Lead {
+  _id: string
+  FullName: string
+  Email: string
+  PhoneNumber?: string
+  CompanyName: string
+  Position: string
+  City: string
+  createdAt: string
+  status?: number
+}
+
+export interface LeadsApiResponse {
+  success: boolean
+  data: Lead[] | { data: Lead[]; totalPages: number; currentPage: number; totalLeads: number; [key: string]: any }
+  error?: boolean
+  message?: string
+}
