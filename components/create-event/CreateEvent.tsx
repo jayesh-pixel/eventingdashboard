@@ -226,6 +226,11 @@ const getEventValidationSchema = (eventSelectionFlag: number) => Yup.object().sh
     .required("Terms and conditions are required")
     .min(10, "Terms and conditions must be at least 10 characters"),
   
+  eventVideoUrl: Yup.string()
+    .url("Please enter a valid URL")
+    .nullable()
+    .transform((value) => value === '' ? null : value),
+  
   eventVisibility: Yup.string()
     .required("Event visibility is required"),
   
@@ -1321,9 +1326,8 @@ export default function CreateEvent({
       submitData.append("Status", eventStatus === EventStatus.Draft ? "1" : "3")
 
       // Add conditional fields only if they have values
-      if (values.eventVideoUrl && values.eventVideoUrl.trim && values.eventVideoUrl.trim()) {
-        submitData.append("EventVideoUrl", values.eventVideoUrl.trim())
-      }
+      // Always append video URL even if empty (backend expects this field)
+      submitData.append("EventVideoUrl", values.eventVideoUrl?.trim() || "")
 
       if (values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
         submitData.append("BookingPhoneNumber", values.bookingphonenumber.trim())

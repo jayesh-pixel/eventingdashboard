@@ -1055,35 +1055,93 @@ export default function TicketsPage() {
       let payload: any
       
       if (isNormal) {
-        // Format payload according to swagger API specification for normal tickets
+        // Format payload for normal tickets - only send editable fields (Price and Quantity)
         const normalTicket = selectedTicket as ExtendedNormalTicket
         
         payload = {
           Event_id: eventId,
           eventTicket_id: normalTicket._id,
-          EventTicketVisibility: editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility || normalTicket.EventTicketVisibility,
-          Description: editFormData.TicketDescription || editFormData.Description || normalTicket.Description,
+          // Only include the editable fields
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
-          BookingMaxLimit: parseInt(editFormData.BookingMaxLimit || normalTicket.BookingMaxLimit)
+          // Keep existing non-editable values
+          EventTicketVisibility: normalTicket.EventTicketVisibility,
+          Description: normalTicket.Description,
+          BookingMaxLimit: normalTicket.BookingMaxLimit
         }
         
-        // Only include EventPromoters if the ticket has promoter visibility or existing promoters
-        const hasPromoters = editFormData.EventPromoters && editFormData.EventPromoters.length > 0
-        const hasExistingPromoters = normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0
-        const isPromoterVisibility = (editFormData.VisibilityLevel === 3 || editFormData.VisibilityLevel === "3") || 
-                                   (normalTicket.EventTicketVisibility === "3" || normalTicket.EventTicketVisibility === 3)
-        
-        if (hasPromoters || (isPromoterVisibility && hasExistingPromoters)) {
-          payload.EventPromoters = editFormData.EventPromoters || normalTicket.EventPromoters
+        // Keep existing promoters if any
+        if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
+          payload.EventPromoters = normalTicket.EventPromoters
         }
       } else {
-        // For bulk tickets, use existing format
+        // For bulk tickets - only send editable fields (Price and Quantity)
         payload = {
           _id: selectedTicket._id,
           AdminRole: getNumericRole(role),
           user_id: user.user_id,
-          ...editFormData
+          // Only include the editable fields
+          BulkTicketPrice: parseFloat(editFormData.BulkTicketPrice || editFormData.Price || (selectedTicket as ExtendedBulkTicket).BulkTicketPrice),
+          BulkTicketQuantity: parseInt(editFormData.BulkTicketQuantity || editFormData.Quantity || (selectedTicket as ExtendedBulkTicket).BulkTicketQuantity)
+        }
+      }
+
+      // Validation for editable fields
+      if (isNormal) {
+        const price = parseFloat(editFormData.TicketPrice || editFormData.Price || (selectedTicket as ExtendedNormalTicket).Price)
+        const quantity = parseInt(editFormData.MaxQuantity || editFormData.Quantity || (selectedTicket as ExtendedNormalTicket).Quantity)
+        
+        if (price < 0) {
+          toast({
+            title: "Validation Error",
+            description: "Price cannot be negative",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+        
+        if (quantity < 1) {
+          toast({
+            title: "Validation Error",
+            description: "Quantity must be at least 1",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+      } else {
+        const price = parseFloat(editFormData.BulkTicketPrice || editFormData.Price || (selectedTicket as ExtendedBulkTicket).BulkTicketPrice)
+        const quantity = parseInt(editFormData.BulkTicketQuantity || editFormData.Quantity || (selectedTicket as ExtendedBulkTicket).BulkTicketQuantity)
+        
+        if (price < 0) {
+          toast({
+            title: "Validation Error",
+            description: "Price cannot be negative",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+        
+        if (quantity < 1) {
+          toast({
+            title: "Validation Error",
+            description: "Quantity must be at least 1",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+        
+        if (quantity > 20) {
+          toast({
+            title: "Validation Error",
+            description: "Bulk ticket quantity cannot exceed 20",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
         }
       }
 
@@ -2213,143 +2271,147 @@ export default function TicketsPage() {
               {selectedTicketType === 'normal' ? (
                 // Normal ticket edit form
                 <>
+                  {/* Read-only fields */}
                   <div className="space-y-2">
-                    <Label htmlFor="editTicketName">Ticket Name</Label>
+                    <Label>Ticket Name</Label>
                     <Input
-                      id="editTicketName"
                       value={editFormData.TicketName || editFormData.Name || ""}
-                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketName: e.target.value, Name: e.target.value }))}
+                      disabled
+                      className="bg-muted"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="editVisibilityLevel">Visibility</Label>
-                    <Select
-                      value={editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString() || "1"}
-                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, VisibilityLevel: parseInt(value), EventTicketVisibility: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* Only show "All" and "All Customers" for public events */}
-                        {eventData && (eventData as any).eventVisibility !== 2 && (
-                          <>
-                            <SelectItem value="1">All</SelectItem>
-                            <SelectItem value="2">All Customers</SelectItem>
-                          </>
-                        )}
-                        <SelectItem value="3">Promoters</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {/* Show info message for private events */}
-                    {eventData && (eventData as any).eventVisibility === 2 && (
-                      <p className="text-xs text-muted-foreground">
-                        This is a private event. Tickets can only be visible to selected promoters.
-                      </p>
-                    )}
+                    <Label>Visibility</Label>
+                    <Input
+                      value={
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "1" ? "All" :
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "2" ? "All Customers" :
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3" ? "Promoters" : "Unknown"
+                      }
+                      disabled
+                      className="bg-muted"
+                    />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="editTicketType">Ticket Type</Label>
-                    <Select
-                      value={editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || ""}
-                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, TicketType: parseInt(value), EventTicketType: parseInt(value) }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">Single Day</SelectItem>
-                        <SelectItem value="2">Multiple Day</SelectItem>
-                        <SelectItem value="3">Season Pass</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Ticket Type</Label>
+                    <Input
+                      value={getTicketTypeName(parseInt(editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || "1"))}
+                      disabled
+                      className="bg-muted"
+                    />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="editTicketDescription">Description</Label>
+                    <Label>Description</Label>
                     <Textarea
-                      id="editTicketDescription"
                       value={editFormData.TicketDescription || editFormData.Description || ""}
-                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketDescription: e.target.value, Description: e.target.value }))}
+                      disabled
+                      className="bg-muted"
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  {/* Editable fields - Only Price and Quantity */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="editTicketPrice">Price (₹)</Label>
+                      <Label htmlFor="editTicketPrice">Price (₹) *</Label>
                       <Input
                         id="editTicketPrice"
                         type="number"
                         value={editFormData.TicketPrice || editFormData.Price || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
+                        className="border-primary"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="editMaxQuantity">Total Quantity</Label>
+                      <Label htmlFor="editMaxQuantity">Total Quantity *</Label>
                       <Input
                         id="editMaxQuantity"
                         type="number"
                         value={editFormData.TicketQuantity || editFormData.Quantity || editFormData.MaxQuantity || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0, MaxQuantity: parseInt(e.target.value) || 0 }))}
+                        className="border-primary"
                       />
                     </div>
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="editBookingMaxLimit">Booking Max Limit</Label>
-                      <Input
-                        id="editBookingMaxLimit"
-                        type="number"
-                        value={editFormData.BookingMaxLimit || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
-                      />
-                    </div>
+                  {/* Read-only Booking Max Limit */}
+                  <div className="space-y-2">
+                    <Label>Booking Max Limit</Label>
+                    <Input
+                      value={editFormData.BookingMaxLimit || ""}
+                      disabled
+                      className="bg-muted"
+                    />
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    * Only Price and Quantity fields can be edited
                   </div>
                 </>
               ) : (
                 // Bulk ticket edit form
                 <>
+                  {/* Read-only fields */}
                   <div className="space-y-2">
-                    <Label htmlFor="editBulkTicketName">Bulk Ticket Name</Label>
+                    <Label>Bulk Ticket Name</Label>
                     <Input
-                      id="editBulkTicketName"
                       value={editFormData.BulkTicketName || editFormData.TicketName || ""}
-                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketName: e.target.value, TicketName: e.target.value }))}
+                      disabled
+                      className="bg-muted"
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4">
+                  {/* Editable fields - Only Price and Quantity */}
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="editBulkTicketPrice">Price (₹)</Label>
+                      <Label htmlFor="editBulkTicketPrice">Price (₹) *</Label>
                       <Input
                         id="editBulkTicketPrice"
                         type="number"
                         value={editFormData.BulkTicketPrice || editFormData.Price || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
+                        className="border-primary"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="editBulkMinQuantity">Min Quantity</Label>
+                      <Label htmlFor="editBulkQuantity">Quantity *</Label>
                       <Input
-                        id="editBulkMinQuantity"
+                        id="editBulkQuantity"
                         type="number"
+                        value={editFormData.BulkTicketQuantity || editFormData.Quantity || ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0 }))}
+                        className="border-primary"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Read-only fields */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Min Quantity Per Transaction</Label>
+                      <Input
                         value={editFormData.MinBulkTicketPerTransaction || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, MinBulkTicketPerTransaction: parseInt(e.target.value) || 0 }))}
+                        disabled
+                        className="bg-muted"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="editBulkMaxQuantity">Max Quantity</Label>
+                      <Label>Max Quantity Per Transaction</Label>
                       <Input
-                        id="editBulkMaxQuantity"
-                        type="number"
                         value={editFormData.MaxBulkTicketPerTransaction || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, MaxBulkTicketPerTransaction: parseInt(e.target.value) || 0 }))}
+                        disabled
+                        className="bg-muted"
                       />
                     </div>
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    * Only Price and Quantity fields can be edited
                   </div>
                 </>
               )}
