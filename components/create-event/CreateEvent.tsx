@@ -490,7 +490,7 @@ export default function CreateEvent({
         eventname: existingEventData.EventName || existingEventData.eventName || "",
         eventDescription: existingEventData.EventDescription || existingEventData.eventDescription || "",
         eventTermsandConditions: existingEventData.EventTermsCondition || existingEventData.eventTermsCondition || "",
-        eventVideoUrl: existingEventData.EventVideoUrl || existingEventData.eventVideoUrl || "",
+        eventVideoUrl: existingEventData.EventVedioUrl || existingEventData.eventVideoUrl || "",
         eventVisibility: existingEventData.EventVisibility ? existingEventData.EventVisibility.toString() : "1",
         eventType: existingEventData.EventType ? existingEventData.EventType.toString() : "1",
         bookingphonenumber: existingEventData.BookingPhoneNumber || existingEventData.bookingPhoneNumber || "",
@@ -1327,7 +1327,7 @@ export default function CreateEvent({
 
       // Add conditional fields only if they have values
       // Always append video URL even if empty (backend expects this field)
-      submitData.append("EventVideoUrl", values.eventVideoUrl?.trim() || "")
+      submitData.append("EventVedioUrl", values.eventVideoUrl?.trim() || "")
 
       if (values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
         submitData.append("BookingPhoneNumber", values.bookingphonenumber.trim())

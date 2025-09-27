@@ -15,7 +15,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   MoreHorizontal,
   PlusCircle,
@@ -132,6 +131,13 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [showOrganizerPopup, setShowOrganizerPopup] = React.useState(false)
   const [selectedOrganizerData, setSelectedOrganizerData] = React.useState<any>(null)
 
+  // Filter options data state
+  const [filterCities, setFilterCities] = React.useState<string[]>([])
+  const [filterOrganizers, setFilterOrganizers] = React.useState<{id: string, name: string}[]>([])
+  const [filterVenues, setFilterVenues] = React.useState<{id: string, name: string}[]>([])
+  const [filterPromoters, setFilterPromoters] = React.useState<{id: string, name: string}[]>([])
+  const [filterOptionsLoading, setFilterOptionsLoading] = React.useState(false)
+
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
     if (typeof status === "number") {
@@ -145,25 +151,151 @@ export default function EventsPage({ params }: EventsPageProps) {
     return event.EventIsEnableOrDisable === 2
   }
 
-  // Helper functions to get unique filter options
-  const getUniqueCities = (): string[] => {
-    const cities = originalData.map(event => event.city).filter(Boolean)
-    return [...new Set(cities)].sort()
+  // API functions to fetch filter options
+  const fetchFilterCities = async () => {
+    try {
+      const response = await fetch('https://node.eventingclub.in/events/getAllEventCities', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getValidToken()}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Cities API response:', data)
+        const citiesData = data.data || data || []
+        if (citiesData.length > 0) {
+          console.log('First city object keys:', Object.keys(citiesData[0]))
+          console.log('First city object:', citiesData[0])
+        }
+        // Extract CityName from the API response structure
+        const cities = citiesData.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
+        console.log('Extracted cities:', cities)
+        setFilterCities([...new Set(cities)].sort())
+      }
+    } catch (error) {
+      console.error('Error fetching cities:', error)
+      // Fallback to local data
+      const cities = originalData.map(event => event.city).filter(Boolean)
+      setFilterCities([...new Set(cities)].sort())
+    }
   }
 
-  const getUniqueVenues = (): string[] => {
-    const venues = originalData.map(event => event.venueName).filter(Boolean)
-    return [...new Set(venues)].sort()
+  const fetchFilterOrganizers = async () => {
+    try {
+      const response = await fetch('https://node.eventingclub.in/organizer/getAll', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getValidToken()}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Organizers API response:', data)
+        const organizers = (data.data || data || []).map((org: any) => {
+          console.log('Organizer object keys:', Object.keys(org))
+          return {
+            id: org._id || org.id,
+            name: org.CompanyName || org.FullName || org.Name || org.OrganizerName || org.name || 'Unknown Organizer'
+          }
+        })
+        console.log('Mapped organizers:', organizers)
+        setFilterOrganizers(organizers)
+      }
+    } catch (error) {
+      console.error('Error fetching organizers:', error)
+      // Fallback to local data
+      const organizers = originalData.map(event => ({
+        id: event.organizerId || event._id,
+        name: event.organizerName || 'Unknown Organizer'
+      })).filter(org => org.name && org.name !== 'Unknown Organizer')
+      setFilterOrganizers([...new Map(organizers.map(org => [org.id, org])).values()])
+    }
   }
 
-  const getUniqueOrganizers = (): string[] => {
-    const organizers = originalData.map(event => event.organizerName).filter(Boolean)
-    return [...new Set(organizers)].sort()
+  const fetchFilterVenues = async () => {
+    try {
+      const response = await fetch('https://node.eventingclub.in/venue/getall', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getValidToken()}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Venues API response:', data)
+        const venues = (data.data || data || []).map((venue: any) => {
+          console.log('Venue object keys:', Object.keys(venue))
+          return {
+            id: venue._id || venue.id,
+            name: venue.VenueName || venue.Name || venue.CompanyName || venue.venueName || venue.name || 'Unknown Venue'
+          }
+        })
+        console.log('Mapped venues:', venues)
+        setFilterVenues(venues)
+      }
+    } catch (error) {
+      console.error('Error fetching venues:', error)
+      // Fallback to local data
+      const venues = originalData.map(event => ({
+        id: event.venueId || event._id,
+        name: event.venueName || 'Unknown Venue'
+      })).filter(venue => venue.name && venue.name !== 'Unknown Venue')
+      setFilterVenues([...new Map(venues.map(venue => [venue.id, venue])).values()])
+    }
   }
 
-  const getUniquePromoters = (): string[] => {
-    const promoters = originalData.map(event => event.promoterName).filter(Boolean)
-    return [...new Set(promoters)].sort()
+  const fetchFilterPromoters = async () => {
+    try {
+      const response = await fetch('https://node.eventingclub.in/promoter/getAll', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getValidToken()}`
+        }
+      })
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Promoters API response:', data)
+        const promoters = (data.data || data || []).map((promoter: any) => {
+          console.log('Promoter object keys:', Object.keys(promoter))
+          return {
+            id: promoter._id || promoter.id,
+            name: promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
+          }
+        })
+        console.log('Mapped promoters:', promoters)
+        setFilterPromoters(promoters)
+      }
+    } catch (error) {
+      console.error('Error fetching promoters:', error)
+      // Fallback to local data
+      const promoters = originalData.map(event => ({
+        id: event.promoterId || event._id,
+        name: event.promoterName || 'Unknown Promoter'
+      })).filter(promoter => promoter.name && promoter.name !== 'Unknown Promoter')
+      setFilterPromoters([...new Map(promoters.map(promoter => [promoter.id, promoter])).values()])
+    }
+  }
+
+  // Function to fetch all filter options
+  const fetchAllFilterOptions = async () => {
+    setFilterOptionsLoading(true)
+    try {
+      await Promise.all([
+        fetchFilterCities(),
+        fetchFilterOrganizers(),
+        fetchFilterVenues(),
+        fetchFilterPromoters()
+      ])
+    } catch (error) {
+      console.error('Error fetching filter options:', error)
+    } finally {
+      setFilterOptionsLoading(false)
+    }
   }
   // Helper function to normalize events data
   const normalizeEventsData = (events: any[]): any[] => {
@@ -360,9 +492,9 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
         console.log("Admin paginated payload JSON:", JSON.stringify(requestPayload))
-        console.log("🔍 CRITICAL: Final user_id in payload:", requestPayload.user_id)
+        console.log(" CRITICAL: Final user_id in payload:", requestPayload.user_id)
         console.log("🔍 CRITICAL: Expected user_id should be:", "99095128-0c68-4aad-adf4-089b47502925")
-        console.log("🔍 CRITICAL: User ID matches expected?:", requestPayload.user_id === "99095128-0c68-4aad-adf4-089b47502925")
+        console.log(" CRITICAL: User ID matches expected?:", requestPayload.user_id === "99095128-0c68-4aad-adf4-089b47502925")
       }
 
       console.log("Fetching events for role:", role)
@@ -720,6 +852,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Initial data fetch
   React.useEffect(() => {
     getAllEventData(activeTab)
+    fetchAllFilterOptions()
   }, [])
   // Filter events based on filters (no tab filtering since we fetch specific data per tab)
   const filteredEvents = React.useMemo(() => {
@@ -732,17 +865,29 @@ export default function EventsPage({ params }: EventsPageProps) {
 
     // Apply venue filter
     if (selectedVenue && selectedVenue !== "__all__") {
-      events = events.filter(event => event.venueName === selectedVenue)
+      const selectedVenueData = filterVenues.find(venue => venue.id === selectedVenue)
+      events = events.filter(event => 
+        event.venueName === selectedVenueData?.name || 
+        event.venueId === selectedVenue
+      )
     }
 
     // Apply organizer filter
     if (selectedOrganizer && selectedOrganizer !== "__all__") {
-      events = events.filter(event => event.organizerName === selectedOrganizer)
+      const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === selectedOrganizer)
+      events = events.filter(event => 
+        event.organizerName === selectedOrganizerData?.name ||
+        event.organizerId === selectedOrganizer
+      )
     }
 
     // Apply promoter filter
     if (selectedPromoter && selectedPromoter !== "__all__") {
-      events = events.filter(event => event.promoterName === selectedPromoter)
+      const selectedPromoterData = filterPromoters.find(promoter => promoter.id === selectedPromoter)
+      events = events.filter(event => 
+        event.promoterName === selectedPromoterData?.name ||
+        event.promoterId === selectedPromoter
+      )
     }
 
     // Apply date range filter (for table view)
@@ -1282,13 +1427,20 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <>
                         {/* City Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedCity} onValueChange={setSelectedCity}>
+                          <Select value={selectedCity} onValueChange={setSelectedCity} disabled={filterOptionsLoading}>
                             <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              <SelectValue placeholder="🏙️ Select City" />
+                              {filterOptionsLoading ? (
+                                <div className="flex items-center">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </div>
+                              ) : (
+                                <SelectValue placeholder="🏙️ Select City" />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__all__">All Cities</SelectItem>
-                              {getUniqueCities().map((city) => (
+                              {filterCities.map((city) => (
                                 <SelectItem key={city} value={city}>
                                   {city}
                                 </SelectItem>
@@ -1299,15 +1451,22 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                         {/* Venue Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedVenue} onValueChange={setSelectedVenue}>
+                          <Select value={selectedVenue} onValueChange={setSelectedVenue} disabled={filterOptionsLoading}>
                             <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              <SelectValue placeholder="🏢 Select Venue" />
+                              {filterOptionsLoading ? (
+                                <div className="flex items-center">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </div>
+                              ) : (
+                                <SelectValue placeholder="🏢 Select Venue" />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__all__">All Venues</SelectItem>
-                              {getUniqueVenues().map((venue) => (
-                                <SelectItem key={venue} value={venue}>
-                                  {venue}
+                              {filterVenues.map((venue) => (
+                                <SelectItem key={venue.id} value={venue.id}>
+                                  {venue.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1316,15 +1475,22 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                         {/* Organizer Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer}>
+                          <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer} disabled={filterOptionsLoading}>
                             <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              <SelectValue placeholder="👨‍💼 Select Organizer" />
+                              {filterOptionsLoading ? (
+                                <div className="flex items-center">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </div>
+                              ) : (
+                                <SelectValue placeholder="👨‍💼 Select Organizer" />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__all__">All Organizers</SelectItem>
-                              {getUniqueOrganizers().map((organizer) => (
-                                <SelectItem key={organizer} value={organizer}>
-                                  {organizer}
+                              {filterOrganizers.map((organizer) => (
+                                <SelectItem key={organizer.id} value={organizer.id}>
+                                  {organizer.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1333,15 +1499,22 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                         {/* Promoter Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedPromoter} onValueChange={setSelectedPromoter}>
+                          <Select value={selectedPromoter} onValueChange={setSelectedPromoter} disabled={filterOptionsLoading}>
                             <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              <SelectValue placeholder="📢 Select Promoter" />
+                              {filterOptionsLoading ? (
+                                <div className="flex items-center">
+                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  Loading...
+                                </div>
+                              ) : (
+                                <SelectValue placeholder="📢 Select Promoter" />
+                              )}
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__all__">All Promoters</SelectItem>
-                              {getUniquePromoters().map((promoter) => (
-                                <SelectItem key={promoter} value={promoter}>
-                                  {promoter}
+                              {filterPromoters.map((promoter) => (
+                                <SelectItem key={promoter.id} value={promoter.id}>
+                                  {promoter.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -1400,14 +1573,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                       </Button>
                     )}
                     
-                    {/* Export Button */}
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all whitespace-nowrap"
-                    >
-                      <Download className="mr-2 h-4 w-4" /> Export
-                    </Button>
+      
+              
                   </div>
                 </div>
               </div>
@@ -1458,19 +1625,19 @@ export default function EventsPage({ params }: EventsPageProps) {
                   )}
                   {selectedVenue && selectedVenue !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Venue: {selectedVenue}
+                      Venue: {filterVenues.find(v => v.id === selectedVenue)?.name || selectedVenue}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedVenue("__all__")} />
                     </Badge>
                   )}
                   {selectedOrganizer && selectedOrganizer !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Organizer: {selectedOrganizer}
+                      Organizer: {filterOrganizers.find(o => o.id === selectedOrganizer)?.name || selectedOrganizer}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedOrganizer("__all__")} />
                     </Badge>
                   )}
                   {selectedPromoter && selectedPromoter !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Promoter: {selectedPromoter}
+                      Promoter: {filterPromoters.find(p => p.id === selectedPromoter)?.name || selectedPromoter}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedPromoter("__all__")} />
                     </Badge>
                   )}
