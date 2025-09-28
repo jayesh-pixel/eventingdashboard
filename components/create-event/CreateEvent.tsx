@@ -590,8 +590,7 @@ export default function CreateEvent({
   // API utility function
   const getApiEndpoint = (endpoint: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
-    const prefix = role === "superadmin" ? "" : "/api/organizer"
-    return `${baseUrl}${prefix}${endpoint}`
+    return `${baseUrl}${endpoint}`
   }
 
   // Fetch all required data on component mount
