@@ -1327,7 +1327,9 @@ export default function CreateEvent({
 
       // Add conditional fields only if they have values
       // Always append video URL even if empty (backend expects this field)
-      submitData.append("EventVedioUrl", values.eventVideoUrl?.trim() || "")
+      if (values.eventVideoUrl && values.eventVideoUrl.trim()) {
+        submitData.append("EventVedioUrl", values.eventVideoUrl.trim())
+      }
 
       if (values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
         submitData.append("BookingPhoneNumber", values.bookingphonenumber.trim())
