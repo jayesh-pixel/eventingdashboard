@@ -40,7 +40,7 @@ import { venueEndPoint, getallcityDataEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
-import { formatDate } from "@/lib/utils"
+import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
@@ -271,15 +271,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body: JSON.stringify(body),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data: ApiResponse = await response.json()
-
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch venues")
-      }
+      const data: ApiResponse = await handleApiResponse(response)
 
       setVenues(data.data.VenueData || [])
       setTotalPages(data.data.totalPages || 1)
@@ -291,8 +283,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       setApiError("Could not fetch venues from server")
       
       toast({
-        title: "API Error",
-        description: "Could not fetch venues from server.",
+        title: "Error",
+        description: getApiErrorMessage(error, "Could not fetch venues from server."),
         variant: "destructive",
       })
     } finally {
@@ -368,18 +360,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       console.log("Create venue response status:", response.status)
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error("Create venue error response:", errorText)
-        throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`)
-      }
-
-      const result = await response.json()
+      const result = await handleApiResponse(response)
       console.log("Create venue response:", result)
-
-      if (result.error) {
-        throw new Error(result.message || "Failed to create venue")
-      }
 
       // Upload images if any selected
       if (selectedImages.length > 0 && result.data?.venue_id) {
@@ -398,7 +380,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       console.error("Create venue error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create venue",
+        description: getApiErrorMessage(error, "Failed to create venue"),
         variant: "destructive",
       })
     } finally {
@@ -452,15 +434,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body: JSON.stringify(payload),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (result.error) {
-        throw new Error(result.message || "Failed to update venue")
-      }
+      const result = await handleApiResponse(response)
 
       // Upload new images if any selected
       if (selectedImages.length > 0 && selectedVenue) {
@@ -480,7 +454,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       console.error("Update venue error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update venue",
+        description: getApiErrorMessage(error, "Failed to update venue"),
         variant: "destructive",
       })
     } finally {
@@ -511,15 +485,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body: JSON.stringify(payload),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-
-      if (result.error) {
-        throw new Error(result.message || "Failed to delete venue")
-      }
+      const result = await handleApiResponse(response)
 
       await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
 
@@ -531,7 +497,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       console.error("Delete venue error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete venue",
+        description: getApiErrorMessage(error, "Failed to delete venue"),
         variant: "destructive",
       })
     } finally {
@@ -646,7 +612,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       console.error("Image upload error:", error)
       toast({
         title: "Warning",
-        description: error instanceof Error ? error.message : "Some images failed to upload",
+        description: getApiErrorMessage(error, "Some images failed to upload"),
         variant: "destructive",
       })
       return false
@@ -674,27 +640,20 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`Failed to remove image: ${response.status}`)
-      }
-
-      const result = await response.json()
-      if (result.error) {
-        throw new Error(result.message || "Failed to remove image")
-      }
+      const result = await handleApiResponse(response)
 
       // Refresh venues to show updated images
       await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
 
       toast({
         title: "Success",
-        description: "Image removed successfully",
+        description: result.message || "Image removed successfully",
       })
     } catch (error) {
       console.error("Remove image error:", error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to remove image",
+        description: getApiErrorMessage(error, "Failed to remove image"),
         variant: "destructive",
       })
     }

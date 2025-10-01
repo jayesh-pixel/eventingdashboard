@@ -40,6 +40,7 @@ import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { useToast } from "@/hooks/use-toast"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 const statusColors = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -114,21 +115,22 @@ export default function ScannerUsersPage() {
         },        body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Events API Response:', data)
-        if (!data.error && data.data) {
-          setEvents(data.data)
-        } else {
-          console.warn('Events API returned error or no data:', data)
-          setEvents([])
-        }
+      const data = await handleApiResponse(response)
+      console.log('Events API Response:', data)
+      if (data.data) {
+        setEvents(data.data)
       } else {
-        console.error('Events API request failed:', response.status, response.statusText)
+        console.warn('Events API returned no data:', data)
         setEvents([])
       }
     } catch (error) {
       console.error("Error fetching events:", error)
+      setEvents([])
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch events"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingEvents(false)
     }
@@ -152,22 +154,22 @@ export default function ScannerUsersPage() {
         },
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Organizers API Response:', data)
-        if (!data.error && data.data) {
-          setOrganizers(data.data)
-        } else {
-          console.warn('Organizers API returned error or no data:', data)
-          setOrganizers([])
-        }
+      const data = await handleApiResponse(response)
+      console.log('Organizers API Response:', data)
+      if (data.data) {
+        setOrganizers(data.data)
       } else {
-        console.error('Organizers API request failed:', response.status, response.statusText)
+        console.warn('Organizers API returned no data:', data)
         setOrganizers([])
       }
     } catch (error) {
       console.error("Error fetching organizers:", error)
       setOrganizers([])
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch organizers"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingOrganizers(false)
     }
@@ -341,23 +343,19 @@ export default function ScannerUsersPage() {
         body: JSON.stringify(payload),
       })
 
-      const data = await response.json()
+      const data = await handleApiResponse(response)
 
-      if (response.ok && !data.error) {
-        toast({
-          title: "Success",
-          description: "Scanner user created successfully",
-        })
-        setIsCreateDialogOpen(false)
-        resetForm()
-        await fetchScannerUsers()
-      } else {
-        throw new Error(data.message || "Failed to create scanner user")
-      }
+      toast({
+        title: "Success",
+        description: "Scanner user created successfully",
+      })
+      setIsCreateDialogOpen(false)
+      resetForm()
+      await fetchScannerUsers()
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create scanner user",
+        description: getApiErrorMessage(error, "Failed to create scanner user"),
         variant: "destructive",
       })
     } finally {
@@ -391,23 +389,19 @@ export default function ScannerUsersPage() {
         body: JSON.stringify(payload),
       })
 
-      const data = await response.json()
+      const data = await handleApiResponse(response)
 
-      if (response.ok && !data.error) {
-        toast({
-          title: "Success",
-          description: "Scanner user updated successfully",
-        })
-        setIsEditDialogOpen(false)
-        resetForm()
-        await fetchScannerUsers()
-      } else {
-        throw new Error(data.message || "Failed to update scanner user")
-      }
+      toast({
+        title: "Success",
+        description: "Scanner user updated successfully",
+      })
+      setIsEditDialogOpen(false)
+      resetForm()
+      await fetchScannerUsers()
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to update scanner user",
+        description: getApiErrorMessage(error, "Failed to update scanner user"),
         variant: "destructive",
       })
     } finally {
@@ -434,21 +428,17 @@ export default function ScannerUsersPage() {
         body: JSON.stringify({ scanneruser_id: userId }),
       })
 
-      const data = await response.json()
+      const data = await handleApiResponse(response)
 
-      if (response.ok && !data.error) {
-        toast({
-          title: "Success",
-          description: `Scanner user ${currentStatus === 1 ? 'disabled' : 'enabled'} successfully`,
-        })
-        await fetchScannerUsers()
-      } else {
-        throw new Error(data.message || "Failed to update user status")
-      }
+      toast({
+        title: "Success",
+        description: `Scanner user ${currentStatus === 1 ? 'disabled' : 'enabled'} successfully`,
+      })
+      await fetchScannerUsers()
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to update user status",
+        description: getApiErrorMessage(error, "Failed to update user status"),
         variant: "destructive",
       })
     } finally {

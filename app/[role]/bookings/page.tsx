@@ -51,6 +51,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { BookingsTable } from "@/components/bookings-table"
 import {
   Pagination,
@@ -550,27 +551,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         return
       }
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await handleApiResponse(response)
       console.log("🎯 BOOKING API RESPONSE SUCCESS:")
       console.log("- Response status:", response.status)
       console.log("- Response size:", JSON.stringify(data).length, "characters")
       console.log("- Response keys:", Object.keys(data || {}))
-
-      // Some APIs respond with error flags but 200 status; treat these as no data
-      const hasErrorFlag = Boolean(
-        (data && (data.error === true || data.success === false || data.status === false)) ||
-        (data?.data && (data.data.error === true || data.data.success === false || data.data.status === false))
-      )
-      if (hasErrorFlag) {
-        console.warn("API returned an error flag – showing empty state")
-        setBookingsData([])
-        setOriginalData([])
-        return
-      }
 
       let bookingsArray = null
       
@@ -642,6 +627,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       }
     } catch (error) {
       console.error("Error fetching bookings:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch bookings"),
+        variant: "destructive",
+      })
       setBookingsData([])
       setOriginalData([])
     } finally {

@@ -13,6 +13,7 @@ import type { UserRole } from "@/lib/navigation"
 import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import {
   Pagination,
   PaginationContent,
@@ -206,15 +207,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result: PromotersApiResponse = await response.json()
-      
-      if (result.error) {
-        throw new Error(result.message || "Failed to fetch promoters")
-      }      // Handle paginated response structure
+      const result: PromotersApiResponse = await handleApiResponse(response)      // Handle paginated response structure
       if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
         const paginatedData = result.data as {
           PromoterData: Promoter[]  // Changed from PromotersData to PromoterData
@@ -238,12 +231,17 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
     } catch (error) {
       console.error("Error fetching promoters:", error)
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred"
+      const errorMessage = getApiErrorMessage(error, "Failed to load promoters")
       setApiError(errorMessage)
       setShowErrorDialog(true)
       setPromoters([])
       setTotalPages(1)
       setTotalPromoters(0)
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -476,22 +474,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify(payload),
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {        toast({
-          title: "Success",
-          description: "Promoter created successfully",
-        })
-        setShowCreateDialog(false)
-        resetForm()
-        await fetchPromoters(currentPage, debouncedSearchTerm)
-      } else {
-        throw new Error(result.message || "Failed to create promoter")
-      }
+      toast({
+        title: "Success",
+        description: "Promoter created successfully",
+      })
+      setShowCreateDialog(false)
+      resetForm()
+      await fetchPromoters(currentPage, debouncedSearchTerm)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create promoter",
+        description: getApiErrorMessage(error, "Failed to create promoter"),
         variant: "destructive",
       })
     } finally {
@@ -551,22 +546,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: formDataToSend,
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {        toast({
-          title: "Success",
-          description: "Promoter updated successfully",
-        })
-        setShowEditDialog(false)
-        setSelectedPromoter(null)
-        await fetchPromoters(currentPage, debouncedSearchTerm)
-      } else {
-        throw new Error(result.message || "Failed to update promoter")
-      }
+      toast({
+        title: "Success",
+        description: "Promoter updated successfully",
+      })
+      setShowEditDialog(false)
+      setSelectedPromoter(null)
+      await fetchPromoters(currentPage, debouncedSearchTerm)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to update promoter",
+        description: getApiErrorMessage(error, "Failed to update promoter"),
         variant: "destructive",
       })
     } finally {
@@ -599,22 +591,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         }),
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {        toast({
-          title: "Success",
-          description: `Promoter ${statusAction}d successfully`,
-        })
-        setShowStatusDialog(false)
-        setSelectedPromoter(null)
-        await fetchPromoters(currentPage, debouncedSearchTerm)
-      } else {
-        throw new Error(result.message || `Failed to ${statusAction} promoter`)
-      }
+      toast({
+        title: "Success",
+        description: `Promoter ${statusAction}d successfully`,
+      })
+      setShowStatusDialog(false)
+      setSelectedPromoter(null)
+      await fetchPromoters(currentPage, debouncedSearchTerm)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || `Failed to ${statusAction} promoter`,
+        description: getApiErrorMessage(error, `Failed to ${statusAction} promoter`),
         variant: "destructive",
       })
     } finally {
@@ -660,23 +649,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         }),
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {
-        toast({
-          title: "Success",
-          description: "Password reset successfully",
-        })
-        setShowPasswordResetDialog(false)
-        setSelectedPromoter(null)
-        setNewPassword("")
-      } else {
-        throw new Error(result.message || "Failed to reset password")
-      }
+      toast({
+        title: "Success",
+        description: "Password reset successfully",
+      })
+      setShowPasswordResetDialog(false)
+      setSelectedPromoter(null)
+      setNewPassword("")
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to reset password",
+        description: getApiErrorMessage(error, "Failed to reset password"),
         variant: "destructive",
       })
     } finally {

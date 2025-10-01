@@ -38,7 +38,7 @@ import { promocodeEndPoint, eventEndPoint, websiteCustomer } from "@/lib/api-end
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest, Customer } from "@/lib/types"
-import { formatDate } from "@/lib/utils"
+import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors: Record<number, string> = {
@@ -133,17 +133,9 @@ export default function PromocodesPage() {
         body: JSON.stringify(requestPayload),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await handleApiResponse(response)
       
       console.log("Events API Response:", data) // Debug log
-      
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch events")
-      }
 
       // Extract events from the paginated response - handle different response structures
       let eventsArray = []
@@ -167,7 +159,7 @@ export default function PromocodesPage() {
       console.error("Error fetching events:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch events for selection",
+        description: getApiErrorMessage(error, "Failed to fetch events for selection"),
         variant: "destructive",
       })
     } finally {
@@ -194,17 +186,9 @@ export default function PromocodesPage() {
         },
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await handleApiResponse(response)
       
       console.log("Customers API Response:", data) // Debug log
-      
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch customers")
-      }
 
       // Extract customers from the response - handle different response structures
       let customersArray = []
@@ -224,7 +208,7 @@ export default function PromocodesPage() {
       console.error("Error fetching customers:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch customers for selection",
+        description: getApiErrorMessage(error, "Failed to fetch customers for selection"),
         variant: "destructive",
       })
     } finally {
@@ -289,16 +273,8 @@ export default function PromocodesPage() {
         body: JSON.stringify(body),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data: PromocodesApiResponse = await response.json()
+      const data: PromocodesApiResponse = await handleApiResponse(response)
       
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch promocodes")
-      }
-
       setPromocodes(data.data.PromocodeData || [])
       setTotalPages(data.data.totalPages || 1)
       setCurrentPage(data.data.currentPage || 1)
@@ -306,9 +282,14 @@ export default function PromocodesPage() {
       
     } catch (error) {
       console.error("Error fetching promocodes:", error)
-      const errorMessage = error instanceof Error ? error.message : "Failed to fetch promocodes"
+      const errorMessage = getApiErrorMessage(error, "Failed to fetch promocodes")
       setApiError(errorMessage)
       setShowErrorDialog(true)
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
       setPromocodes([])
       setTotalPages(1)
       setTotalPromocodes(0)
@@ -451,23 +432,19 @@ export default function PromocodesPage() {
         body: JSON.stringify(requestData),
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {
-        toast({
-          title: "Success",
-          description: "Promocode created successfully",
-        })
-        setIsCreateDialogOpen(false)
-        resetForm()
-        await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
-      } else {
-        throw new Error(result.message || "Failed to create promocode")
-      }
+      toast({
+        title: "Success",
+        description: result.message || "Promocode created successfully",
+      })
+      setIsCreateDialogOpen(false)
+      resetForm()
+      await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to create promocode",
+        description: getApiErrorMessage(error, "Failed to create promocode"),
         variant: "destructive",
       })
     } finally {
@@ -601,21 +578,17 @@ export default function PromocodesPage() {
         }),
       })
 
-      const result = await response.json()
+      const result = await handleApiResponse(response)
 
-      if (response.ok && !result.error) {
-        toast({
-          title: "Success",
-          description: `Promocode ${action}d successfully`,
-        })
-        await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
-      } else {
-        throw new Error(result.message || `Failed to ${action} promocode`)
-      }
+      toast({
+        title: "Success",
+        description: result.message || `Promocode ${action}d successfully`,
+      })
+      await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || `Failed to ${action} promocode`,
+        description: getApiErrorMessage(error, `Failed to ${action} promocode`),
         variant: "destructive",
       })
     } finally {

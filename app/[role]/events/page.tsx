@@ -56,6 +56,7 @@ import { getNumericAdminRole, getStringEventStatus, EventStatus } from "@/lib/ap
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getValidToken } from "@/lib/token-utils"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import PromoterEventCard from "@/components/create-event/promotereventcard"
 import AddPromoterAndShow from "@/components/add-promoter-and-show"
 import MultipleOrganizersDisplay from "@/components/multiple-organizers-display"
@@ -161,21 +162,28 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
       })
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Cities API response:', data)
-        const citiesData = data.data || data || []
-        if (citiesData.length > 0) {
-          console.log('First city object keys:', Object.keys(citiesData[0]))
-          console.log('First city object:', citiesData[0])
-        }
-        // Extract CityName from the API response structure
-        const cities = citiesData.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
-        console.log('Extracted cities:', cities)
-        setFilterCities([...new Set(cities)].sort())
+      if (!response.ok) {
+        throw new Error(`Failed to fetch cities: ${response.status} ${response.statusText}`)
       }
+
+      const data = await response.json()
+      console.log('Cities API response:', data)
+      const citiesData = data.data || data || []
+      if (citiesData.length > 0) {
+        console.log('First city object keys:', Object.keys(citiesData[0]))
+        console.log('First city object:', citiesData[0])
+      }
+      // Extract CityName from the API response structure
+      const cities = citiesData.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
+      console.log('Extracted cities:', cities)
+      setFilterCities([...new Set(cities)].sort())
     } catch (error) {
       console.error('Error fetching cities:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch cities filter",
+        variant: "destructive",
+      })
       // Fallback to local data
       const cities = originalData.map(event => event.city).filter(Boolean)
       setFilterCities([...new Set(cities)].sort())
@@ -191,21 +199,28 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
       })
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Organizers API response:', data)
-        const organizers = (data.data || data || []).map((org: any) => {
-          console.log('Organizer object keys:', Object.keys(org))
-          return {
-            id: org._id || org.id,
-            name: org.CompanyName || org.FullName || org.Name || org.OrganizerName || org.name || 'Unknown Organizer'
-          }
-        })
-        console.log('Mapped organizers:', organizers)
-        setFilterOrganizers(organizers)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch organizers: ${response.status} ${response.statusText}`)
       }
+
+      const data = await response.json()
+      console.log('Organizers API response:', data)
+      const organizers = (data.data || data || []).map((org: any) => {
+        console.log('Organizer object keys:', Object.keys(org))
+        return {
+          id: org._id || org.id,
+          name: org.CompanyName || org.FullName || org.Name || org.OrganizerName || org.name || 'Unknown Organizer'
+        }
+      })
+      console.log('Mapped organizers:', organizers)
+      setFilterOrganizers(organizers)
     } catch (error) {
       console.error('Error fetching organizers:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch organizers filter",
+        variant: "destructive",
+      })
       // Fallback to local data
       const organizers = originalData.map(event => ({
         id: event.organizerId || event._id,
@@ -224,21 +239,28 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
       })
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Venues API response:', data)
-        const venues = (data.data || data || []).map((venue: any) => {
-          console.log('Venue object keys:', Object.keys(venue))
-          return {
-            id: venue._id || venue.id,
-            name: venue.VenueName || venue.Name || venue.CompanyName || venue.venueName || venue.name || 'Unknown Venue'
-          }
-        })
-        console.log('Mapped venues:', venues)
-        setFilterVenues(venues)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch venues: ${response.status} ${response.statusText}`)
       }
+
+      const data = await response.json()
+      console.log('Venues API response:', data)
+      const venues = (data.data || data || []).map((venue: any) => {
+        console.log('Venue object keys:', Object.keys(venue))
+        return {
+          id: venue._id || venue.id,
+          name: venue.VenueName || venue.Name || venue.CompanyName || venue.venueName || venue.name || 'Unknown Venue'
+        }
+      })
+      console.log('Mapped venues:', venues)
+      setFilterVenues(venues)
     } catch (error) {
       console.error('Error fetching venues:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch venues filter",
+        variant: "destructive",
+      })
       // Fallback to local data
       const venues = originalData.map(event => ({
         id: event.venueId || event._id,
@@ -257,21 +279,28 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
       })
       
-      if (response.ok) {
-        const data = await response.json()
-        console.log('Promoters API response:', data)
-        const promoters = (data.data || data || []).map((promoter: any) => {
-          console.log('Promoter object keys:', Object.keys(promoter))
-          return {
-            id: promoter._id || promoter.id,
-            name: promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
-          }
-        })
-        console.log('Mapped promoters:', promoters)
-        setFilterPromoters(promoters)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch promoters: ${response.status} ${response.statusText}`)
       }
+
+      const data = await response.json()
+      console.log('Promoters API response:', data)
+      const promoters = (data.data || data || []).map((promoter: any) => {
+        console.log('Promoter object keys:', Object.keys(promoter))
+        return {
+          id: promoter._id || promoter.id,
+          name: promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
+        }
+      })
+      console.log('Mapped promoters:', promoters)
+      setFilterPromoters(promoters)
     } catch (error) {
       console.error('Error fetching promoters:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch promoters filter",
+        variant: "destructive",
+      })
       // Fallback to local data
       const promoters = originalData.map(event => ({
         id: event.promoterId || event._id,
@@ -710,19 +739,16 @@ export default function EventsPage({ params }: EventsPageProps) {
         body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const eventsArray = data.data || []
-        const normalizedEvents = normalizeEventsData(eventsArray)
-        setAllEventsData(normalizedEvents)
-      } else {
-        setAllEventsData([])
-      }
+      const data = await handleApiResponse(response)
+      const eventsArray = data.data || []
+      const normalizedEvents = normalizeEventsData(eventsArray)
+      setAllEventsData(normalizedEvents)
     } catch (error) {
       console.error("Search error:", error)
+      setAllEventsData([])
       toast({
         title: "Error",
-        description: "Failed to search events",
+        description: getApiErrorMessage(error, "Failed to search events"),
         variant: "destructive",
       })
     } finally {

@@ -38,6 +38,7 @@ import type { UserRole } from "@/lib/navigation"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
@@ -342,14 +343,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
-      }      const data: PaginatedOrganizersResponse = await response.json()
-      console.log("Organizers API response:", data)
-
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch organizers")
-      }      // Defensive programming - handle different response structures
+      const data: PaginatedOrganizersResponse = await handleApiResponse(response)
+      console.log("Organizers API response:", data)      // Defensive programming - handle different response structures
       if (!data.data) {        console.warn("No data in API response:", data)
         setOrganizers([])
         setCurrentPage(1)
@@ -397,21 +392,18 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     } catch (error) {
       console.error("Error fetching organizers:", error)
       
-      // Extract meaningful error message
-      let errorMessage = "Failed to load organizers"
-
-
-      if (error instanceof Error) {
-        errorMessage = error.message
-      } else if (typeof error === 'string') {
-        errorMessage = error
-      }
+      const errorMessage = getApiErrorMessage(error, "Failed to load organizers")
       
       setApiError(errorMessage)
       setOrganizers([])
       setCurrentPage(1)
       setTotalPages(1)
       setTotalOrganizers(0)
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -449,14 +441,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
-      if (!response.ok) {
-        throw new Error(`Search API error: ${response.status}`)
-      }      const data: PaginatedOrganizersResponse = await response.json()
-      console.log("Search response:", data)
-
-      if (data.error) {
-        throw new Error(data.message || "Search failed")
-      }      // Defensive programming - handle different response structures
+      const data: PaginatedOrganizersResponse = await handleApiResponse(response)
+      console.log("Search response:", data)      // Defensive programming - handle different response structures
       if (!data.data) {
         console.warn("No data in search response:", data)
         setOrganizers([])
@@ -502,8 +488,14 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       setApiError(null)
     } catch (error) {
       console.error("Error searching organizers:", error)
-      setApiError("Search failed. Please try again.")
+      const errorMessage = getApiErrorMessage(error, "Search failed. Please try again.")
+      setApiError(errorMessage)
       setOrganizers([])
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }

@@ -39,6 +39,7 @@ import type { UserRole } from "@/lib/navigation"
 import { categorieEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 interface CategoriesPageProps {
   params: { role: UserRole }
@@ -193,16 +194,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
 
       console.log("Response status:", response.status)
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data: ApiResponse = await response.json()
+      const data: ApiResponse = await handleApiResponse(response)
       console.log("Categories API response:", data)
-
-      if (data.error) {
-        throw new Error(data.message || "Failed to fetch categories")
-      }
 
       // Set the data from API
       setCategories(data.data.CategoryData || [])
@@ -214,6 +207,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     } catch (error) {
       console.error("Categories fetch failed:", error)
       setApiError("Could not fetch categories from server")
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch categories"),
+        variant: "destructive",
+      })
       
       // Fall back to mock data
       setCategories(mockCategories)
@@ -368,10 +366,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
           body: formData,
         })
 
-        const data = await response.json()
-        if (data.error) {
-          throw new Error(data.message || "Failed to upload image")
-        }
+        await handleApiResponse(response)
       }
 
       toast({
@@ -386,7 +381,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.error("Image upload failed:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to upload images. Please try again.",
+        description: getApiErrorMessage(error, "Failed to upload images. Please try again."),
         variant: "destructive",
       })
     } finally {
@@ -419,15 +414,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         }),
       })
 
-      const data = await response.json()
-
-      if (data.error) {
-        throw new Error(data.message || "Failed to remove image")
-      }
+      const data = await handleApiResponse(response)
 
       toast({
         title: "Success",
-        description: "Image removed successfully!",
+        description: data.message || "Image removed successfully!",
       })
 
       // Update editFormData by removing the deleted image
@@ -443,7 +434,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.error("Image removal failed:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to remove image. Please try again.",
+        description: getApiErrorMessage(error, "Failed to remove image. Please try again."),
         variant: "destructive",
       })
     }
@@ -521,13 +512,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         body: formDataToSend,
       })
 
-      const data = await response.json()
+      const data = await handleApiResponse(response)
 
-      if (data.error) {
-        throw new Error(data.message || "Failed to create category")
-      }      toast({
+      toast({
         title: "Success",
-        description: "Category created successfully!",
+        description: data.message || "Category created successfully!",
       })
 
       setIsCreateDialogOpen(false)
@@ -541,7 +530,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.error("Category creation failed:", error)
       toast({
         title: "Error",
-        description: error.message || "Failed to create category. Please try again.",
+        description: getApiErrorMessage(error, "Failed to create category. Please try again."),
         variant: "destructive",
       })
     } finally {
@@ -593,13 +582,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         }),
       })
 
-      const data = await response.json()
+      const data = await handleApiResponse(response)
 
-      if (data.error) {
-        throw new Error(data.message || "Failed to update category")
-      }      toast({
+      toast({
         title: "Success",
-        description: "Category updated successfully!",
+        description: data.message || "Category updated successfully!",
       })
 
       // Upload new images if any selected
@@ -617,7 +604,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update category",
+        description: getApiErrorMessage(error, "Failed to update category"),
         variant: "destructive",
       })
     } finally {
@@ -649,15 +636,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         }),
       })
 
-      const data = await response.json()
-
-      if (data.error) {
-        throw new Error(data.message || "Failed to delete category")
-      }
+      const data = await handleApiResponse(response)
 
       toast({
         title: "Success",
-        description: "Category deleted successfully!",
+        description: data.message || "Category deleted successfully!",
       })
       
       // Refresh the categories list
@@ -666,7 +649,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to delete category. Please try again.",
+        description: getApiErrorMessage(error, "Failed to delete category. Please try again."),
         variant: "destructive",
       })
     } finally {
