@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { UserRole } from "@/lib/navigation"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { 
   createVenueOption, 
@@ -560,18 +561,19 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const venueOptions = data.data.map((venue: any) => ({
-          value: venue._id || venue.id,
-          label: venue.Name || "Unnamed Venue"
-        }))
-        setVenues([...venueOptions, createVenueOption])
-      } else {
-        console.error("Failed to fetch venues:", response.status, response.statusText)
-      }
+      const data = await handleApiResponse(response)
+      const venueOptions = data.data.map((venue: any) => ({
+        value: venue._id || venue.id,
+        label: venue.Name || "Unnamed Venue"
+      }))
+      setVenues([...venueOptions, createVenueOption])
     } catch (error) {
       console.error("Error fetching venues:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch venues"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingVenues(false)
     }
@@ -586,20 +588,23 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const organizerOptions = data.data.map((organizer: any) => {
-          const label =  organizer.Username || organizer.FullName || organizer.Name || "Unnamed Organizer"
-          console.log(`Organizer: ${organizer._id}, CompanyName: ${organizer.CompanyName}, Username: ${organizer.Username}, FullName: ${organizer.FullName}, Selected Label: ${label}`)
-          return {
-            value: organizer._id || organizer.id,
-            label: label
-          }
-        })
-        setOrganizers([...organizerOptions, createOrganizerOption])
-      }
+      const data = await handleApiResponse(response)
+      const organizerOptions = data.data.map((organizer: any) => {
+        const label =  organizer.Username || organizer.FullName || organizer.Name || "Unnamed Organizer"
+        console.log(`Organizer: ${organizer._id}, CompanyName: ${organizer.CompanyName}, Username: ${organizer.Username}, FullName: ${organizer.FullName}, Selected Label: ${label}`)
+        return {
+          value: organizer._id || organizer.id,
+          label: label
+        }
+      })
+      setOrganizers([...organizerOptions, createOrganizerOption])
     } catch (error) {
       console.error("Error fetching organizers:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch organizers"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingOrganizers(false)
     }
@@ -615,16 +620,19 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const categoryOptions = data.data.map((category: any) => ({
-          value: category._id || category.id,
-          label: category.Name || "Unnamed Category"
-        }))
-        setCategories([...categoryOptions, createCategoryOption])
-      }
+      const data = await handleApiResponse(response)
+      const categoryOptions = data.data.map((category: any) => ({
+        value: category._id || category.id,
+        label: category.Name || "Unnamed Category"
+      }))
+      setCategories([...categoryOptions, createCategoryOption])
     } catch (error) {
       console.error("Error fetching categories:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch categories"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingCategories(false)
     }
@@ -640,16 +648,19 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const artistOptions = data.data.map((artist: any) => ({
-          value: artist._id || artist.id,
-          label: artist.Name || "Unnamed Artist"
-        }))
-        setArtists([...artistOptions, createArtistOption])
-      }
+      const data = await handleApiResponse(response)
+      const artistOptions = data.data.map((artist: any) => ({
+        value: artist._id || artist.id,
+        label: artist.Name || "Unnamed Artist"
+      }))
+      setArtists([...artistOptions, createArtistOption])
     } catch (error) {
       console.error("Error fetching artists:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch artists"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingArtists(false)
     }
@@ -665,16 +676,19 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const genreOptions = data.data.map((genre: any) => ({
-          value: genre._id || genre.id,
-          label: genre.Name || "Unnamed Genre"
-        }))
-        setGenres([...genreOptions, createGenreOption])
-      }
+      const data = await handleApiResponse(response)
+      const genreOptions = data.data.map((genre: any) => ({
+        value: genre._id || genre.id,
+        label: genre.Name || "Unnamed Genre"
+      }))
+      setGenres([...genreOptions, createGenreOption])
     } catch (error) {
       console.error("Error fetching genres:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch genres"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingGenres(false)
     }
@@ -690,16 +704,19 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const tourOptions = data.data.map((tour: any) => ({
-          value: tour._id || tour.id,
-          label: tour.Name || "Unnamed Tour"
-        }))
-        setEventTours([...tourOptions, createEventTourOption])
-      }
+      const data = await handleApiResponse(response)
+      const tourOptions = data.data.map((tour: any) => ({
+        value: tour._id || tour.id,
+        label: tour.Name || "Unnamed Tour"
+      }))
+      setEventTours([...tourOptions, createEventTourOption])
     } catch (error) {
       console.error("Error fetching event tours:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch event tours"),
+        variant: "destructive",
+      })
     } finally {
       setLoadingEventTours(false)
     }
@@ -1440,34 +1457,25 @@ export default function CreateEvent({
         body: submitData,
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        toast({
-          title: "Success",
-          description: data.message || (editMode ? "Event updated successfully" : "Event created successfully"),
-        })
-        setTimeout(() => {
-          if (editMode) {
-            // For edit mode, call the function directly (no parameters)
-            (setEventCreationModal as () => void)()
-          } else {
-            // For create mode, call with false parameter
-            (setEventCreationModal as (value: boolean) => void)(false)
-          }
-        }, 2000)
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || (editMode ? "Failed to update event" : "Failed to create event"),
-          variant: "destructive"
-        })
-      }
+      const data = await handleApiResponse(response)
+      toast({
+        title: "Success",
+        description: data.message || (editMode ? "Event updated successfully" : "Event created successfully"),
+      })
+      setTimeout(() => {
+        if (editMode) {
+          // For edit mode, call the function directly (no parameters)
+          (setEventCreationModal as () => void)()
+        } else {
+          // For create mode, call with false parameter
+          (setEventCreationModal as (value: boolean) => void)(false)
+        }
+      }, 2000)
     } catch (error) {
       console.error(`Error ${editMode ? 'updating' : 'creating'} event:`, error)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : (editMode ? "Failed to update event" : "Failed to create event"),
+        description: getApiErrorMessage(error, editMode ? "Failed to update event" : "Failed to create event"),
         variant: "destructive"
       })
     }
@@ -2932,38 +2940,29 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newVenue = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name
-                    }
-                      // Update venues list and select the new venue
-                    setVenues(prev => [newVenue, ...prev.filter(v => v.value !== createVenueOption.value)])
-                    if (formikSetFieldValue) {
-                      formikSetFieldValue("venue_id", newVenue.value)
-                    }
-                    
-                   
-                    toast({
-                      title: "Success",
-                      description: "Venue created successfully",
-                    })
-                    
-                    setShowCreateVenueModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create venue",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newVenue = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name
                   }
+                    // Update venues list and select the new venue
+                  setVenues(prev => [newVenue, ...prev.filter(v => v.value !== createVenueOption.value)])
+                  if (formikSetFieldValue) {
+                    formikSetFieldValue("venue_id", newVenue.value)
+                  }
+                  
+                 
+                  toast({
+                    title: "Success",
+                    description: "Venue created successfully",
+                  })
+                  
+                  setShowCreateVenueModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create venue",
+                    description: getApiErrorMessage(error, "Failed to create venue"),
                     variant: "destructive"
                   })
                 } finally {
@@ -3083,35 +3082,26 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newOrganizer = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name || data.data.organizerName
-                    }
-                    
-                    // Update organizers list
-                    setOrganizers(prev => [newOrganizer, ...prev.filter(o => o.value !== createOrganizerOption.value)])
-                    
-                    toast({
-                      title: "Success",
-                      description: "Organizer created successfully",
-                    })
-                    
-                    setShowCreateOrganizerModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create organizer",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newOrganizer = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name || data.data.organizerName
                   }
+                  
+                  // Update organizers list
+                  setOrganizers(prev => [newOrganizer, ...prev.filter(o => o.value !== createOrganizerOption.value)])
+                  
+                  toast({
+                    title: "Success",
+                    description: "Organizer created successfully",
+                  })
+                  
+                  setShowCreateOrganizerModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create organizer",
+                    description: getApiErrorMessage(error, "Failed to create organizer"),
                     variant: "destructive"
                   })
                 } finally {
@@ -3199,35 +3189,26 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newCategory = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name || data.data.categoryName
-                    }
-                    
-                    // Update categories list
-                    setCategories(prev => [newCategory, ...prev.filter(c => c.value !== createCategoryOption.value)])
-                    
-                    toast({
-                      title: "Success",
-                      description: "Category created successfully",
-                    })
-                    
-                    setShowCreateCategoryModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create category",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newCategory = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name || data.data.categoryName
                   }
+                  
+                  // Update categories list
+                  setCategories(prev => [newCategory, ...prev.filter(c => c.value !== createCategoryOption.value)])
+                  
+                  toast({
+                    title: "Success",
+                    description: "Category created successfully",
+                  })
+                  
+                  setShowCreateCategoryModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create category",
+                    description: getApiErrorMessage(error, "Failed to create category"),
                     variant: "destructive"
                   })
                 } finally {
@@ -3295,35 +3276,26 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newArtist = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name || data.data.artistName
-                    }
-                    
-                    // Update artists list
-                    setArtists(prev => [newArtist, ...prev.filter(a => a.value !== createArtistOption.value)])
-                    
-                    toast({
-                      title: "Success",
-                      description: "Artist created successfully",
-                    })
-                    
-                    setShowCreateArtistModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create artist",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newArtist = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name || data.data.artistName
                   }
+                  
+                  // Update artists list
+                  setArtists(prev => [newArtist, ...prev.filter(a => a.value !== createArtistOption.value)])
+                  
+                  toast({
+                    title: "Success",
+                    description: "Artist created successfully",
+                  })
+                  
+                  setShowCreateArtistModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create artist",
+                    description: getApiErrorMessage(error, "Failed to create artist"),
                     variant: "destructive"
                   })
                 } finally {
@@ -3403,35 +3375,26 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newGenre = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name || data.data.genreName
-                    }
-                    
-                    // Update genres list
-                    setGenres(prev => [newGenre, ...prev.filter(g => g.value !== createGenreOption.value)])
-                    
-                    toast({
-                      title: "Success",
-                      description: "Genre created successfully",
-                    })
-                    
-                    setShowCreateGenreModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create genre",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newGenre = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name || data.data.genreName
                   }
+                  
+                  // Update genres list
+                  setGenres(prev => [newGenre, ...prev.filter(g => g.value !== createGenreOption.value)])
+                  
+                  toast({
+                    title: "Success",
+                    description: "Genre created successfully",
+                  })
+                  
+                  setShowCreateGenreModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create genre",
+                    description: getApiErrorMessage(error, "Failed to create genre"),
                     variant: "destructive"
                   })
                 } finally {
@@ -3499,37 +3462,28 @@ export default function CreateEvent({
                     body: JSON.stringify(values)
                   })
 
-                  if (response.ok) {
-                    const data = await response.json()
-                    const newEventTour = {
-                      value: data.data._id || data.data.id,
-                      label: data.data.Name || data.data.name || data.data.tourName || data.data.title
-                    }
-                      // Update event tours list and select the new tour
-                    setEventTours(prev => [newEventTour, ...prev.filter(t => t.value !== createEventTourOption.value)])
-                    if (formikSetFieldValue) {
-                      formikSetFieldValue("eventTour_id", newEventTour.value)
-                    }
-                    
-                    toast({
-                      title: "Success",
-                      description: "Event tour created successfully",
-                    })
-                    
-                    setShowCreateEventTourModal(false)
-                    resetForm()
-                  } else {
-                    const errorData = await response.json()
-                    toast({
-                      title: "Error",
-                      description: errorData.message || "Failed to create event tour",
-                      variant: "destructive"
-                    })
+                  const data = await handleApiResponse(response)
+                  const newEventTour = {
+                    value: data.data._id || data.data.id,
+                    label: data.data.Name || data.data.name || data.data.tourName || data.data.title
                   }
+                    // Update event tours list and select the new tour
+                  setEventTours(prev => [newEventTour, ...prev.filter(t => t.value !== createEventTourOption.value)])
+                  if (formikSetFieldValue) {
+                    formikSetFieldValue("eventTour_id", newEventTour.value)
+                  }
+                  
+                  toast({
+                    title: "Success",
+                    description: "Event tour created successfully",
+                  })
+                  
+                  setShowCreateEventTourModal(false)
+                  resetForm()
                 } catch (error) {
                   toast({
                     title: "Error",
-                    description: "Failed to create event tour",
+                    description: getApiErrorMessage(error, "Failed to create event tour"),
                     variant: "destructive"
                   })
                 } finally {

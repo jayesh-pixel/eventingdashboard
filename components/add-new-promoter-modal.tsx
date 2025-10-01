@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { getValidToken } from "@/lib/token-utils"
 import { promoterEndpoint, eventEndPoint } from "@/lib/api-endpoints"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 interface PromoterData {
   _id: string
@@ -87,23 +88,14 @@ const AddNewPromoterModal = ({
         },
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        const allPromoterData = data.data || []
-        setApiAllPromoterData(allPromoterData)
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to fetch promoters",
-          variant: "destructive",
-        })
-      }
+      const data = await handleApiResponse(response)
+      const allPromoterData = data.data || []
+      setApiAllPromoterData(allPromoterData)
     } catch (error) {
       console.error("Error fetching promoters:", error)
       toast({
         title: "Error",
-        description: "Failed to fetch promoters",
+        description: getApiErrorMessage(error, "Failed to fetch promoters"),
         variant: "destructive",
       })
     } finally {
@@ -157,27 +149,18 @@ const AddNewPromoterModal = ({
         body: JSON.stringify(payload),
       })
 
-      if (response.ok) {
-        const data = await response.json()
-        onPromoterUpdate(data.data.EventPromoter)
-        onOpenChange(false)
-        toast({
-          title: "Success",
-          description: data.message || "Promoters updated successfully",
-        })
-      } else {
-        const errorData = await response.json()
-        toast({
-          title: "Error",
-          description: errorData.message || "Failed to update promoters",
-          variant: "destructive",
-        })
-      }
+      const data = await handleApiResponse(response)
+      onPromoterUpdate(data.data.EventPromoter)
+      onOpenChange(false)
+      toast({
+        title: "Success",
+        description: data.message || "Promoters updated successfully",
+      })
     } catch (error) {
       console.error("Error updating promoters:", error)
       toast({
         title: "Error",
-        description: "Failed to update promoters",
+        description: getApiErrorMessage(error, "Failed to update promoters"),
         variant: "destructive",
       })
     } finally {

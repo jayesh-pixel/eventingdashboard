@@ -3,6 +3,8 @@
 import * as React from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { useToast } from "@/hooks/use-toast"
 
 interface State {
   id: number
@@ -41,6 +43,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   const [stateData, setStateData] = React.useState<State[]>([])
   const [cityData, setCityData] = React.useState<City[]>([])
   const [loading, setLoading] = React.useState(false)
+  const { toast } = useToast()
 
   const API_KEY = "TUo5UThvYmNjckE0U294WmdzeFBtZmV4RzZlMUxhUHhTaG05TURVdQ=="
 
@@ -66,14 +69,15 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
         }
       )
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await handleApiResponse(response)
       setStateData(data)
     } catch (error) {
       console.error("Error fetching states:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch states"),
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
@@ -110,14 +114,15 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
         }
       )
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
+      const data = await handleApiResponse(response)
       setCityData(data)
     } catch (error) {
       console.error("Error fetching cities:", error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to fetch cities"),
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
