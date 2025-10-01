@@ -155,7 +155,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   const fetchFilterCities = async () => {
     try {
       const response = await fetch('https://node.eventingclub.in/events/getAllEventCities', {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
         }
@@ -489,6 +489,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           user_id: user.user_id,
           page: "1",
           limit: "10", // Get more events for better UX
+          ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm })
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
         console.log("Admin paginated payload JSON:", JSON.stringify(requestPayload))
@@ -1134,6 +1135,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[120px]">Organizer</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[140px]">Promoter</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Status</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Venue</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">City</TableHead>
@@ -1144,7 +1146,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               <TableBody>
                 {currentEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-16">
+                    <TableCell colSpan={12} className="text-center py-16">
                       <div className="space-y-6">
                         <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
                           <AlertCircle className="h-10 w-10 text-muted-foreground" />
@@ -1217,6 +1219,11 @@ export default function EventsPage({ params }: EventsPageProps) {
                         ) : (
                           event.promoterName || "N/A"
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
+                          {normalizeEventStatus(event.eventStatus)}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant={event.eventVisibility ? "default" : "secondary"}>

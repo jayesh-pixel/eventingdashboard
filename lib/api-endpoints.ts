@@ -103,7 +103,7 @@ export const organizerEndpoint = {
   GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS_BY_ORGANIZER: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
   GET_ALL_REJECTED_EVENTS_DATA_BY_ORGANIZER: BASE_URL + "/events/getRejectedEvents",
   ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/organizer/getpasswordresetlink",
-  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/resetPassword/",
+  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/changepassword",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
     BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:

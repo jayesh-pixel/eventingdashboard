@@ -31,7 +31,6 @@ import {
   createArtistOption, 
   createGenreOption, 
   createEventTourOption,
-  indianLanguages,
   yearsOptions 
 } from "./modal-data"
 import { 
@@ -48,97 +47,6 @@ import {
   ImagePlus,
   AlertCircle 
 } from "lucide-react"
-
-// Custom styles for react-select to support dark mode
-const getSelectStyles = () => {
-  // Get CSS custom properties at runtime to support theme switching
-  const getThemeColor = (property: string) => {
-    if (typeof window !== 'undefined') {
-      return getComputedStyle(document.documentElement).getPropertyValue(property).trim()
-    }
-    return ''
-  }
-
-  return {
-    control: (provided: any, state: any) => ({
-      ...provided,
-      backgroundColor: `hsl(${getThemeColor('--card')})`,
-      borderColor: `hsl(${getThemeColor('--border')})`,
-      color: `hsl(${getThemeColor('--foreground')})`,
-      '&:hover': {
-        borderColor: `hsl(${getThemeColor('--ring')})`,
-      },
-      boxShadow: state.isFocused ? `0 0 0 2px hsl(${getThemeColor('--ring')})` : 'none',
-      minHeight: '40px',
-    }),
-    menu: (provided: any) => ({
-      ...provided,
-      backgroundColor: `hsl(${getThemeColor('--popover')})`,
-      border: `1px solid hsl(${getThemeColor('--border')})`,
-      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    }),
-    option: (provided: any, state: any) => ({
-      ...provided,
-      backgroundColor: state.isSelected 
-        ? `hsl(${getThemeColor('--primary')})` 
-        : state.isFocused 
-        ? `hsl(${getThemeColor('--accent')})` 
-        : 'transparent',
-      color: state.isSelected 
-        ? `hsl(${getThemeColor('--primary-foreground')})` 
-        : `hsl(${getThemeColor('--popover-foreground')})`,
-      '&:hover': {
-        backgroundColor: `hsl(${getThemeColor('--accent')})`,
-        color: `hsl(${getThemeColor('--accent-foreground')})`,
-      },
-    }),
-    singleValue: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--foreground')})`,
-    }),
-    multiValue: (provided: any) => ({
-      ...provided,
-      backgroundColor: `hsl(${getThemeColor('--secondary')})`,
-      color: `hsl(${getThemeColor('--secondary-foreground')})`,
-    }),
-    multiValueLabel: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--secondary-foreground')})`,
-    }),
-    multiValueRemove: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--secondary-foreground')})`,
-      '&:hover': {
-        backgroundColor: `hsl(${getThemeColor('--destructive')})`,
-        color: `hsl(${getThemeColor('--destructive-foreground')})`,
-      },
-    }),
-    placeholder: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--muted-foreground')})`,
-    }),
-    input: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--foreground')})`,
-    }),
-    indicatorSeparator: (provided: any) => ({
-      ...provided,
-      backgroundColor: `hsl(${getThemeColor('--border')})`,
-    }),
-    dropdownIndicator: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--muted-foreground')})`,
-    }),
-    clearIndicator: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--muted-foreground')})`,
-    }),
-    loadingIndicator: (provided: any) => ({
-      ...provided,
-      color: `hsl(${getThemeColor('--muted-foreground')})`,
-    }),
-  }
-}
 
 // Remove the old ReactQuill import as we're using the wrapper
 
@@ -213,7 +121,7 @@ interface EventFormValues {
 
 // Validation Schema
 // Dynamic validation schema function
-const getEventValidationSchema = (eventSelectionFlag: number) => Yup.object().shape({
+const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string) => Yup.object().shape({
   eventname: Yup.string()
     .required("Event name is required")
     .min(3, "Event name must be at least 3 characters"),
@@ -283,8 +191,9 @@ const getEventValidationSchema = (eventSelectionFlag: number) => Yup.object().sh
     }),
   
   
-  organizers: Yup.array()
-    .min(1, "At least one organizer is required"),
+  organizers: userRole === "organizer" 
+    ? Yup.array() // No minimum requirement for organizer role users
+    : Yup.array().min(1, "At least one organizer is required"),
   
   categories: Yup.array()
     .min(1, "At least one category is required"),
@@ -324,6 +233,7 @@ export default function CreateEvent({
 }: CreateEventProps) {
   const { user } = useAuth()
   const { toast } = useToast()
+  const isOrganizer = role === "organizer"
 
   // State for external data
   const [venues, setVenues] = React.useState<SelectOption[]>([])
@@ -332,7 +242,7 @@ export default function CreateEvent({
   const [artists, setArtists] = React.useState<SelectOption[]>([])
   const [genres, setGenres] = React.useState<SelectOption[]>([])
   const [eventTours, setEventTours] = React.useState<SelectOption[]>([])
-  const [indianLanguages, setIndianLanguages] = React.useState<SelectOption[]>([])
+  const [languageOptions, setLanguageOptions] = React.useState<SelectOption[]>([])
   const [states, setStates] = React.useState<SelectOption[]>([])
   const [cities, setCities] = React.useState<SelectOption[]>([])
 
@@ -407,11 +317,26 @@ export default function CreateEvent({
         return null
       }
 
+      // Use UTC methods to avoid timezone offset issues
+      const formatDateUTC = (date: Date) => {
+        const year = date.getUTCFullYear()
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const day = String(date.getUTCDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      }
+
+      const formatTimeUTC = (date: Date) => {
+        const hours = String(date.getUTCHours()).padStart(2, '0')
+        const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+        const seconds = String(date.getUTCSeconds()).padStart(2, '0')
+        return `${hours}:${minutes}:${seconds}`
+      }
+
       return {
-        EventStartDate: startDate.toISOString().split('T')[0],
-        EventStartTime: startDate.toTimeString().slice(0, 8), // Include seconds in format HH:MM:SS
-        EventEndDate: endDate.toISOString().split('T')[0],
-        EventEndTime: endDate.toTimeString().slice(0, 8) // Include seconds in format HH:MM:SS
+        EventStartDate: formatDateUTC(startDate),
+        EventStartTime: formatTimeUTC(startDate),
+        EventEndDate: formatDateUTC(endDate),
+        EventEndTime: formatTimeUTC(endDate)
       }
     }).filter(Boolean) as EventDateTime[] // Remove any null entries from invalid dates
   }
@@ -451,7 +376,7 @@ export default function CreateEvent({
       'Assamese': 'as'
     }
 
-    const transformed = existingLanguages.map((lang: any) => {
+  const transformed = existingLanguages.map((lang: any) => {
       let langString = ''
       
       if (typeof lang === 'string') {
@@ -461,7 +386,7 @@ export default function CreateEvent({
       }
 
       // Try to find by name first
-      const langOption = indianLanguages.find(option => 
+  const langOption = languageOptions.find(option => 
         option.label === langString || 
         option.value === langString ||
         option.value === languageMapping[langString]
@@ -476,7 +401,7 @@ export default function CreateEvent({
       }
     }).filter(Boolean) as SelectOption[]
 
-    // console.log('🔄 transformExistingLanguageData result:', transformed)
+  // console.log('🔄 transformExistingLanguageData result:', transformed)
     return transformed
   }
 
@@ -529,41 +454,40 @@ export default function CreateEvent({
       //   'events length': initialValues.events?.length
       // })
       
-      // console.log("✅ Initial values with populated multi-selects:", {
-      //   organizers: initialValues.organizers.length,
-      //   categories: initialValues.categories.length,
-      //   artists: initialValues.artists.length,
-      //   genres: initialValues.genres.length,
-      //   languages: initialValues.languages.length,
-      //   details: initialValues
-      // })
-      // console.log("📋 Raw data for multi-select matching:", {
-      //   'Raw Organizers': existingEventData.EventOrganizers || existingEventData.eventOrganizers,
-      //   'Raw Categories': existingEventData.EventCategories || existingEventData.eventCategories, 
-      //   'Raw Artists': existingEventData.EventArtist || existingEventData.eventArtists,
-      //   'Raw Genres': existingEventData.EventGenre || existingEventData.eventGenres,
-      //   'Raw Languages': existingEventData.EventLanguages || existingEventData.eventLanguages,
-      //   'Options availability': {
-      //     organizers: organizers.length,
-      //     categories: categories.length,
-      //     artists: artists.length,
-      //     genres: genres.length,
-      //     languages: indianLanguages.length
-      //   }
-      // })
+  // console.log("✅ Initial values with populated multi-selects:", {
+  //   organizers: initialValues.organizers.length,
+  //   categories: initialValues.categories.length,
+  //   artists: initialValues.artists.length,
+  //   genres: initialValues.genres.length,
+  //   languages: initialValues.languages.length,
+  //   details: initialValues
+  // })
+  // console.log("📋 Raw data for multi-select matching:", {
+  //   'Raw Organizers': existingEventData.EventOrganizers || existingEventData.eventOrganizers,
+  //   'Raw Categories': existingEventData.EventCategories || existingEventData.eventCategories, 
+  //   'Raw Artists': existingEventData.EventArtist || existingEventData.eventArtists,
+  //   'Raw Genres': existingEventData.EventGenre || existingEventData.eventGenres,
+  //   'Raw Languages': existingEventData.EventLanguages || existingEventData.eventLanguages,
+  //   'Options availability': {
+  //     organizers: organizers.length,
+  //     categories: categories.length,
+  //     artists: artists.length,
+  //     genres: genres.length,
+  //     languages: languageOptions.length
+  //   }
+  // })
       return initialValues
     }
     
-    // console.log("🆕 Using default values for create mode")
     // Default values for create mode
-    return {
+    const defaultValues: EventFormValues = {
       eventname: "",
       eventDescription: "",
       eventTermsandConditions: "",
       eventVideoUrl: "",
       eventVisibility: "",
       eventType: "1",
-      bookingphonenumber: "",
+      bookingphonenumber: isOrganizer ? "9730589111" : "",
       whatsappnumber: "",
       locationType: "",
       venue_id: "",
@@ -585,6 +509,25 @@ export default function CreateEvent({
       events: [],
       faqs: []
     }
+
+    // Auto-set organizer for organizer role users
+    if (role === "organizer" && user?.user_id) {
+      const currentOrganizerOption = organizers.find(org => org.value === user.user_id)
+      if (currentOrganizerOption) {
+        defaultValues.organizers = [currentOrganizerOption]
+        console.log("🎯 Auto-setting organizer for organizer role:", currentOrganizerOption)
+      } else if (user?.Username) {
+        // Fallback: create organizer option from current user data
+        const fallbackOrganizer = {
+          value: user.user_id,
+          label: user.Username
+        }
+        defaultValues.organizers = [fallbackOrganizer]
+        console.log("🎯 Auto-setting organizer with fallback data:", fallbackOrganizer)
+      }
+    }
+
+    return defaultValues
   }
 
   // API utility function
@@ -806,7 +749,7 @@ export default function CreateEvent({
         { value: "or", label: "Odia" },
         { value: "as", label: "Assamese" }
       ]
-      setIndianLanguages(languages)
+  setLanguageOptions(languages)
     } catch (error) {
       console.error("Error fetching languages:", error)
     } finally {
@@ -1239,7 +1182,8 @@ export default function CreateEvent({
       setFieldValue(fieldName, filteredOptions || [])
     } else {
       setFieldValue(fieldName, selectedOptions || [])
-    }  }
+    }
+  }
 
   // Form submission handler
   const handleSubmit = async (values: EventFormValues, eventStatus: number) => {
@@ -1315,6 +1259,7 @@ export default function CreateEvent({
 
       // Add form data using the exact field names required by the API
       submitData.append("EventName", values.eventname || "")
+      submitData.append("eventNameSearchKeyword", values.eventname || "") // Add search keyword field
       submitData.append("EventDescription", values.eventDescription || "")
       submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
       submitData.append("EventVisibility", values.eventVisibility || "1")
@@ -1529,7 +1474,7 @@ export default function CreateEvent({
   }
   
   // Custom styles for react-select to support dark mode
-  const getSelectStyles = () => {
+  const getSelectStyles = (): any => {
     // Get CSS custom properties at runtime to support theme switching
     const getThemeColor = (property: string) => {
       if (typeof window !== 'undefined') {
@@ -1642,13 +1587,13 @@ export default function CreateEvent({
         </Card>
 
       <Formik
-        key={`${organizers.length}-${categories.length}-${artists.length}-${genres.length}-${indianLanguages.length}`}
+        key={`${organizers.length}-${categories.length}-${artists.length}-${genres.length}-${languageOptions.length}`}
         initialValues={React.useMemo(() => getInitialValues(), [
           editMode, existingEventData,
-          organizers.length, categories.length, artists.length, genres.length, indianLanguages.length
+          organizers.length, categories.length, artists.length, genres.length, languageOptions.length
         ])}
         enableReinitialize={true} // Re-initialize when existingEventData changes
-        validationSchema={getEventValidationSchema(eventSelectionFlag ?? 0)}
+        validationSchema={getEventValidationSchema(eventSelectionFlag ?? 0, role)}
         onSubmit={() => {}} // We handle submission manually through buttons
       >
         {({ values, errors, touched, setFieldValue, setFieldTouched }: FormikProps<EventFormValues>) => {
@@ -1676,7 +1621,7 @@ export default function CreateEvent({
               categoriesLength: categories.length,
               artistsLength: artists.length,
               genresLength: genres.length,
-              languagesLength: indianLanguages.length,
+              languagesLength: languageOptions.length,
               eventToursLength: eventTours.length,
               eventSelectionFlag
             })
@@ -1694,14 +1639,14 @@ export default function CreateEvent({
             console.log("🔄 ALL OPTIONS LOADED - Populating multi-select fields with existing data...")
             
             // Wait for ALL option arrays to load before proceeding
-            if (organizers.length === 0 || categories.length === 0 || 
-                artists.length === 0 || genres.length === 0 || indianLanguages.length === 0) {
+      if (organizers.length === 0 || categories.length === 0 || 
+        artists.length === 0 || genres.length === 0 || languageOptions.length === 0) {
               console.log("⏳ Waiting for options to load:", {
                 organizers: organizers.length,
                 categories: categories.length,
                 artists: artists.length,
                 genres: genres.length,
-                languages: indianLanguages.length,
+                languages: languageOptions.length,
                 eventTours: eventTours.length
               })
               return
@@ -1824,7 +1769,7 @@ export default function CreateEvent({
               return isMatch
             })
             
-            const selectedLanguages = indianLanguages.filter(l => {
+            const selectedLanguages = languageOptions.filter(l => {
               const isMatch = languageIds.includes(l.value)
               console.log(`Language ${l.value} (${l.label}): ${isMatch ? 'MATCH' : 'NO MATCH'}`)
               return isMatch
@@ -1873,7 +1818,7 @@ export default function CreateEvent({
             categories.length, 
             artists.length, 
             genres.length,
-            indianLanguages.length,
+            languageOptions.length,
             eventTours.length,
             setFieldValue
           ])
@@ -1915,10 +1860,183 @@ export default function CreateEvent({
           }, [values.organizers, values.categories, values.artists, values.genres, values.languages])
 
           return (
-          <Form>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Form>
+              <div className={`grid grid-cols-1 gap-6 ${isOrganizer ? "" : "lg:grid-cols-2"}`}>
               {/* Left Column */}
               <div className="space-y-6">
+                {/* Event Configuration */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Configuration</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Event Visibility */}
+                    <div className="space-y-3">
+                      <Label className="text-base font-semibold">Event Visibility <span className="text-red-500">*</span></Label>
+                      <div className="flex space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <Field
+                            type="radio"
+                            name="eventVisibility"
+                            value="1"
+                            className="w-4 h-4"
+                          />
+                          <Label>Public (Online/Offline)</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Field
+                            type="radio"
+                            name="eventVisibility"
+                            value="2"
+                            className="w-4 h-4"
+                          />
+                          <Label>Private (Offline Only)</Label>
+                        </div>
+                      </div>
+                      {touched.eventVisibility && errors.eventVisibility && (
+                        <p className="text-sm text-red-600">{errors.eventVisibility}</p>
+                      )}
+                    </div>
+
+                    {/* Event Type - Hidden for organizers, defaulted to Booking */}
+                    {!isOrganizer && (
+                      <div className="space-y-3">
+                        <Label className="text-base font-semibold">Event Type <span className="text-red-500">*</span></Label>
+                        <div className="flex space-x-4">
+                          <div className="flex items-center space-x-2">
+                            <Field
+                              type="radio"
+                              name="eventType"
+                              value="1"
+                              className="w-4 h-4"
+                            />
+                            <Label>Booking</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Field
+                              type="radio"
+                              name="eventType"
+                              value="2"
+                              className="w-4 h-4"
+                            />
+                            <Label>Registration</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Field
+                              type="radio"
+                              name="eventType"
+                              value="3"
+                              className="w-4 h-4"
+                            />
+                            <Label>Free</Label>
+                          </div>
+                        </div>
+                        {touched.eventType && errors.eventType && (
+                          <p className="text-sm text-red-600">{errors.eventType}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Booking Phone Number - Only for Booking type, editable for SuperAdmin */}
+                    {values.eventType === "1" && (
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">Booking Phone Number <span className="text-red-500">*</span></Label>
+                        <Field
+                          as={Input}
+                          name="bookingphonenumber"
+                          type="tel"
+                          placeholder="Enter booking phone number"
+                          disabled={isOrganizer}
+                        />
+                        {isOrganizer && (
+                          <p className="text-xs text-muted-foreground">Default booking number set by admin</p>
+                        )}
+                        {touched.bookingphonenumber && errors.bookingphonenumber && (
+                          <p className="text-sm text-red-600">{errors.bookingphonenumber}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* WhatsApp Number - Only for Free type */}
+                    {values.eventType === "3" && (
+                      <div className="space-y-2">
+                        <Label className="text-base font-semibold">WhatsApp Number <span className="text-red-500">*</span></Label>
+                        <Field
+                          as={Input}
+                          name="whatsappnumber"
+                          type="tel"
+                          placeholder="Enter WhatsApp number"
+                        />
+                        {touched.whatsappnumber && errors.whatsappnumber && (
+                          <p className="text-sm text-red-600">{errors.whatsappnumber}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Featured Event Toggle - Hidden for organizers */}
+                    {!isOrganizer && (
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          checked={values.isFeatured}
+                          onCheckedChange={(checked) => setFieldValue("isFeatured", checked)}
+                        />
+                        <Label>Mark as Featured Event</Label>
+                      </div>
+                    )}
+
+                    {/* Age Restriction */}
+                    <div className="space-y-2">
+                      <Label className="text-base font-semibold">Age Restriction <span className="text-red-500">*</span></Label>
+                      <Select
+                        options={yearsOptions}
+                        value={yearsOptions.find(option => option.value === values.ageRestriction)}
+                        onChange={(selected) => setFieldValue("ageRestriction", selected?.value || "")}
+                        placeholder="Select age group..."
+                        className="basic-single"
+                        classNamePrefix="select"
+                        styles={getSelectStyles()}
+                      />
+                      {touched.ageRestriction && errors.ageRestriction && (
+                        <p className="text-sm text-red-600">{errors.ageRestriction}</p>
+                      )}
+                    </div>
+
+                    {/* Convenience Fee - Hidden for organizers, only SuperAdmin can set */}
+                    {!isOrganizer && (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
+                          <UISelect
+                            value={values.feeunit.toString()}
+                            onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
+                              <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
+                            </SelectContent>
+                          </UISelect>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
+                          <Field
+                            as={Input}
+                            name="feevalue"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Enter fee value"
+                          />
+                          {touched.feevalue && errors.feevalue && (
+                            <p className="text-sm text-red-600">{errors.feevalue}</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
                 {/* Carousel Images Upload Section */}
                 <Card>
                   <CardHeader>
@@ -2047,272 +2165,116 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Organizers Selection */}
-                <Card>
-                  <CardHeader>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>Select organizers</Label>
-                      <Select
-                        isMulti
-                        options={organizers}
-                        value={values.organizers}
-                        onChange={(selected) => handleSelectChange(selected, "organizers", setFieldValue)}
-                        placeholder="Select "
-                        isLoading={loadingOrganizers}
-                        className="basic-multi-select"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />{touched.organizers && errors.organizers && (
-                        <p className="text-sm text-red-600">{String(errors.organizers)}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                {/* Organizers Selection - Hidden for organizer role */}
+                {role !== "organizer" ? (
+                  <Card>
+                    <CardHeader>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <Label>Select organizers <span className="text-red-500">*</span></Label>
+                        <Select
+                          isMulti
+                          options={organizers}
+                          value={values.organizers}
+                          onChange={(selected) => handleSelectChange(selected, "organizers", setFieldValue)}
+                          placeholder="Select "
+                          isLoading={loadingOrganizers}
+                          className="basic-multi-select"
+                          classNamePrefix="select"
+                          styles={getSelectStyles()}
+                        />{touched.organizers && errors.organizers && (
+                          <p className="text-sm text-red-600">{String(errors.organizers)}</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Event Organizer</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-primary">
+                                {values.organizers[0]?.label?.charAt(0) || user?.Username?.charAt(0) || 'O'}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm">
+                                {values.organizers[0]?.label || user?.Username || 'Current Organizer'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                You are the organizer for this event
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
-                {/* Categories Selection */}
+                {/* Location & Venue */}
                 <Card>
                   <CardHeader>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>Select categories</Label>
-                      <Select                        isMulti
-                        options={categories}
-                        value={values.categories}
-                        onChange={(selected) => handleSelectChange(selected, "categories", setFieldValue)}
-                        placeholder="Select "
-                        isLoading={loadingCategories}
-                        className="basic-multi-select"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />{touched.categories && errors.categories && (
-                        <p className="text-sm text-red-600">{String(errors.categories)}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Artists Selection */}
-                <Card>
-                  <CardHeader>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>Select artists</Label>
-                      <Select                        isMulti
-                        options={artists}
-                        value={values.artists}
-                        onChange={(selected) => handleSelectChange(selected, "artists", setFieldValue)}
-                        placeholder="Select "
-                        isLoading={loadingArtists}
-                        className="basic-multi-select"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />                      {touched.artists && errors.artists && (
-                        <p className="text-sm text-red-600">{String(errors.artists)}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Genres Selection */}
-                <Card>
-                  <CardHeader>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>Select genres</Label>
-                      <Select
-                        isMulti
-                        options={genres}
-                        value={values.genres}
-                        onChange={(selected) => handleSelectChange(selected, "genres", setFieldValue)}
-                        placeholder="Select "
-                        isLoading={loadingGenres}
-                        className="basic-multi-select"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />{touched.genres && errors.genres && (
-                        <p className="text-sm text-red-600">{String(errors.genres)}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Languages Selection */}
-                <Card>
-                  <CardHeader>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      <Label>Select languages</Label>
-                      <Select
-                        isMulti
-                        options={indianLanguages}
-                        value={values.languages}
-                        onChange={(selected) => setFieldValue("languages", selected || [])}
-                        placeholder="Select "
-                        isLoading={loadingLanguages}
-                        className="basic-multi-select"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />                      {touched.languages && errors.languages && (
-                        <p className="text-sm text-red-600">{String(errors.languages)}</p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Event Configuration */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Configuration</CardTitle>
+                    <CardTitle>Location & Venue</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Event Visibility */}
+                    {/* Location Type */}
                     <div className="space-y-3">
-                      <Label className="text-base font-semibold">Event Visibility *</Label>
+                      <Label className="text-base font-semibold">Location Type <span className="text-red-500">*</span></Label>
                       <div className="flex space-x-4">
                         <div className="flex items-center space-x-2">
                           <Field
                             type="radio"
-                            name="eventVisibility"
-                            value="1"
+                            name="locationType"
+                            value="venue"
                             className="w-4 h-4"
                           />
-                          <Label>Public (Online/Offline)</Label>
+                          <Label>Physical Venue</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Field
                             type="radio"
-                            name="eventVisibility"
-                            value="2"
+                            name="locationType"
+                            value="online"
                             className="w-4 h-4"
                           />
-                          <Label>Private (Offline Only)</Label>
-                        </div>
-                      </div>
-                      {touched.eventVisibility && errors.eventVisibility && (
-                        <p className="text-sm text-red-600">{errors.eventVisibility}</p>
-                      )}
-                    </div>
-
-                    {/* Event Type */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-semibold">Event Type *</Label>
-                      <div className="flex space-x-4">
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventType"
-                            value="1"
-                            className="w-4 h-4"
-                          />
-                          <Label>Booking</Label>
+                          <Label>Online Event</Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Field
                             type="radio"
-                            name="eventType"
-                            value="2"
+                            name="locationType"
+                            value="tba"
                             className="w-4 h-4"
                           />
-                          <Label>Registration</Label>
+                          <Label>To be announced</Label>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventType"
-                            value="3"
-                            className="w-4 h-4"
-                          />
-                          <Label>WhatsApp</Label>
-                        </div>
-                      </div>
-                      {touched.eventType && errors.eventType && (
-                        <p className="text-sm text-red-600">{errors.eventType}</p>
-                      )}
-
-                      {/* Conditional phone number input */}
-                      {values.eventType === "1" && (
-                        <div className="space-y-2">
-                          <Label>Booking Phone Number *</Label>
-                          <Field
-                            as={Input}
-                            name="bookingphonenumber"
-                            type="tel"
-                            placeholder="Enter 10-digit phone number"
-                          />
-                          {touched.bookingphonenumber && errors.bookingphonenumber && (
-                            <p className="text-sm text-red-600">{errors.bookingphonenumber}</p>
-                          )}
-                        </div>
-                      )}
-
-                      {values.eventType === "3" && (
-                        <div className="space-y-2">
-                          <Label>WhatsApp Number *</Label>
-                          <Field
-                            as={Input}
-                            name="whatsappnumber"
-                            type="tel"
-                            placeholder="Enter 10-digit WhatsApp number"
-                          />
-                          {touched.whatsappnumber && errors.whatsappnumber && (
-                            <p className="text-sm text-red-600">{errors.whatsappnumber}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>                    {/* Location */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-semibold">Location Type *</Label>
-                      <div className="flex space-x-2">
-                        <Button
-                          type="button"
-                          variant={values.locationType === "venue" ? "default" : "outline"}
-                          onClick={() => setFieldValue("locationType", "venue")}
-                          className="flex-1"
-                        >
-                          Venue
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={values.locationType === "online" ? "default" : "outline"}
-                          onClick={() => setFieldValue("locationType", "online")}
-                          className="flex-1"
-                        >
-                          Online Event
-                        </Button>
-                        <Button
-                          type="button"
-                          variant={values.locationType === "tba" ? "default" : "outline"}
-                          onClick={() => setFieldValue("locationType", "tba")}
-                          className="flex-1"
-                        >
-                          To Be Announced
-                        </Button>
                       </div>
                       {touched.locationType && errors.locationType && (
                         <p className="text-sm text-red-600">{errors.locationType}</p>
                       )}
 
-                      {/* Conditional location inputs */}
                       {values.locationType === "venue" && (
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label>Select Venue *</Label>
+                            <Label>Select Venue <span className="text-red-500">*</span></Label>
                             <Select
                               options={venues}
-                              value={venues.find(v => v.value === values.venue_id)}                              onChange={(selected) => {
-                                if (selected?.value === "CREATE_NEW_VENUE") {
+                              value={venues.find(v => v.value === values.venue_id)}
+                              onChange={(selected) => {
+                                if (selected?.value === 'create-new-venue') {
                                   setShowCreateVenueModal(true)
                                 } else {
                                   setFieldValue("venue_id", selected?.value || "")
                                 }
                               }}
-                              placeholder="Select "
+                              placeholder="Select venue..."
                               isLoading={loadingVenues}
                               className="basic-single"
                               classNamePrefix="select"
@@ -2360,7 +2322,7 @@ export default function CreateEvent({
 
                       {values.locationType === "online" && (
                         <div className="space-y-2">
-                          <Label>Online Event URL *</Label>
+                          <Label>Online Event URL <span className="text-red-500">*</span></Label>
                           <Field
                             as={Input}
                             name="onlineEventUrl"
@@ -2381,7 +2343,7 @@ export default function CreateEvent({
                           
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <Label>State *</Label>
+                              <Label>State <span className="text-red-500">*</span></Label>
                               <Select
                                 options={states}
                                 value={states.find(s => s.value === values.stateIsoCode)}
@@ -2404,7 +2366,7 @@ export default function CreateEvent({
                             </div>
 
                             <div className="space-y-2">
-                              <Label>City *</Label>
+                              <Label>City <span className="text-red-500">*</span></Label>
                               <Select
                                 options={cities}
                                 value={cities.find(c => c.value === values.cityIsoCode)}
@@ -2427,55 +2389,101 @@ export default function CreateEvent({
                         </div>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
 
-                    {/* Age Restriction */}
+                {/* Categories Selection */}
+                <Card>
+                  
+                  <CardContent>
                     <div className="space-y-2">
-                      <Label className="text-base font-semibold">Age Restriction *</Label>
+                      <Label>Select categories <span className="text-red-500">*</span></Label>
                       <Select
-                        options={yearsOptions}
-                        value={yearsOptions.find(option => option.value === values.ageRestriction)}
-                        onChange={(selected) => setFieldValue("ageRestriction", selected?.value || "")}
-                        placeholder="Select age group..."
-                        className="basic-single"
+                        isMulti
+                        options={categories}
+                        value={values.categories}
+                        onChange={(selected) => handleSelectChange(selected, "categories", setFieldValue)}
+                        placeholder="Select categories"
+                        isLoading={loadingCategories}
+                        className="basic-multi-select"
                         classNamePrefix="select"
                         styles={getSelectStyles()}
                       />
-                      {touched.ageRestriction && errors.ageRestriction && (
-                        <p className="text-sm text-red-600">{errors.ageRestriction}</p>
+                      {touched.categories && errors.categories && (
+                        <p className="text-sm text-red-600">{String(errors.categories)}</p>
                       )}
                     </div>
+                  </CardContent>
+                </Card>
 
-                    {/* Convenience Fee */}
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label>Convenience Fee Unit *</Label>
-                        <UISelect
-                          value={values.feeunit.toString()}
-                          onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
-                        >
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
-                            <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
-                          </SelectContent>
-                        </UISelect>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Convenience Fee Value *</Label>
-                        <Field
-                          as={Input}
-                          name="feevalue"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="Enter fee value"
-                        />
-                        {touched.feevalue && errors.feevalue && (
-                          <p className="text-sm text-red-600">{errors.feevalue}</p>
-                        )}
-                      </div>
+                {/* Artists Selection */}
+                <Card>
+                 
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label>Select artists <span className="text-red-500">*</span></Label>
+                      <Select
+                        isMulti
+                        options={artists}
+                        value={values.artists}
+                        onChange={(selected) => handleSelectChange(selected, "artists", setFieldValue)}
+                        placeholder="Select artists"
+                        isLoading={loadingArtists}
+                        className="basic-multi-select"
+                        classNamePrefix="select"
+                        styles={getSelectStyles()}
+                      />
+                      {touched.artists && errors.artists && (
+                        <p className="text-sm text-red-600">{String(errors.artists)}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Genres Selection */}
+                <Card>
+             
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label>Select genres <span className="text-red-500">*</span></Label>
+                      <Select
+                        isMulti
+                        options={genres}
+                        value={values.genres}
+                        onChange={(selected) => handleSelectChange(selected, "genres", setFieldValue)}
+                        placeholder="Select genres"
+                        isLoading={loadingGenres}
+                        className="basic-multi-select"
+                        classNamePrefix="select"
+                        styles={getSelectStyles()}
+                      />
+                      {touched.genres && errors.genres && (
+                        <p className="text-sm text-red-600">{String(errors.genres)}</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Languages Selection */}
+                <Card>
+              
+                  <CardContent>
+                    <div className="space-y-2">
+                      <Label>Select languages <span className="text-red-500">*</span></Label>
+                      <Select
+                        isMulti
+                        options={languageOptions}
+                        value={values.languages}
+                        onChange={(selected) => setFieldValue("languages", selected || [])}
+                        placeholder="Select languages"
+                        isLoading={loadingLanguages}
+                        className="basic-multi-select"
+                        classNamePrefix="select"
+                        styles={getSelectStyles()}
+                      />
+                      {touched.languages && errors.languages && (
+                        <p className="text-sm text-red-600">{String(errors.languages)}</p>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -2490,7 +2498,7 @@ export default function CreateEvent({
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
-                      <Label className="text-base font-semibold"> Name *</Label>
+                      <Label className="text-base font-semibold">Name <span className="text-red-500">*</span></Label>
                       <Field
                         as={Input}
                         name="eventname"
@@ -2500,7 +2508,7 @@ export default function CreateEvent({
                         <p className="text-sm text-red-600">{errors.eventname}</p>
                       )}
                     </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Description *</Label>
+                      <Label className="text-base font-semibold">Description <span className="text-red-500">*</span></Label>
                       <ReactQuillWrapper
                         value={values.eventDescription}
                         onChange={(content) => setFieldValue("eventDescription", content)}
@@ -2512,7 +2520,7 @@ export default function CreateEvent({
                         <p className="text-sm text-red-600">{errors.eventDescription}</p>
                       )}
                     </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Terms and Conditions *</Label>
+                      <Label className="text-base font-semibold">Terms and Conditions <span className="text-red-500">*</span></Label>
                       <ReactQuillWrapper
                         value={values.eventTermsandConditions}
                         onChange={(content) => setFieldValue("eventTermsandConditions", content)}
@@ -2599,7 +2607,7 @@ export default function CreateEvent({
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
-                      <span>Date & Time *</span>
+                      <span>Date & Time <span className="text-red-500">*</span></span>
                       {editingEventIndex !== null && (
                         <span className="text-sm bg-primary text-primary-foreground px-2 py-1 rounded">
                           Editing Event #{editingEventIndex + 1}
@@ -2616,7 +2624,7 @@ export default function CreateEvent({
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Start Date</Label>
+                        <Label>Start Date <span className="text-red-500">*</span></Label>
                         <Input
                           type="date"
                           min={formattedDate}
@@ -2625,7 +2633,7 @@ export default function CreateEvent({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>Start Time</Label>
+                        <Label>Start Time <span className="text-red-500">*</span></Label>
                         <Input
                           type="time"
                           value={tempEventDate.startTime}
@@ -2633,7 +2641,7 @@ export default function CreateEvent({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>End Date</Label>
+                        <Label>End Date <span className="text-red-500">*</span></Label>
                         <Input
                           type="date"
                           min={tempEventDate.startDate || formattedDate}
@@ -2642,7 +2650,7 @@ export default function CreateEvent({
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label>End Time</Label>
+                        <Label>End Time <span className="text-red-500">*</span></Label>
                         <Input
                           type="time"
                           value={tempEventDate.endTime}
@@ -3575,11 +3583,7 @@ export default function CreateEvent({
           </DialogContent>
         </Dialog>
       )}
+      </div>
     </div>
-        </div>
-
-
   )
 }
-
-

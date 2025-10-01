@@ -856,16 +856,25 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }).format(amount)
   }
 
-  const formatDate = (date: Date | string | number) => {
+  const formatDate = (date: Date | string | number | null | undefined) => {
+    if (!date || date === '' || date === 'Invalid Date') return "N/A"
+    
     const dateObj = parseDate(date)
     if (!dateObj) return "N/A"
-    return dateObj.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    
+    try {
+      return dateObj.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+    } catch (error) {
+      console.warn('Error formatting date:', date, error)
+      return "N/A"
+    }
   }
 
   const getStatusBadgeVariant = (status: string) => {
@@ -883,33 +892,51 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   // Helper to parse both ISO and DD-MM-YYYY HH:mm:ss formats
-  function parseDate(date: string | number | Date): Date | null {
-    if (!date) return null
-    if (typeof date === "string") {
-      // Check for DD-MM-YYYY HH:mm:ss
-      const ddmmyyyy = date.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/)
-      if (ddmmyyyy) {
-        // new Date(year, monthIndex, day, hour, minute, second)
-        return new Date(
-          Number(ddmmyyyy[3]),
-          Number(ddmmyyyy[2]) - 1,
-          Number(ddmmyyyy[1]),
-          Number(ddmmyyyy[4]),
-          Number(ddmmyyyy[5]),
-          Number(ddmmyyyy[6])
-        )
+  function parseDate(date: string | number | Date | null | undefined): Date | null {
+    if (!date || date === '' || date === 'Invalid Date') return null
+    
+    try {
+      if (typeof date === "string") {
+        // Check for DD-MM-YYYY HH:mm:ss
+        const ddmmyyyy = date.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/)
+        if (ddmmyyyy) {
+          // new Date(year, monthIndex, day, hour, minute, second)
+          const parsedDate = new Date(
+            Number(ddmmyyyy[3]),
+            Number(ddmmyyyy[2]) - 1,
+            Number(ddmmyyyy[1]),
+            Number(ddmmyyyy[4]),
+            Number(ddmmyyyy[5]),
+            Number(ddmmyyyy[6])
+          )
+          return isNaN(parsedDate.getTime()) ? null : parsedDate
+        }
+        
+        // Check for YYYY-MM-DD format (without time)
+        const yyyymmdd = date.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (yyyymmdd) {
+          const parsedDate = new Date(
+            Number(yyyymmdd[1]),
+            Number(yyyymmdd[2]) - 1,
+            Number(yyyymmdd[3])
+          )
+          return isNaN(parsedDate.getTime()) ? null : parsedDate
+        }
+        
+        // Try ISO or other formats
+        const iso = new Date(date)
+        if (!isNaN(iso.getTime())) return iso
+        return null
       }
-      // Try ISO or other formats
-      const iso = new Date(date)
-      if (!isNaN(iso.getTime())) return iso
-      return null
-    }
-    if (typeof date === "number") {
-      const d = new Date(date)
-      return isNaN(d.getTime()) ? null : d
-    }
-    if (date instanceof Date) {
-      return isNaN(date.getTime()) ? null : date
+      if (typeof date === "number") {
+        const d = new Date(date)
+        return isNaN(d.getTime()) ? null : d
+      }
+      if (date instanceof Date) {
+        return isNaN(date.getTime()) ? null : date
+      }
+    } catch (error) {
+      console.warn('Error parsing date:', date, error)
     }
     return null
   }

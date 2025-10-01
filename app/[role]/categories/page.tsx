@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, Upload, Loader2 } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Search, Edit, Trash2, Upload, Loader2, X } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -786,7 +786,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 <Label>Add Images</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                    Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
                   </p>
                   <Input
                     type="file"
@@ -799,17 +799,38 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 
                 {selectedImages.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-600">
-                      {selectedImages.length} image(s) selected
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        {selectedImages.length} image(s) selected
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedImages([])}
+                      >
+                        Clear All
+                      </Button>
+                    </div>
                     <div className="grid grid-cols-3 gap-4">
                       {selectedImages.map((file, index) => (
-                        <div key={index} className="relative">
+                        <div key={index} className="relative group">
                           <img
                             src={URL.createObjectURL(file)}
                             alt={`Selected image ${index + 1}`}
-                            className="w-full h-20 object-cover rounded"
+                            className="w-full h-20 object-cover rounded border"
                           />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              setSelectedImages(prev => prev.filter((_, i) => i !== index))
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -1019,17 +1040,31 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   {editFormData.categoryImages.map((imageObj) => (
                     <div key={imageObj._id} className="relative group">
                       <img
-                        src={`${process.env.NEXT_PUBLIC_BASE_URL}${imageObj.image_path}`}
+                        src={
+                          imageObj.image_path.startsWith('http') 
+                            ? imageObj.image_path 
+                            : `${process.env.NEXT_PUBLIC_API_BASE_URL}/${imageObj.image_path}`
+                        }
                         alt={`Category image`}
-                        className="w-full h-20 object-cover rounded"
+                        className="w-full h-20 object-cover rounded border"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement
+                          target.src = '/placeholder.svg?height=80&width=80&text=No+Image'
+                        }}
                       />
-                      <button
+                      <Button
                         type="button"
-                        onClick={() => removeImage(editFormData.categoryId, imageObj._id)}
-                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        size="sm"
+                        variant="destructive"
+                        className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => {
+                          if (window.confirm('Are you sure you want to remove this image?')) {
+                            removeImage(editFormData.categoryId, imageObj._id)
+                          }
+                        }}
                       >
-                        ×
-                      </button>
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1039,27 +1074,53 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
             {/* New Images Section */}
             <div className="space-y-2">
               <Label>Add New Images</Label>
-              <Input
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImageSelect}
-                className="cursor-pointer"
-              />
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
+                </p>
+                <Input
+                  type="file"
+                  multiple
+                  accept="image/png,image/jpeg,image/jpg"
+                  onChange={handleImageSelect}
+                  className="cursor-pointer bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 transition-all duration-200"
+                />
+              </div>
               
               {selectedImages.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-600">
-                    {selectedImages.length} new image(s) selected
-                  </p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {selectedImages.length} new image(s) selected
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedImages([])}
+                    >
+                      Clear All
+                    </Button>
+                  </div>
                   <div className="grid grid-cols-3 gap-4">
                     {selectedImages.map((file, index) => (
-                      <div key={index} className="relative">
+                      <div key={index} className="relative group">
                         <img
                           src={URL.createObjectURL(file)}
                           alt={`New image ${index + 1}`}
-                          className="w-full h-20 object-cover rounded"
+                          className="w-full h-20 object-cover rounded border"
                         />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => {
+                            setSelectedImages(prev => prev.filter((_, i) => i !== index))
+                          }}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
                       </div>
                     ))}
                   </div>

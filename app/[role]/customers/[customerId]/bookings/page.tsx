@@ -259,27 +259,11 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
       )}
 
       {/* Bookings Summary */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="text-sm text-muted-foreground">Total Bookings</div>
             <div className="text-2xl font-bold">{filteredBookings.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">Total Spent</div>
-            <div className="text-2xl font-bold">
-              {formatCurrency(filteredBookings.reduce((sum, booking) => sum + (booking.TotalAmount || 0), 0))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">Total Tickets</div>
-            <div className="text-2xl font-bold">
-              {filteredBookings.reduce((sum, booking) => sum + (booking.TicketQuantity || 0), 0)}
-            </div>
           </CardContent>
         </Card>
       </div>

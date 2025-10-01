@@ -115,7 +115,7 @@ export default function PromocodesPage() {
         throw new Error("No valid authentication token found")
       }
 
-      // Use the paginated endpoint with proper payload
+      // Use the paginated publish events endpoint to show only published events
       const numericRole = getNumericAdminRole(user.AdminRole)
       const requestPayload = {
         AdminRole: numericRole,
@@ -124,7 +124,7 @@ export default function PromocodesPage() {
         limit: "50", // Get more events for selection
       }
 
-      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_PAGINATED, {
+      const response = await fetch(eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

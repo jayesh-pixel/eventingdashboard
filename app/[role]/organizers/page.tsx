@@ -12,11 +12,9 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, PlusCircle, Eye, KeyRound, IndianRupee, FilePlus, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
+import { MoreHorizontal, PlusCircle, Eye, KeyRound, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
 import {
   Pagination,
   PaginationContent,
@@ -33,7 +31,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import AddAddress from "@/components/add-address"
@@ -168,6 +165,14 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const [totalSalesData, setTotalSalesData] = React.useState<TotalSalesDataResponse['data'] | null>(null)
   const [salesLoading, setSalesLoading] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
+  
+  // Password reset dialog state
+  const [showPasswordResetDialog, setShowPasswordResetDialog] = React.useState(false)
+  const [selectedOrganizerForReset, setSelectedOrganizerForReset] = React.useState<Organizer | null>(null)
+  const [newPassword, setNewPassword] = React.useState("")
+  const [confirmPassword, setConfirmPassword] = React.useState("")
+  const [showPassword, setShowPassword] = React.useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   
   // Address selector state
   const [stateIsoCode, setStateIsoCode] = React.useState("")
@@ -581,7 +586,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       const authToken = localStorage.getItem("authToken")
       if (!user || !authToken) {
         throw new Error("Authentication required")
-      }      // Prepare the payload based on the original form structure and API requirements
+      }
+
+      // Prepare the payload based on the original form structure and API requirements
       const payload = {
         OwnerType: formData.OwnerType === "ownClub" ? 1 : 2, // 1 for Club, 2 for EventCompany
         CompanyName: formData.CompanyName,
@@ -598,7 +605,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         CityIsoCode: formData.CityIsoCode,
         SendMailFlag: formData.sendEmailNotification ? 2: 1,
         createduser_id: user?.user_id || "",
-            CreatedBy: 1,
+        CreatedBy: 1,
       }
 
       // Remove undefined fields
@@ -645,7 +652,18 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       }
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
+        const errorText = await response.text()
+        let errorMessage = `API error: ${response.status}`
+        
+        try {
+          const errorData = JSON.parse(errorText)
+          errorMessage = errorData.message || errorMessage
+        } catch {
+          // If response is not JSON, use the text or default message
+          errorMessage = errorText || errorMessage
+        }
+        
+        throw new Error(errorMessage)
       }
 
       const result = await response.json()
@@ -657,6 +675,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         title: "Success", 
         description: editingOrganizer ? "Organizer updated successfully." : "Organizer created successfully." 
       })
+      
+      // Only close dialog and reset form on success
+      setIsFormOpen(false)
+      resetForm()
       
       // Refresh the current page
       if (debouncedSearchTerm) {
@@ -671,9 +693,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         description: error instanceof Error ? error.message : "Failed to save organizer. Please try again.", 
         variant: "destructive" 
       })
-    } finally {      setLoading(false)
-      setIsFormOpen(false)
-      resetForm()
+      // Don't close dialog or reset form on error - let user fix the issue
+    } finally {
+      setLoading(false)
+      // Removed dialog closing and form reset from finally block
     }
   }
 
@@ -776,59 +799,110 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       setLoading(false)
     }
   }
-  const handleResetPassword = async (organizerId: string) => {
+  const handleResetPassword = async () => {
+    if (!selectedOrganizerForReset || !newPassword || !confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Please enter both password fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (newPassword !== confirmPassword) {
+      toast({
+        title: "Error",
+        description: "Passwords do not match",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters long",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setLoading(true)
-      
       const authToken = localStorage.getItem("authToken")
       if (!user || !authToken) {
         throw new Error("Authentication required")
       }
 
-      // Find the organizer to get their email
-      const organizer = organizers.find(org => org._id === organizerId)
-      if (!organizer) {
-        throw new Error("Organizer not found")
-      }
-
-      if (!organizer.Email) {
-        throw new Error("Organizer email not found. Cannot send password reset link.")
-      }
-
-      const response = await fetch(organizerEndpoint.ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL, {
+      const response = await fetch(organizerEndpoint.ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          Email: organizer.Email
+          organizer_id: selectedOrganizerForReset._id,
+          new_password: newPassword,
         }),
       })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
-      }
-
       const result = await response.json()
-      if (result.error) {
-        throw new Error(result.message || "Failed to send password reset link")
+
+      if (response.ok && !result.error) {
+        toast({
+          title: "Success",
+          description: "Password reset successfully",
+        })
+        setShowPasswordResetDialog(false)
+        setSelectedOrganizerForReset(null)
+        setNewPassword("")
+        await fetchOrganizers(currentPage)
+      } else {
+        throw new Error(result.message || "Failed to reset password")
       }
-      
-      toast({ 
-        title: "Success", 
-        description: `Password reset link sent to ${organizer.Email}` 
-      })
     } catch (error) {
       console.error("Error resetting password:", error)
-      toast({ 
-        title: "Error", 
-        description: error instanceof Error ? error.message : "Failed to send password reset link. Please try again.", 
-        variant: "destructive" 
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to reset password",
+        variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
+  }
+
+  const openPasswordResetDialog = (organizer: Organizer) => {
+    setSelectedOrganizerForReset(organizer)
+    setNewPassword("")
+    setConfirmPassword("")
+    setShowPasswordResetDialog(true)
+  }
+
+  // Generate password function for reset
+  const handleGenerateResetPassword = () => {
+    const length = 8
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    
+    setNewPassword(password)
+    setConfirmPassword(password)
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(password).then(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}\nPassword copied to clipboard!`,
+      })
+    }).catch(() => {
+      toast({
+        title: "Password Generated",
+        description: `Generated password: ${password}`,
+      })
+    })
   }
 
 
@@ -1032,10 +1106,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => handleEdit(org)}>
-                              <Eye className="mr-2 h-4 w-4" /> View & Edit                            </DropdownMenuItem>
+                              <Eye className="mr-2 h-4 w-4" /> View & Edit
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => router.push(`/${role}/organizers/${org._id}/sales`)}>
                               <BarChart3 className="mr-2 h-4 w-4" /> Sales
-                            </DropdownMenuItem>                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDisable(org._id)}>
                               {org.status === 0 ? (
                                 <>
                                   <UserCheck className="mr-2 h-4 w-4" /> Enable Organizer
@@ -1045,7 +1121,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                                   <UserX className="mr-2 h-4 w-4" /> Disable Organizer
                                 </>
                               )}
-                            </DropdownMenuItem><DropdownMenuItem onClick={() => handleResetPassword(org._id)}>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openPasswordResetDialog(org)}>
                               <KeyRound className="mr-2 h-4 w-4" /> Reset Password
                             </DropdownMenuItem>
                           </DropdownMenuContent>
@@ -1105,29 +1182,13 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editingOrganizer ? "Edit Organizer" : "Create New Organizer"}
-            </DialogTitle>            <DialogDescription>
-              {editingOrganizer 
-                ? "Update organizer information. Note: Only Full Name, Email, and Phone can be updated due to API limitations." 
-                : "Fill in the required information to create a new organizer account"
-              }
-            </DialogDescription>
-          </DialogHeader>          <div className="space-y-6 py-4">
-            {/* Information note for editing */}
-            {editingOrganizer && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  <strong>Note:</strong> Only Full Name, Email, and Phone Number can be updated. 
-                  Other fields like Owner Type, Company Name, Username, and Address cannot be modified due to API limitations.
-                </AlertDescription>
-              </Alert>
-            )}
-
+            <DialogTitle>{editingOrganizer ? "Edit Organizer" : "Add New Organizer"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
             {/* Owner Type Selection */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Owner Type *</Label>              <div className="flex gap-6">
+              <Label className="text-sm font-medium">Owner Type <span className="text-red-500">*</span></Label>
+              <div className="flex gap-6">
                 <div className="flex items-center">
                   <input
                     type="radio"
@@ -1136,10 +1197,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     value="ownClub"
                     checked={formData.OwnerType === "ownClub"}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
-                    disabled={!!editingOrganizer}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
-                  <label htmlFor="ownClub" className={`ml-2 text-sm font-medium ${editingOrganizer ? 'text-gray-500' : 'text-gray-900'}`}>
+                  <label htmlFor="ownClub" className="ml-2 text-sm font-medium text-gray-900">
                     Own club
                   </label>
                 </div>
@@ -1151,10 +1211,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     value="eventCompany"
                     checked={formData.OwnerType === "eventCompany"}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
-                    disabled={!!editingOrganizer}
-                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 disabled:opacity-50"
+                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
-                  <label htmlFor="eventCompany" className={`ml-2 text-sm font-medium ${editingOrganizer ? 'text-gray-500' : 'text-gray-900'}`}>
+                  <label htmlFor="eventCompany" className="ml-2 text-sm font-medium text-gray-900">
                     Event company name
                   </label>
                 </div>
@@ -1167,13 +1226,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Conditional Company/Club Name Fields */}
             {formData.OwnerType === "ownClub" && (
               <div className="space-y-2">
-                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name *</Label>                <Input
+                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name <span className="text-red-500">*</span></Label>
+                <Input
                   id="clubName"
                   value={formData.CompanyName}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter your club name"
-                  disabled={!!editingOrganizer}
-                  className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
                 />
                 {formErrors.CompanyName && (
                   <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
@@ -1183,13 +1241,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {formData.OwnerType === "eventCompany" && (
               <div className="space-y-2">
-                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name *</Label>                <Input
+                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name <span className="text-red-500">*</span></Label>
+                <Input
                   id="companyName"
                   value={formData.CompanyName}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter event company name"
-                  disabled={!!editingOrganizer}
-                  className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
                 />
                 {formErrors.CompanyName && (
                   <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
@@ -1199,7 +1256,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {/* Full Name */}
             <div className="space-y-2">
-              <Label htmlFor="organizerFullName" className="text-sm font-medium">Full Name *</Label>
+              <Label htmlFor="organizerFullName" className="text-sm font-medium">Full Name <span className="text-red-500">*</span></Label>
               <Input
                 id="organizerFullName"
                 value={formData.FullName}
@@ -1213,13 +1270,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="organizerusername" className="text-sm font-medium">Username *</Label>              <Input
+              <Label htmlFor="organizerusername" className="text-sm font-medium">Username <span className="text-red-500">*</span></Label>
+              <Input
                 id="organizerusername"
                 value={formData.Username}
                 onChange={(e) => setFormData({ ...formData, Username: e.target.value })}
                 placeholder="Enter organizer username"
-                disabled={!!editingOrganizer}
-                className={editingOrganizer ? "bg-gray-50 text-gray-500" : ""}
               />
               {formErrors.Username && (
                 <div className="text-red-600 text-sm">{formErrors.Username}</div>
@@ -1227,7 +1283,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Email */}
+              {/* Email - OPTIONAL, no asterisk */}
               <div className="space-y-2">
                 <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id</Label>
                 <Input
@@ -1242,7 +1298,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 )}
               </div>
 
-              {/* Phone Number */}
+              {/* Phone Number - OPTIONAL, no asterisk */}
               <div className="space-y-2">
                 <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No.</Label>
                 <Input
@@ -1255,27 +1311,28 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <div className="text-red-600 text-sm">{formErrors.Phone1}</div>
                 )}
               </div>
-            </div>            {/* Address Information */}
-            {!editingOrganizer && (
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Address Information</Label>
-                <AddAddress
-                  stateIsoCode={stateIsoCode}
-                  setStateIsoCode={setStateIsoCode}
-                  stateName={stateName}
-                  setStateName={setStateName}
-                  cityIsoCode={cityIsoCode}
-                  setCityIsoCode={setCityIsoCode}
-                  cityName={cityName}
-                  setCityName={setCityName}
-                />
-              </div>
-            )}
+            </div>
 
-            {/* Password */}
+            {/* Address Information - Show for both create and edit */}
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Address Information</Label>
+              
+              <AddAddress
+                stateIsoCode={stateIsoCode}
+                setStateIsoCode={setStateIsoCode}
+                stateName={stateName}
+                setStateName={setStateName}
+                cityIsoCode={cityIsoCode}
+                setCityIsoCode={setCityIsoCode}
+                cityName={cityName}
+                setCityName={setCityName}
+              />
+            </div>
+
+            {/* Password - Only show for create mode */}
             {!editingOrganizer && (
               <div className="space-y-2">
-                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password * (6-10 characters)</Label>
+                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password <span className="text-red-500">*</span> (6-10 characters)</Label>
                 <div className="relative">
                   <Input
                     id="organizerPassword"
@@ -1291,11 +1348,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     className="absolute inset-y-0 right-0 flex items-center pr-3"
                     onClick={() => setFormData({ ...formData, showPassword: !formData.showPassword })}
                   >
-                    {formData.showPassword ? (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-gray-400" />
-                    )}
+                    <Eye className="h-4 w-4 text-gray-400" />
                   </button>
                 </div>
                 {formErrors.password && (
@@ -1314,7 +1367,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               </div>
             )}
 
-            {/* Send Email Notification */}
+            {/* Send Email Notification - Only show for create mode, OPTIONAL, no asterisk */}
             {!editingOrganizer && (
               <div className="flex items-center space-x-2">
                 <Checkbox
@@ -1328,8 +1381,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 </Label>
               </div>
             )}
-          </div>
 
+          </div>
           <DialogFooter>
             <Button
               variant="outline"
@@ -1434,6 +1487,97 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           <DialogFooter className="flex-shrink-0">
             <Button variant="outline" onClick={() => setIsSalesDialogOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password Reset Dialog */}
+      <Dialog open={showPasswordResetDialog} onOpenChange={setShowPasswordResetDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Reset password for {selectedOrganizerForReset?.FullName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword" className="text-sm font-medium">
+                New Password <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="newPassword"
+                  type={showPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Enter new password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  <Eye className="h-4 w-4 text-gray-400" />
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                Confirm Password <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex items-center pr-3"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                >
+                  <Eye className="h-4 w-4 text-gray-400" />
+                </button>
+              </div>
+            </div>
+            
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleGenerateResetPassword}
+              className="w-full"
+            >
+              Generate Random Password
+            </Button>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowPasswordResetDialog(false)
+                setSelectedOrganizerForReset(null)
+                setNewPassword("")
+                setConfirmPassword("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleResetPassword}
+              disabled={loading || !newPassword || !confirmPassword}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Reset Password
             </Button>
           </DialogFooter>
         </DialogContent>
