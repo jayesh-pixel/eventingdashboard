@@ -90,4 +90,17 @@
   body {
     @apply bg-background text-foreground;
   }
+  
+  /* Make all asterisks in labels red for required fields */
+  label span.text-red-500,
+  label span[class*="text-red"] {
+    color: #ef4444 !important; /* Tailwind red-500 */
+  }
+  
+  /* Global style for any asterisk in required field labels */
+  label .required-asterisk::before,
+  label .required::after {
+    content: " *";
+    color: #ef4444;
+  }
 }

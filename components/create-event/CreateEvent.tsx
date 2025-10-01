@@ -1322,7 +1322,7 @@ export default function CreateEvent({
         submitData.append("EventGenre", JSON.stringify(genresArray))
       }
       if (values.languages && values.languages.length > 0) {
-        const languagesArray = values.languages.map(l => l.value)
+        const languagesArray = values.languages.map(l => l.label)
         submitData.append("EventLanguages", JSON.stringify(languagesArray))
       }
 
