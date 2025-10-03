@@ -54,6 +54,7 @@ import {
   Plus,
   Search,
   Ticket,
+  Users,
   X,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
@@ -1055,24 +1056,34 @@ export default function TicketsPage() {
       let payload: any
       
       if (isNormal) {
-        // Format payload for normal tickets - only send editable fields (Price and Quantity)
+        // Format payload for normal tickets - editable fields: Description, Price, Quantity, and Promoters (if visibility is Promoter)
         const normalTicket = selectedTicket as ExtendedNormalTicket
         
         payload = {
           Event_id: eventId,
           eventTicket_id: normalTicket._id,
-          // Only include the editable fields
+          // Editable fields
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
+          Description: editFormData.Description || normalTicket.Description || '',
           // Keep existing non-editable values
           EventTicketVisibility: normalTicket.EventTicketVisibility,
-          Description: normalTicket.Description,
           BookingMaxLimit: normalTicket.BookingMaxLimit
         }
         
-        // Keep existing promoters if any
-        if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
-          payload.EventPromoters = normalTicket.EventPromoters
+        // Handle promoters - can be updated only if visibility is set to "Promoters" (3)
+        if (normalTicket.EventTicketVisibility === '3' || normalTicket.EventTicketVisibility === 3) {
+          // Use selected promoters if any, otherwise keep existing ones
+          if (selectedPromoters.length > 0) {
+            payload.EventPromoters = selectedPromoters.map(promoterId => ({ promoter_id: promoterId }))
+          } else if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
+            payload.EventPromoters = normalTicket.EventPromoters
+          }
+        } else {
+          // For non-promoter visibility, keep existing promoters if any
+          if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
+            payload.EventPromoters = normalTicket.EventPromoters
+          }
         }
       } else {
         // For bulk tickets - only send editable fields (Price and Quantity)
@@ -1169,6 +1180,8 @@ export default function TicketsPage() {
         setShowEditModal(false)
         setEditFormData({})
         setSelectedTicketType(null)
+        setSelectedPromoters([])
+        setSelectedPromoters([])
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
           fetchNormalTickets()
@@ -1389,6 +1402,17 @@ export default function TicketsPage() {
     
     // Determine ticket type based on current active tab since tickets come from different tabs
     setSelectedTicketType(activeTab as 'normal' | 'bulk')
+    
+    // Initialize selected promoters if this is a normal ticket with promoter visibility
+    if (activeTab === 'normal') {
+      const normalTicket = ticket as ExtendedNormalTicket
+      if (normalTicket.EventTicketVisibility === '3' || normalTicket.EventTicketVisibility === 3) {
+        const existingPromoterIds = normalTicket.EventPromoters?.map((ep: any) => ep.promoter_id || ep._id) || []
+        setSelectedPromoters(existingPromoterIds)
+      } else {
+        setSelectedPromoters([])
+      }
+    }
     
     setShowEditModal(true)
   }  // Filter promoters based on search AND event assignment
@@ -2218,7 +2242,7 @@ export default function TicketsPage() {
                       id="bulkTicketPrice"
                       type="number"
                       min="0"
-                      step="0.01"
+                      step="1"
                       value={bulkFormData.TicketPrice}
                       onChange={(e) => setBulkFormData(prev => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0 }))}
                       required
@@ -2273,7 +2297,7 @@ export default function TicketsPage() {
                 <>
                   {/* Read-only fields */}
                   <div className="space-y-2">
-                    <Label>Ticket Name</Label>
+                    <Label>Ticket Name (Read Only)</Label>
                     <Input
                       value={editFormData.TicketName || editFormData.Name || ""}
                       disabled
@@ -2282,12 +2306,12 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Visibility</Label>
+                    <Label>Visibility (Read Only)</Label>
                     <Input
                       value={
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "1" ? "All" :
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "2" ? "All Customers" :
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3" ? "Promoters" : "Unknown"
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "1" ? "Everyone" :
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "2" ? "Organizers Only" :
+                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3" ? "Promoters Only" : "Unknown"
                       }
                       disabled
                       className="bg-muted"
@@ -2295,7 +2319,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Ticket Type</Label>
+                    <Label>Ticket Type (Read Only)</Label>
                     <Input
                       value={getTicketTypeName(parseInt(editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || "1"))}
                       disabled
@@ -2303,22 +2327,28 @@ export default function TicketsPage() {
                     />
                   </div>
 
+                  {/* Editable Description */}
                   <div className="space-y-2">
-                    <Label>Description</Label>
+                    <Label htmlFor="editDescription">Description</Label>
                     <Textarea
-                      value={editFormData.TicketDescription || editFormData.Description || ""}
-                      disabled
-                      className="bg-muted"
+                      id="editDescription"
+                      value={editFormData.Description || editFormData.TicketDescription || ""}
+                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, Description: e.target.value, TicketDescription: e.target.value }))}
+                      placeholder="Enter ticket description"
+                      rows={3}
+                      className="border-primary"
                     />
                   </div>
 
-                  {/* Editable fields - Only Price and Quantity */}
+                  {/* Editable Price and Quantity */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="editTicketPrice">Price (₹) *</Label>
                       <Input
                         id="editTicketPrice"
                         type="number"
+                        min="0"
+                        step="1"
                         value={editFormData.TicketPrice || editFormData.Price || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
                         className="border-primary"
@@ -2330,6 +2360,7 @@ export default function TicketsPage() {
                       <Input
                         id="editMaxQuantity"
                         type="number"
+                        min="1"
                         value={editFormData.TicketQuantity || editFormData.Quantity || editFormData.MaxQuantity || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0, MaxQuantity: parseInt(e.target.value) || 0 }))}
                         className="border-primary"
@@ -2337,9 +2368,38 @@ export default function TicketsPage() {
                     </div>
                   </div>
 
+                  {/* Promoter Selection - Only shown if visibility is "Promoters" */}
+                  {((editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3") && (
+                    <div className="space-y-2">
+                      <Label>Selected Promoters</Label>
+                      <div className="space-y-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowPromoterModal(true)}
+                          className="w-full justify-start border-primary"
+                        >
+                          <Users className="mr-2 h-4 w-4" />
+                          {selectedPromoters.length > 0 
+                            ? `${selectedPromoters.length} promoter(s) selected`
+                            : 'Select promoters'
+                          }
+                        </Button>
+                        {selectedPromoters.length > 0 && (
+                          <div className="text-sm text-muted-foreground">
+                            Selected: {selectedPromoters.map(id => {
+                              const promoter = promoters.find(p => p._id === id)
+                              return promoter?.FullName || 'Unknown'
+                            }).join(', ')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Read-only Booking Max Limit */}
                   <div className="space-y-2">
-                    <Label>Booking Max Limit</Label>
+                    <Label>Booking Max Limit (Read Only)</Label>
                     <Input
                       value={editFormData.BookingMaxLimit || ""}
                       disabled
@@ -2348,7 +2408,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="text-sm text-muted-foreground">
-                    * Only Price and Quantity fields can be edited
+                    * Description, Price, Quantity{((editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3") ? ", and Promoters" : ""} can be edited
                   </div>
                 </>
               ) : (
@@ -2356,7 +2416,7 @@ export default function TicketsPage() {
                 <>
                   {/* Read-only fields */}
                   <div className="space-y-2">
-                    <Label>Bulk Ticket Name</Label>
+                    <Label>Bulk Ticket Name (Read Only)</Label>
                     <Input
                       value={editFormData.BulkTicketName || editFormData.TicketName || ""}
                       disabled
@@ -2364,13 +2424,15 @@ export default function TicketsPage() {
                     />
                   </div>
 
-                  {/* Editable fields - Only Price and Quantity */}
+                  {/* Editable fields - Price and Quantity */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="editBulkTicketPrice">Price (₹) *</Label>
                       <Input
                         id="editBulkTicketPrice"
                         type="number"
+                        min="0"
+                        step="1"
                         value={editFormData.BulkTicketPrice || editFormData.Price || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
                         className="border-primary"
@@ -2382,30 +2444,11 @@ export default function TicketsPage() {
                       <Input
                         id="editBulkQuantity"
                         type="number"
+                        min="1"
+                        max="20"
                         value={editFormData.BulkTicketQuantity || editFormData.Quantity || ""}
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, BulkTicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0 }))}
                         className="border-primary"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Read-only fields */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Min Quantity Per Transaction</Label>
-                      <Input
-                        value={editFormData.MinBulkTicketPerTransaction || ""}
-                        disabled
-                        className="bg-muted"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Max Quantity Per Transaction</Label>
-                      <Input
-                        value={editFormData.MaxBulkTicketPerTransaction || ""}
-                        disabled
-                        className="bg-muted"
                       />
                     </div>
                   </div>
@@ -2423,6 +2466,7 @@ export default function TicketsPage() {
                     setShowEditModal(false)
                     setSelectedTicketType(null)
                     setEditFormData({})
+                    setSelectedPromoters([])
                   }}
                 >
                   Cancel
