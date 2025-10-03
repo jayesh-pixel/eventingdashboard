@@ -1276,7 +1276,6 @@ export default function CreateEvent({
 
       // Add form data using the exact field names required by the API
       submitData.append("EventName", values.eventname || "")
-      submitData.append("eventNameSearchKeyword", values.eventname || "") // Add search keyword field
       submitData.append("EventDescription", values.eventDescription || "")
       submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
       submitData.append("EventVisibility", values.eventVisibility || "1")

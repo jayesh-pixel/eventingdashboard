@@ -706,31 +706,45 @@ export default function EventsPage({ params }: EventsPageProps) {
       return
     }
 
-    // For promoter role, make API call with search keyword
-    if (role === "promoter" && debouncedSearchTerm.length >= 3) {
+    // Make API call with search keyword for all roles when search term is at least 3 characters
+    if (debouncedSearchTerm.length >= 3) {
       searchEventsWithKeyword(debouncedSearchTerm)
     } else {
-      // For other roles, filter locally
+      // For shorter search terms, filter locally to avoid too many API calls
       const filtered = originalData.filter((event) =>
         event.eventName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
       )
       setAllEventsData(filtered)
     }
   }, [debouncedSearchTerm, originalData, role])
-  // Search events with API call for promoters
+  // Search events with API call for all roles
   const searchEventsWithKeyword = async (keyword: string) => {
     try {
       setSearchLoading(true)
       const authToken = getValidToken()
       if (!user || !authToken) return
 
+      // Determine the correct role ID based on user role
+      const getSearchRoleId = () => {
+        const roleStr = role as string
+        if (roleStr === "promoter") return 4
+        if (roleStr === "organizer") return 3
+        if (roleStr === "admin") return 2
+        return 1 // superadmin
+      }
+
       const payload = {
-        AdminRole: 4, // Promoter role ID
+        AdminRole: getSearchRoleId(),
         user_id: user.user_id,
+        page: "1",
+        limit: "10",
         eventNameSearchKeyword: keyword,
       }
 
-      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
+      // Use the getAllPaginated endpoint for search
+      const searchEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.eventingclub.in'}/events/getAllPaginated`
+
+      const response = await fetch(searchEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -740,9 +754,23 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
 
       const data = await handleApiResponse(response)
-      const eventsArray = data.data || []
+      
+      // Handle the paginated response structure
+      let eventsArray = []
+      if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
+        eventsArray = data.data.EventsData
+      } else if (data && data.data && Array.isArray(data.data)) {
+        eventsArray = data.data
+      }
+
       const normalizedEvents = normalizeEventsData(eventsArray)
       setAllEventsData(normalizedEvents)
+      
+      console.log("Search completed:", {
+        keyword,
+        resultsCount: normalizedEvents.length,
+        payload
+      })
     } catch (error) {
       console.error("Search error:", error)
       setAllEventsData([])
