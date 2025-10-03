@@ -1535,28 +1535,30 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </div>
 
                         {/* Organizer Filter */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer} disabled={filterOptionsLoading}>
-                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              {filterOptionsLoading ? (
-                                <div className="flex items-center">
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  Loading...
-                                </div>
-                              ) : (
-                                <SelectValue placeholder="👨‍💼 Select Organizer" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__all__">All Organizers</SelectItem>
-                              {filterOrganizers.map((organizer) => (
-                                <SelectItem key={organizer.id} value={organizer.id}>
-                                  {organizer.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        {(role as UserRole) !== "organizer" && (
+                          <div className="flex-1 sm:flex-none min-w-[160px]">
+                            <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer} disabled={filterOptionsLoading}>
+                              <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                                {filterOptionsLoading ? (
+                                  <div className="flex items-center">
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    Loading...
+                                  </div>
+                                ) : (
+                                  <SelectValue placeholder="👨‍💼 Select Organizer" />
+                                )}
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">All Organizers</SelectItem>
+                                {filterOrganizers.map((organizer) => (
+                                  <SelectItem key={organizer.id} value={organizer.id}>
+                                    {organizer.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
 
                         {/* Promoter Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
@@ -1622,7 +1624,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   {/* Actions */}
                   <div className="flex gap-2 flex-shrink-0">
                     {/* Reset All Filters Button */}
-                    {(searchTerm || dateFilterOption || (selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__")) && (
+                    {(searchTerm || dateFilterOption || (selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (((role as UserRole) !== "organizer") && selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__")) && (
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -1675,7 +1677,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               )}
 
               {/* Active Filters Display */}
-              {((selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__") || dateFilterOption) && (
+              {((selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (((role as UserRole) !== "organizer") && selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__") || dateFilterOption) && (
                 <div className="flex flex-wrap gap-2 p-3 bg-muted/10 dark:bg-muted/5 rounded-lg border border-border/20">
                   <span className="text-xs font-medium text-muted-foreground mr-2">Active Filters:</span>
                   {selectedCity && selectedCity !== "__all__" && (
@@ -1690,7 +1692,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedVenue("__all__")} />
                     </Badge>
                   )}
-                  {selectedOrganizer && selectedOrganizer !== "__all__" && (
+                  {(role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
                       Organizer: {filterOrganizers.find(o => o.id === selectedOrganizer)?.name || selectedOrganizer}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedOrganizer("__all__")} />
