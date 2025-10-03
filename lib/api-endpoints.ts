@@ -93,6 +93,7 @@ export const organizerEndpoint = {
   UPDATE_ORGANIZER_DATA_URL: BASE_URL + "/events/organizer/update",
   DELETE_ORGANIZER_DATA_URL: BASE_URL + "/organizer/delete",
   PROFILE_CHANGE_PASSWORD: BASE_URL + "/organizer/changepassword",
+  UPDATE_PASSWORD: BASE_URL + "/organizer/updatepassword",
   SEARCH_ORGANIZER_BY_ORGANIZER_NAME: BASE_URL + "/organizer/getOrganizerDataBySearchKeyword",
   ORGANIZER_LOGIN_API_URL: BASE_URL + "/organizer/login",
   CREATE_EVENT_BY_ORGANIZER: BASE_URL + "/events/organizer/create",
@@ -103,7 +104,7 @@ export const organizerEndpoint = {
   GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS_BY_ORGANIZER: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
   GET_ALL_REJECTED_EVENTS_DATA_BY_ORGANIZER: BASE_URL + "/events/getRejectedEvents",
   ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/organizer/getpasswordresetlink",
-  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/changepassword",
+  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/updatepassword",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
     BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:

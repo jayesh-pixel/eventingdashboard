@@ -826,7 +826,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(organizerEndpoint.ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD, {
+      const response = await fetch(organizerEndpoint.UPDATE_PASSWORD, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -835,6 +835,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         body: JSON.stringify({
           organizer_id: selectedOrganizerForReset._id,
           new_password: newPassword,
+          CreatedBy: 1,
+          createduser_id: user.user_id,
         }),
       })
 
