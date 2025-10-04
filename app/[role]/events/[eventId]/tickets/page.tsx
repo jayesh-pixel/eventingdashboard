@@ -1424,8 +1424,15 @@ export default function TicketsPage() {
     // Initialize selected promoters if this is a normal ticket with promoter visibility
     if (activeTab === 'normal') {
       const normalTicket = ticket as ExtendedNormalTicket
-      if (normalTicket.EventTicketVisibility === '3' || normalTicket.EventTicketVisibility === 3) {
-        const existingPromoterIds = normalTicket.EventPromoters?.map((ep: any) => ep.promoter_id || ep._id) || []
+      // Check both Visibility and EventTicketVisibility fields (API may return either)
+      const visibility = (normalTicket as any).Visibility || normalTicket.EventTicketVisibility || (normalTicket as any).VisibilityLevel
+      const visibilityStr = visibility?.toString()
+      
+      if (visibilityStr === '3') {
+        // Extract promoter IDs from both possible field names
+        const promotersArray = (normalTicket as any).Promoters || normalTicket.EventPromoters || []
+        const existingPromoterIds = promotersArray.map((ep: any) => ep.promoter_id || ep._id).filter(Boolean)
+        console.log('Edit Modal - Found promoters for visibility 3:', existingPromoterIds)
         setSelectedPromoters(existingPromoterIds)
       } else {
         setSelectedPromoters([])
@@ -2333,7 +2340,8 @@ export default function TicketsPage() {
                     <Label>Visibility (Read Only)</Label>
                     <Input
                       value={(() => {
-                        const visibility = (editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                        // Check for Visibility, VisibilityLevel, or EventTicketVisibility
+                        const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
                         if (visibility === "1") return "All"
                         if (visibility === "2") return "All Customers"
                         if (visibility === "3") return "Promoters"
@@ -2395,7 +2403,9 @@ export default function TicketsPage() {
                   </div>
 
                   {/* Promoter Selection - Only shown if visibility is "Promoters" */}
-                  {((editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3") && (
+                  {(() => {
+                    const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                    return visibility === "3" && (
                     <div className="space-y-2">
                       <Label>Selected Promoters (Searchable)</Label>
                       <Popover open={editPromoterPopoverOpen} onOpenChange={setEditPromoterPopoverOpen}>
@@ -2483,7 +2493,8 @@ export default function TicketsPage() {
                         </div>
                       )}
                     </div>
-                  )}
+                    )
+                  })()}
 
                   {/* Read-only Booking Max Limit */}
                   <div className="space-y-2">
@@ -2496,7 +2507,10 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="text-sm text-muted-foreground">
-                    * Description, Price, Quantity{((editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3") ? ", and Promoters" : ""} can be edited
+                    * Description, Price, Quantity{(() => {
+                      const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                      return visibility === "3" ? ", and Promoters" : ""
+                    })()} can be edited
                   </div>
                 </>
               ) : (
