@@ -991,7 +991,8 @@ export default function TicketsPage() {
           
           // Determine default visibility based on event privacy for reset
           let defaultVisibility = 1 // Default to "All" for public events
-          if (eventData && (eventData as any).eventVisibility === 2) {
+          const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
+          if (eventData && eventVisibility === 2) {
             // For private events, default to "Promoters" as it's the only allowed option
             defaultVisibility = 3
           }
@@ -1356,7 +1357,8 @@ export default function TicketsPage() {
       
       // Determine default visibility based on event privacy
       let defaultVisibility = 1 // Default to "All" for public events
-      if (eventData && (eventData as any).eventVisibility === 2) {
+      const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
+      if (eventData && eventVisibility === 2) {
         // For private events, default to "Promoters" as it's the only allowed option
         defaultVisibility = 3
       }
@@ -2001,21 +2003,27 @@ export default function TicketsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         {/* Only show "All" and "All Customers" for public events */}
-                        {eventData && (eventData as any).eventVisibility !== 2 && (
-                          <>
-                            <SelectItem value="1">All</SelectItem>
-                            <SelectItem value="2">All Customers</SelectItem>
-                          </>
-                        )}
+                        {(() => {
+                          const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
+                          return eventData && eventVisibility !== 2 && (
+                            <>
+                              <SelectItem value="1">All</SelectItem>
+                              <SelectItem value="2">All Customers</SelectItem>
+                            </>
+                          )
+                        })()}
                         <SelectItem value="3">Promoters</SelectItem>
                       </SelectContent>
                     </Select>
                     {/* Show info message for private events */}
-                    {eventData && (eventData as any).eventVisibility === 2 && (
-                      <p className="text-xs text-muted-foreground">
-                        This is a private event. Tickets can only be visible to selected promoters.
-                      </p>
-                    )}                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
+                    {(() => {
+                      const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
+                      return eventData && eventVisibility === 2 && (
+                        <p className="text-xs text-muted-foreground">
+                          This is a private event. Tickets can only be visible to selected promoters.
+                        </p>
+                      )
+                    })()}                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
                       <div className="text-sm text-muted-foreground space-y-2">
                         <div className="flex items-center justify-between">
                           <span>{selectedPromoters.length} promoter(s) selected</span>
