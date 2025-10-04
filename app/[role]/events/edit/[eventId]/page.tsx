@@ -126,7 +126,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
                 <div>
                   <h1 className="text-xl font-semibold text-foreground">Edit Event</h1>
                   <p className="text-sm text-muted-foreground">Loading event data...</p>
-                </div>
+                </div>``
               </div>
             </div>
           </div>

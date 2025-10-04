@@ -317,30 +317,24 @@ export default function CreateEvent({
         return null
       }
 
-      // Parse the ISO string directly without timezone conversion
-      // Format: "2024-12-25T18:30:00.000Z" -> Extract date and time parts
+      // Parse the ISO string and extract date/time without timezone conversion
+      // The API already stores IST time in UTC format, so we just need to extract the values
       const formatDateTimeFromISO = (isoString: string) => {
         try {
-          // Create date object and use local methods to preserve the time as-is
-          const date = new Date(isoString)
-          
-          // Validate the date
-          if (isNaN(date.getTime())) {
+          // Parse the ISO string: "2025-01-31T20:00:00.000Z"
+          // Extract date and time parts directly from the string without conversion
+          const dateTimePart = isoString.split('T')
+          if (dateTimePart.length !== 2) {
+            console.error('Invalid ISO string format:', isoString)
             return null
           }
 
-          // Use local time methods to get the time as stored in the ISO string
-          // This preserves the actual time value without timezone adjustments
-          const year = date.getFullYear()
-          const month = String(date.getMonth() + 1).padStart(2, '0')
-          const day = String(date.getDate()).padStart(2, '0')
-          const hours = String(date.getHours()).padStart(2, '0')
-          const minutes = String(date.getMinutes()).padStart(2, '0')
-          const seconds = String(date.getSeconds()).padStart(2, '0')
+          const datePart = dateTimePart[0] // "2025-01-31"
+          const timePart = dateTimePart[1].split('.')[0] // "20:00:00"
 
           return {
-            date: `${year}-${month}-${day}`,
-            time: `${hours}:${minutes}:${seconds}`
+            date: datePart,
+            time: timePart
           }
         } catch (error) {
           console.error('Error parsing date:', error)
@@ -1910,7 +1904,7 @@ export default function CreateEvent({
 
           return (
             <Form>
-              <div className={`grid grid-cols-1 gap-6 ${isOrganizer ? "" : "lg:grid-cols-2"}`}>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               {/* Left Column */}
               <div className="space-y-6">
                 {/* Event Configuration */}
@@ -2742,11 +2736,29 @@ export default function CreateEvent({
                         {values.events.map((event: EventDateTime, index: number) => {
                           // console.log("🗓️ Displaying event date:", event)
                           const isBeingEdited = editingEventIndex === index
+                          
+                          // Format dates for display (already in IST from transformEventDateTime)
+                          const formatDisplayDate = (dateStr: string) => {
+                            const [year, month, day] = dateStr.split('-')
+                            const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day))
+                            return date.toLocaleDateString('en-IN', { 
+                              day: '2-digit', 
+                              month: 'short', 
+                              year: 'numeric' 
+                            })
+                          }
+                          
+                          // Format time for display (HH:MM:SS to HH:MM)
+                          const formatDisplayTime = (timeStr: string) => {
+                            const [hours, minutes] = timeStr.split(':')
+                            return `${hours}:${minutes}`
+                          }
+                          
                           return (
                           <div key={index} className={`flex items-center justify-between p-3 border rounded ${isBeingEdited ? 'border-primary bg-primary/5' : ''}`}>
                             <div className="text-sm">
-                              <p><strong>Date:</strong> {new Date(event.EventStartDate).toLocaleDateString()} - {new Date(event.EventEndDate).toLocaleDateString()}</p>
-                              <p><strong>Time:</strong> {event.EventStartTime} - {event.EventEndTime}</p>
+                              <p><strong>Date:</strong> {formatDisplayDate(event.EventStartDate)} - {formatDisplayDate(event.EventEndDate)}</p>
+                              <p><strong>Time (IST):</strong> {formatDisplayTime(event.EventStartTime)} - {formatDisplayTime(event.EventEndTime)}</p>
                               {isBeingEdited && (
                                 <p className="text-primary text-xs mt-1">
                                   <Info className="h-3 w-3 inline mr-1" />

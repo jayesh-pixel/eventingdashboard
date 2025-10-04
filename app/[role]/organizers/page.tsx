@@ -13,6 +13,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { MoreHorizontal, PlusCircle, Eye, KeyRound, Loader2, Search, AlertCircle, Check, ChevronRight, UserCheck, UserX, BarChart3 } from "lucide-react"
 import {
@@ -1076,20 +1077,32 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <TableHead>City</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone no.</TableHead>
-        
+                  <TableHead>Status</TableHead>
                   <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>              <TableBody>
                 {(organizers || []).map((org) => {
-                  const statusDisplay = getStatusDisplay(org.status)
+                  // Debug: Log the organizer status
+                  console.log(`Organizer ${org.Username} - status:`, org.status, 'type:', typeof org.status)
+                  
+                  // status === 1 means Active, status === 0 or 2 means Disabled
+                  const isDisabled = org.status !== 1
+                  
                   return (
-                    <TableRow key={org._id}>
+                    <TableRow 
+                      key={org._id}
+                      className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}
+                    >
                       <TableCell className="font-medium">{org.Username || "N/A"}</TableCell>
                       <TableCell>{org.FullName || "N/A"}</TableCell>
                       <TableCell>{org.City || "N/A"}</TableCell>
                       <TableCell>{org.Email || "N/A"}</TableCell>
                       <TableCell>{org.Phone1 || "N/A"}</TableCell>
-          
+                      <TableCell>
+                        <Badge variant={isDisabled ? "destructive" : "default"}>
+                          {isDisabled ? "Disabled" : "Active"}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
