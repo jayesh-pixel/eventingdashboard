@@ -1296,7 +1296,11 @@ export default function CreateEvent({
       submitData.append("EventDescription", values.eventDescription || "")
       submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
       submitData.append("EventVisibility", values.eventVisibility || "1")
-      submitData.append("EventType", values.eventType || "1")
+      
+      // EventType is not allowed when organizer is updating an event
+      if (!(editMode && role === "organizer")) {
+        submitData.append("EventType", values.eventType || "1")
+      }
       
       // FeaturedEventFlag is only allowed for superadmin
       if (role === "superadmin") {
@@ -1373,9 +1377,15 @@ export default function CreateEvent({
       // Add tour ID if applicable
       if (eventSelectionFlag === 1 && values.eventTour_id) {
         submitData.append("EventTour_id", values.eventTour_id)
-        submitData.append("TourEvent", "1")
+        // TourEvent is not allowed when organizer is updating an event
+        if (!(editMode && role === "organizer")) {
+          submitData.append("TourEvent", "1")
+        }
       } else {
-        submitData.append("TourEvent", "0")
+        // TourEvent is not allowed when organizer is updating an event
+        if (!(editMode && role === "organizer")) {
+          submitData.append("TourEvent", "0")
+        }
       }
 
       // Add events data - different handling for create vs edit mode
