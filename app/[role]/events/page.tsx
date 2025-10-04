@@ -451,7 +451,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
 
   // Fetch all events data with improved error handling
-  const getAllEventData = async (tab: string = "all") => {
+  const getAllEventData = async (tab: string = "all", applyFilters: boolean = false) => {
     try {
       setLoading(true)
       setApiError(null)
@@ -538,7 +538,12 @@ export default function EventsPage({ params }: EventsPageProps) {
           user_id: user.user_id,
           page: "1",
           limit: "10", // Get more events for better UX
-          ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm })
+          ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm }),
+          // Include filter parameters if applyFilters is true
+          ...(applyFilters && selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
+          ...(applyFilters && selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
+          ...(applyFilters && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
+          ...(applyFilters && selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
         console.log("Admin paginated payload JSON:", JSON.stringify(requestPayload))
@@ -759,6 +764,11 @@ export default function EventsPage({ params }: EventsPageProps) {
         page: "1",
         limit: "10",
         eventNameSearchKeyword: keyword,
+        // Include filter parameters
+        ...(selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
+        ...(selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
+        ...(selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
+        ...(selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
       }
 
       // Use the getAllPaginated endpoint for search
@@ -929,6 +939,20 @@ export default function EventsPage({ params }: EventsPageProps) {
     getAllEventData(activeTab)
     fetchAllFilterOptions()
   }, [])
+
+  // Refetch data when filters change
+  React.useEffect(() => {
+    // Only trigger if we have initial data loaded
+    if (originalData.length > 0 || allEventsData.length > 0) {
+      if (debouncedSearchTerm && debouncedSearchTerm.length >= 3) {
+        // If search is active, use search function
+        searchEventsWithKeyword(debouncedSearchTerm)
+      } else {
+        // Otherwise use getAllEventData with filters
+        getAllEventData(activeTab, true)
+      }
+    }
+  }, [selectedCity, selectedVenue, selectedOrganizer, selectedPromoter])
   // Filter events based on filters (no tab filtering since we fetch specific data per tab)
   const filteredEvents = React.useMemo(() => {
     let events = allEventsData
