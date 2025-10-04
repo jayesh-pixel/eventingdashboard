@@ -309,35 +309,58 @@ export default function CreateEvent({
     }
 
     return apiEventDateTime.map((item: any) => {
-      const startDate = new Date(item.EventStartDateTime || item.eventStartDateTime)
-      const endDate = new Date(item.EventEndDateTime || item.eventEndDateTime)
+      const startDateTimeStr = item.EventStartDateTime || item.eventStartDateTime
+      const endDateTimeStr = item.EventEndDateTime || item.eventEndDateTime
 
-      // Validate the dates before processing
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      if (!startDateTimeStr || !endDateTimeStr) {
+        console.warn('Missing date/time in event data:', item)
+        return null
+      }
+
+      // Parse the ISO string directly without timezone conversion
+      // Format: "2024-12-25T18:30:00.000Z" -> Extract date and time parts
+      const formatDateTimeFromISO = (isoString: string) => {
+        try {
+          // Create date object and use local methods to preserve the time as-is
+          const date = new Date(isoString)
+          
+          // Validate the date
+          if (isNaN(date.getTime())) {
+            return null
+          }
+
+          // Use local time methods to get the time as stored in the ISO string
+          // This preserves the actual time value without timezone adjustments
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          const hours = String(date.getHours()).padStart(2, '0')
+          const minutes = String(date.getMinutes()).padStart(2, '0')
+          const seconds = String(date.getSeconds()).padStart(2, '0')
+
+          return {
+            date: `${year}-${month}-${day}`,
+            time: `${hours}:${minutes}:${seconds}`
+          }
+        } catch (error) {
+          console.error('Error parsing date:', error)
+          return null
+        }
+      }
+
+      const startDateTime = formatDateTimeFromISO(startDateTimeStr)
+      const endDateTime = formatDateTimeFromISO(endDateTimeStr)
+
+      if (!startDateTime || !endDateTime) {
         console.warn('Invalid date found in event data:', item)
         return null
       }
 
-      // Use UTC methods to avoid timezone offset issues
-      const formatDateUTC = (date: Date) => {
-        const year = date.getUTCFullYear()
-        const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-        const day = String(date.getUTCDate()).padStart(2, '0')
-        return `${year}-${month}-${day}`
-      }
-
-      const formatTimeUTC = (date: Date) => {
-        const hours = String(date.getUTCHours()).padStart(2, '0')
-        const minutes = String(date.getUTCMinutes()).padStart(2, '0')
-        const seconds = String(date.getUTCSeconds()).padStart(2, '0')
-        return `${hours}:${minutes}:${seconds}`
-      }
-
       return {
-        EventStartDate: formatDateUTC(startDate),
-        EventStartTime: formatTimeUTC(startDate),
-        EventEndDate: formatDateUTC(endDate),
-        EventEndTime: formatTimeUTC(endDate)
+        EventStartDate: startDateTime.date,
+        EventStartTime: startDateTime.time,
+        EventEndDate: endDateTime.date,
+        EventEndTime: endDateTime.time
       }
     }).filter(Boolean) as EventDateTime[] // Remove any null entries from invalid dates
   }

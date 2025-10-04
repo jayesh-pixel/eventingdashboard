@@ -23,6 +23,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   Table,
   TableBody,
   TableCell,
@@ -47,6 +59,8 @@ import {
 } from "@/components/ui/breadcrumb"
 import {
   ArrowLeft,
+  Check,
+  ChevronsUpDown,
   Download,
   Filter,
   Loader2,
@@ -224,6 +238,8 @@ export default function TicketsPage() {
   const [selectedTicketType, setSelectedTicketType] = React.useState<'normal' | 'bulk' | null>(null)
   const [selectedPromoters, setSelectedPromoters] = React.useState<string[]>([])
   const [promoterSearchTerm, setPromoterSearchTerm] = React.useState("")
+  const [editPromoterSearchTerm, setEditPromoterSearchTerm] = React.useState("")
+  const [editPromoterPopoverOpen, setEditPromoterPopoverOpen] = React.useState(false)
 
   // Form states - separate for normal and bulk tickets
   const [normalFormData, setNormalFormData] = React.useState<CreateNormalTicketForm>({
@@ -2371,29 +2387,91 @@ export default function TicketsPage() {
                   {/* Promoter Selection - Only shown if visibility is "Promoters" */}
                   {((editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3") && (
                     <div className="space-y-2">
-                      <Label>Selected Promoters</Label>
-                      <div className="space-y-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => setShowPromoterModal(true)}
-                          className="w-full justify-start border-primary"
-                        >
-                          <Users className="mr-2 h-4 w-4" />
-                          {selectedPromoters.length > 0 
-                            ? `${selectedPromoters.length} promoter(s) selected`
-                            : 'Select promoters'
-                          }
-                        </Button>
-                        {selectedPromoters.length > 0 && (
-                          <div className="text-sm text-muted-foreground">
-                            Selected: {selectedPromoters.map(id => {
-                              const promoter = promoters.find(p => p._id === id)
-                              return promoter?.FullName || 'Unknown'
-                            }).join(', ')}
-                          </div>
-                        )}
-                      </div>
+                      <Label>Selected Promoters (Searchable)</Label>
+                      <Popover open={editPromoterPopoverOpen} onOpenChange={setEditPromoterPopoverOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="outline"
+                            role="combobox"
+                            aria-expanded={editPromoterPopoverOpen}
+                            className="w-full justify-between border-primary"
+                          >
+                            <Users className="mr-2 h-4 w-4" />
+                            {selectedPromoters.length > 0 
+                              ? `${selectedPromoters.length} promoter(s) selected`
+                              : 'Search and select promoters...'
+                            }
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0" align="start">
+                          <Command>
+                            <CommandInput 
+                              placeholder="Search promoters..." 
+                              value={editPromoterSearchTerm}
+                              onValueChange={setEditPromoterSearchTerm}
+                            />
+                            <CommandEmpty>
+                              {promoters.length === 0 
+                                ? "No promoters are currently assigned to this event. Please assign promoters to the event first."
+                                : "No promoters found matching your search"
+                              }
+                            </CommandEmpty>
+                            <CommandGroup className="max-h-[300px] overflow-y-auto">
+                              {promoters
+                                .filter(promoter => 
+                                  promoter.FullName?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase()) ||
+                                  promoter.Email?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase()) ||
+                                  promoter.Phone1?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase())
+                                )
+                                .map((promoter) => (
+                                  <CommandItem
+                                    key={promoter._id}
+                                    value={promoter._id}
+                                    onSelect={() => {
+                                      setSelectedPromoters((prev) =>
+                                        prev.includes(promoter._id)
+                                          ? prev.filter((id) => id !== promoter._id)
+                                          : [...prev, promoter._id]
+                                      )
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <div className="flex items-center space-x-3 flex-1">
+                                      <Checkbox
+                                        checked={selectedPromoters.includes(promoter._id)}
+                                        onCheckedChange={() => {
+                                          setSelectedPromoters((prev) =>
+                                            prev.includes(promoter._id)
+                                              ? prev.filter((id) => id !== promoter._id)
+                                              : [...prev, promoter._id]
+                                          )
+                                        }}
+                                      />
+                                      <div className="flex-1">
+                                        <div className="font-medium">{promoter.FullName}</div>
+                                        <div className="text-sm text-muted-foreground">
+                                          {promoter.Email || 'No email'} • {promoter.Phone1 || 'No phone'}
+                                        </div>
+                                      </div>
+                                      <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>
+                                        {promoter.Status === "Active" ? "Active" : promoter.Status || "Inactive"}
+                                      </Badge>
+                                    </div>
+                                  </CommandItem>
+                                ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      {selectedPromoters.length > 0 && (
+                        <div className="text-sm text-muted-foreground mt-2 p-2 bg-muted/30 rounded-md">
+                          <span className="font-medium">Selected:</span> {selectedPromoters.map(id => {
+                            const promoter = promoters.find(p => p._id === id)
+                            return promoter?.FullName || 'Unknown'
+                          }).join(', ')}
+                        </div>
+                      )}
                     </div>
                   )}
 

@@ -36,6 +36,8 @@ import {
   X,
   ArrowLeft,
   CheckCircle,
+  Check,
+  ChevronsUpDown,
   Filter,
   Ticket,
 } from "lucide-react"
@@ -72,6 +74,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 
 interface EventsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -138,6 +152,12 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [filterVenues, setFilterVenues] = React.useState<{id: string, name: string}[]>([])
   const [filterPromoters, setFilterPromoters] = React.useState<{id: string, name: string}[]>([])
   const [filterOptionsLoading, setFilterOptionsLoading] = React.useState(false)
+  
+  // Popover open states for filter dropdowns
+  const [cityPopoverOpen, setCityPopoverOpen] = React.useState(false)
+  const [venuePopoverOpen, setVenuePopoverOpen] = React.useState(false)
+  const [organizerPopoverOpen, setOrganizerPopoverOpen] = React.useState(false)
+  const [promoterPopoverOpen, setPromoterPopoverOpen] = React.useState(false)
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -1492,100 +1512,276 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <>
                         {/* City Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedCity} onValueChange={setSelectedCity} disabled={filterOptionsLoading}>
-                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              {filterOptionsLoading ? (
-                                <div className="flex items-center">
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  Loading...
-                                </div>
-                              ) : (
-                                <SelectValue placeholder="🏙️ Select City" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__all__">All Cities</SelectItem>
-                              {filterCities.map((city) => (
-                                <SelectItem key={city} value={city}>
-                                  {city}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Venue Filter */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedVenue} onValueChange={setSelectedVenue} disabled={filterOptionsLoading}>
-                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              {filterOptionsLoading ? (
-                                <div className="flex items-center">
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  Loading...
-                                </div>
-                              ) : (
-                                <SelectValue placeholder="🏢 Select Venue" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__all__">All Venues</SelectItem>
-                              {filterVenues.map((venue) => (
-                                <SelectItem key={venue.id} value={venue.id}>
-                                  {venue.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-
-                        {/* Organizer Filter */}
-                        {(role as UserRole) !== "organizer" && (
-                          <div className="flex-1 sm:flex-none min-w-[160px]">
-                            <Select value={selectedOrganizer} onValueChange={setSelectedOrganizer} disabled={filterOptionsLoading}>
-                              <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                          <Popover open={cityPopoverOpen} onOpenChange={setCityPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={cityPopoverOpen}
+                                className="w-full justify-between bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm"
+                                disabled={filterOptionsLoading}
+                              >
                                 {filterOptionsLoading ? (
                                   <div className="flex items-center">
                                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
                                     Loading...
                                   </div>
+                                ) : selectedCity === "__all__" ? (
+                                  "🏙️ Select City"
                                 ) : (
-                                  <SelectValue placeholder="👨‍💼 Select Organizer" />
+                                  selectedCity
                                 )}
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__all__">All Organizers</SelectItem>
-                                {filterOrganizers.map((organizer) => (
-                                  <SelectItem key={organizer.id} value={organizer.id}>
-                                    {organizer.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[200px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search cities..." />
+                                <CommandEmpty>No city found.</CommandEmpty>
+                                <CommandGroup className="max-h-[200px] overflow-y-auto">
+                                  <CommandItem
+                                    value="__all__"
+                                    keywords={["all", "cities"]}
+                                    onSelect={() => {
+                                      setSelectedCity("__all__")
+                                      setCityPopoverOpen(false)
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        selectedCity === "__all__" ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    All Cities
+                                  </CommandItem>
+                                  {filterCities.map((city) => (
+                                    <CommandItem
+                                      key={city}
+                                      value={city}
+                                      keywords={[city]}
+                                      onSelect={(currentValue) => {
+                                        setSelectedCity(currentValue)
+                                        setCityPopoverOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          selectedCity === city ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      {city}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+
+                        {/* Venue Filter */}
+                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <Popover open={venuePopoverOpen} onOpenChange={setVenuePopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={venuePopoverOpen}
+                                className="w-full justify-between bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm"
+                                disabled={filterOptionsLoading}
+                              >
+                                {filterOptionsLoading ? (
+                                  <div className="flex items-center">
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    Loading...
+                                  </div>
+                                ) : selectedVenue === "__all__" ? (
+                                  "🏢 Select Venue"
+                                ) : (
+                                  filterVenues.find(v => v.id === selectedVenue)?.name || "Select Venue"
+                                )}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[200px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search venues..." />
+                                <CommandEmpty>No venue found.</CommandEmpty>
+                                <CommandGroup className="max-h-[200px] overflow-y-auto">
+                                  <CommandItem
+                                    value="__all__"
+                                    keywords={["all", "venues"]}
+                                    onSelect={() => {
+                                      setSelectedVenue("__all__")
+                                      setVenuePopoverOpen(false)
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        selectedVenue === "__all__" ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    All Venues
+                                  </CommandItem>
+                                  {filterVenues.map((venue) => (
+                                    <CommandItem
+                                      key={venue.id}
+                                      value={venue.id}
+                                      keywords={[venue.name]}
+                                      onSelect={(currentValue) => {
+                                        setSelectedVenue(currentValue)
+                                        setVenuePopoverOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          selectedVenue === venue.id ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      {venue.name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
+                        </div>
+
+                        {/* Organizer Filter */}
+                        {(role as UserRole) !== "organizer" && (
+                          <div className="flex-1 sm:flex-none min-w-[160px]">
+                            <Popover open={organizerPopoverOpen} onOpenChange={setOrganizerPopoverOpen}>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  role="combobox"
+                                  aria-expanded={organizerPopoverOpen}
+                                  className="w-full justify-between bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm"
+                                  disabled={filterOptionsLoading}
+                                >
+                                  {filterOptionsLoading ? (
+                                    <div className="flex items-center">
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                      Loading...
+                                    </div>
+                                  ) : selectedOrganizer === "__all__" ? (
+                                    "👨‍💼 Select Organizer"
+                                  ) : (
+                                    filterOrganizers.find(o => o.id === selectedOrganizer)?.name || "Select Organizer"
+                                  )}
+                                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-[200px] p-0" align="start">
+                                <Command>
+                                  <CommandInput placeholder="Search organizers..." />
+                                  <CommandEmpty>No organizer found.</CommandEmpty>
+                                  <CommandGroup className="max-h-[200px] overflow-y-auto">
+                                    <CommandItem
+                                      value="__all__"
+                                      keywords={["all", "organizers"]}
+                                      onSelect={() => {
+                                        setSelectedOrganizer("__all__")
+                                        setOrganizerPopoverOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          selectedOrganizer === "__all__" ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      All Organizers
+                                    </CommandItem>
+                                    {filterOrganizers.map((organizer) => (
+                                      <CommandItem
+                                        key={organizer.id}
+                                        value={organizer.id}
+                                        keywords={[organizer.name]}
+                                        onSelect={(currentValue) => {
+                                          setSelectedOrganizer(currentValue)
+                                          setOrganizerPopoverOpen(false)
+                                        }}
+                                      >
+                                        <Check
+                                          className={`mr-2 h-4 w-4 ${
+                                            selectedOrganizer === organizer.id ? "opacity-100" : "opacity-0"
+                                          }`}
+                                        />
+                                        {organizer.name}
+                                      </CommandItem>
+                                    ))}
+                                  </CommandGroup>
+                                </Command>
+                              </PopoverContent>
+                            </Popover>
                           </div>
                         )}
 
                         {/* Promoter Filter */}
                         <div className="flex-1 sm:flex-none min-w-[160px]">
-                          <Select value={selectedPromoter} onValueChange={setSelectedPromoter} disabled={filterOptionsLoading}>
-                            <SelectTrigger className="bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
-                              {filterOptionsLoading ? (
-                                <div className="flex items-center">
-                                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                                  Loading...
-                                </div>
-                              ) : (
-                                <SelectValue placeholder="📢 Select Promoter" />
-                              )}
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__all__">All Promoters</SelectItem>
-                              {filterPromoters.map((promoter) => (
-                                <SelectItem key={promoter.id} value={promoter.id}>
-                                  {promoter.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          <Popover open={promoterPopoverOpen} onOpenChange={setPromoterPopoverOpen}>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={promoterPopoverOpen}
+                                className="w-full justify-between bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm"
+                                disabled={filterOptionsLoading}
+                              >
+                                {filterOptionsLoading ? (
+                                  <div className="flex items-center">
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    Loading...
+                                  </div>
+                                ) : selectedPromoter === "__all__" ? (
+                                  "📢 Select Promoter"
+                                ) : (
+                                  filterPromoters.find(p => p.id === selectedPromoter)?.name || "Select Promoter"
+                                )}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-[200px] p-0" align="start">
+                              <Command>
+                                <CommandInput placeholder="Search promoters..." />
+                                <CommandEmpty>No promoter found.</CommandEmpty>
+                                <CommandGroup className="max-h-[200px] overflow-y-auto">
+                                  <CommandItem
+                                    value="__all__"
+                                    keywords={["all", "promoters"]}
+                                    onSelect={() => {
+                                      setSelectedPromoter("__all__")
+                                      setPromoterPopoverOpen(false)
+                                    }}
+                                  >
+                                    <Check
+                                      className={`mr-2 h-4 w-4 ${
+                                        selectedPromoter === "__all__" ? "opacity-100" : "opacity-0"
+                                      }`}
+                                    />
+                                    All Promoters
+                                  </CommandItem>
+                                  {filterPromoters.map((promoter) => (
+                                    <CommandItem
+                                      key={promoter.id}
+                                      value={promoter.id}
+                                      keywords={[promoter.name]}
+                                      onSelect={(currentValue) => {
+                                        setSelectedPromoter(currentValue)
+                                        setPromoterPopoverOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={`mr-2 h-4 w-4 ${
+                                          selectedPromoter === promoter.id ? "opacity-100" : "opacity-0"
+                                        }`}
+                                      />
+                                      {promoter.name}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </Command>
+                            </PopoverContent>
+                          </Popover>
                         </div>
 
                         {/* Date Range Filter for Non-Promoters */}
