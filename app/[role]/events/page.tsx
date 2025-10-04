@@ -1187,7 +1187,9 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <TableHead className="font-semibold text-foreground bg-muted/30">Start Date</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[120px]">Organizer</TableHead>
+                  {(role as UserRole) !== "organizer" && (
+                    <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[120px]">Organizer</TableHead>
+                  )}
                   <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[140px]">Promoter</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Status</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
@@ -1242,18 +1244,20 @@ export default function EventsPage({ params }: EventsPageProps) {
                       <TableCell>{formatDateForDisplay(event.eventStartDate)}</TableCell>
                       <TableCell>{formatTime(event.eventStartDate)}</TableCell>
                       <TableCell>{event.categoryName}</TableCell>
-                      <TableCell className="min-w-[120px]">
-                        {(role as UserRole) === "superadmin" ? (
-                          <OrganizersCirclesOnly
-                            organizers={event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }]}
-                            maxDisplay={3}
-                            size="sm"
-                            onClick={() => handleOrganizerClick(event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }], event._id)}
-                          />
-                        ) : (
-                          <div />
-                        )}
-                      </TableCell>
+                      {(role as UserRole) !== "organizer" && (
+                        <TableCell className="min-w-[120px]">
+                          {(role as UserRole) === "superadmin" ? (
+                            <OrganizersCirclesOnly
+                              organizers={event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }]}
+                              maxDisplay={3}
+                              size="sm"
+                              onClick={() => handleOrganizerClick(event.organizers && event.organizers.length > 0 ? event.organizers : [{ OrganizerName: event.organizerName, organizer_id: event.organizerId }], event._id)}
+                            />
+                          ) : (
+                            <div />
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="min-w-[140px]">
                         {(role as UserRole) === "superadmin" ? (
                           <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
