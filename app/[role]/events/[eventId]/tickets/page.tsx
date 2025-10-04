@@ -2324,11 +2324,13 @@ export default function TicketsPage() {
                   <div className="space-y-2">
                     <Label>Visibility (Read Only)</Label>
                     <Input
-                      value={
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "1" ? "Everyone" :
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "2" ? "Organizers Only" :
-                        (editFormData.VisibilityLevel?.toString() || editFormData.EventTicketVisibility?.toString()) === "3" ? "Promoters Only" : "Unknown"
-                      }
+                      value={(() => {
+                        const visibility = (editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                        if (visibility === "1") return "All"
+                        if (visibility === "2") return "All Customers"
+                        if (visibility === "3") return "Promoters"
+                        return "Unknown"
+                      })()}
                       disabled
                       className="bg-muted"
                     />
