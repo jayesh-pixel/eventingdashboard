@@ -330,16 +330,111 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
   }
 
+  // Function to fetch filter data for organizers using consolidated endpoint
+  const fetchFilterDataForOrganizer = async () => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        console.error('No user or auth token for filter data fetch')
+        return
+      }
+
+      const numericRole = getNumericAdminRole(user.AdminRole || (role as UserRole))
+      
+      const payload = {
+        AdminRole: numericRole,
+        user_id: user.user_id
+      }
+
+      console.log('Fetching filter data for organizer with payload:', payload)
+
+      const response = await fetch('https://node.eventingclub.in/events/getVenueCitiesandPromoterDataforEvents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(payload)
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Filter data API error response:', errorText)
+        throw new Error(`Failed to fetch filter data: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      console.log('Filter data API response for organizer:', data)
+      
+      if (data.success && data.data) {
+        const { cities, venues, promoters } = data.data
+        
+        // Update cities
+        if (cities && Array.isArray(cities)) {
+          console.log('Cities data:', cities)
+          const citiesData = cities.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
+          setFilterCities([...new Set(citiesData)].sort())
+        }
+        
+        // Update venues
+        if (venues && Array.isArray(venues)) {
+          console.log('Venues data:', venues)
+          const venuesData = venues.map((venue: any) => ({
+            id: venue._id || venue.venueId || venue.VenueId || venue.id,
+            name: venue.VenueName || venue.venueName || venue.Name || venue.name || 'Unknown Venue'
+          }))
+          setFilterVenues(venuesData)
+        }
+        
+        // Update promoters
+        if (promoters && Array.isArray(promoters)) {
+          console.log('Promoters data:', promoters)
+          const promotersData = promoters.map((promoter: any) => ({
+            id: promoter._id || promoter.promoterId || promoter.PromoterId || promoter.id,
+            name: promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
+          }))
+          setFilterPromoters(promotersData)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching filter data for organizer:', error)
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to fetch filter data",
+        variant: "destructive",
+      })
+      // Fallback to local data
+      const cities = originalData.map(event => event.city).filter(Boolean)
+      setFilterCities([...new Set(cities)].sort())
+      const venues = originalData.map(event => ({
+        id: event.venueId || event._id,
+        name: event.venueName || 'Unknown Venue'
+      })).filter(venue => venue.name && venue.name !== 'Unknown Venue')
+      setFilterVenues([...new Map(venues.map(venue => [venue.id, venue])).values()])
+      const promoters = originalData.map(event => ({
+        id: event.promoterId || event._id,
+        name: event.promoterName || 'Unknown Promoter'
+      })).filter(promoter => promoter.name && promoter.name !== 'Unknown Promoter')
+      setFilterPromoters([...new Map(promoters.map(promoter => [promoter.id, promoter])).values()])
+    }
+  }
+
   // Function to fetch all filter options
   const fetchAllFilterOptions = async () => {
     setFilterOptionsLoading(true)
     try {
-      await Promise.all([
-        fetchFilterCities(),
-        fetchFilterOrganizers(),
-        fetchFilterVenues(),
-        fetchFilterPromoters()
-      ])
+      if ((role as UserRole) === "organizer") {
+        // For organizers, use the consolidated endpoint
+        await fetchFilterDataForOrganizer()
+      } else {
+        // For superadmin and promoter, fetch all filter options separately
+        await Promise.all([
+          fetchFilterCities(),
+          fetchFilterOrganizers(),
+          fetchFilterVenues(),
+          fetchFilterPromoters()
+        ])
+      }
     } catch (error) {
       console.error('Error fetching filter options:', error)
     } finally {
@@ -503,6 +598,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
         requestPayload = {
           AdminRole: 4, // Promoter role ID
+        
           user_id: user.user_id,
         }
         console.log("Promoter endpoint URL:", apiEndpoint)
@@ -542,7 +638,8 @@ export default function EventsPage({ params }: EventsPageProps) {
           // Include filter parameters if applyFilters is true
           ...(applyFilters && selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
           ...(applyFilters && selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
-          ...(applyFilters && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
+          // Only include organizer filter if role is not organizer
+          ...(applyFilters && (role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
           ...(applyFilters && selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
@@ -767,7 +864,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         // Include filter parameters
         ...(selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
         ...(selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
-        ...(selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
+        // Only include organizer filter if role is not organizer
+        ...((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
         ...(selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
       }
 
@@ -971,8 +1069,8 @@ export default function EventsPage({ params }: EventsPageProps) {
       )
     }
 
-    // Apply organizer filter
-    if (selectedOrganizer && selectedOrganizer !== "__all__") {
+    // Apply organizer filter (only for non-organizer roles)
+    if ((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__") {
       const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === selectedOrganizer)
       events = events.filter(event => 
         event.organizerName === selectedOrganizerData?.name ||

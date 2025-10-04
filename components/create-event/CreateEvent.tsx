@@ -1313,7 +1313,8 @@ export default function CreateEvent({
         submitData.append("ConvinienceFeeValue", (values.feevalue || 0).toString())
       }
       
-      submitData.append("Status", eventStatus === EventStatus.Draft ? "1" : "2")
+      // Set the correct status value based on the eventStatus parameter
+      submitData.append("Status", eventStatus.toString())
 
       // Add conditional fields only if they have values
       // Always append video URL even if empty (backend expects this field)
