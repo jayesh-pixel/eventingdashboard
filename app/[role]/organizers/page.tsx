@@ -835,7 +835,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         body: JSON.stringify({
           organizer_id: selectedOrganizerForReset._id,
           new_password: newPassword,
-          CreatedBy: 3,
+          CreatedBy: 1,
           createduser_id: user.user_id,
         }),
       })

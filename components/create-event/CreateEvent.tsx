@@ -1280,10 +1280,19 @@ export default function CreateEvent({
       submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
       submitData.append("EventVisibility", values.eventVisibility || "1")
       submitData.append("EventType", values.eventType || "1")
-      submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
-      submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
-      submitData.append("ConvinienceFeeValue", (values.feevalue || 0).toString())
-      submitData.append("Status", eventStatus === EventStatus.Draft ? "1" : "3")
+      
+      // FeaturedEventFlag is only allowed for superadmin
+      if (role === "superadmin") {
+        submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
+      }
+      
+      // ConvinienceFeeUnit and ConvinienceFeeValue are only allowed for superadmin
+      if (role === "superadmin") {
+        submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
+        submitData.append("ConvinienceFeeValue", (values.feevalue || 0).toString())
+      }
+      
+      submitData.append("Status", eventStatus === EventStatus.Draft ? "1" : "2")
 
       // Add conditional fields only if they have values
       // Always append video URL even if empty (backend expects this field)
@@ -1291,7 +1300,8 @@ export default function CreateEvent({
         submitData.append("EventVedioUrl", values.eventVideoUrl.trim())
       }
 
-      if (values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
+      // BookingPhoneNumber is only allowed for superadmin
+      if (role === "superadmin" && values.eventType === "1" && values.bookingphonenumber && values.bookingphonenumber.trim && values.bookingphonenumber.trim()) {
         submitData.append("BookingPhoneNumber", values.bookingphonenumber.trim())
       }
 
@@ -1321,7 +1331,8 @@ export default function CreateEvent({
       }
 
       // Add relationship arrays only if they have values - matching API format
-      if (values.organizers && values.organizers.length > 0) {
+      // EventOrganizers is only allowed for superadmin
+      if (role === "superadmin" && values.organizers && values.organizers.length > 0) {
         const organizersArray = values.organizers.map(o => ({ organizer_id: o.value }))
         submitData.append("EventOrganizers", JSON.stringify(organizersArray))
       }
@@ -1419,9 +1430,17 @@ export default function CreateEvent({
 
       // Add administrative fields (CREATE MODE ONLY)
       if (!editMode && user) {
-        if (user.AdminRole || role) {
+        // Set CreatedBy based on role and event status
+        // 1 = SuperAdmin, 3 = Organizer sending to review
+        if (role === "superadmin") {
           submitData.append("CreatedBy", "1")
+        } else if (role === "organizer" && eventStatus === EventStatus.InReview) {
+          submitData.append("CreatedBy", "3")
+        } else if (role === "organizer") {
+          // Organizer saving as draft
+          submitData.append("CreatedBy", "3")
         }
+        
         if (user.user_id) {
           submitData.append("createduser_id", user.user_id)
         }
@@ -1944,8 +1963,8 @@ export default function CreateEvent({
                       </div>
                     )}
 
-                    {/* Booking Phone Number - Only for Booking type, editable for SuperAdmin */}
-                    {values.eventType === "1" && (
+                    {/* Booking Phone Number - Only for Booking type and SuperAdmin */}
+                    {values.eventType === "1" && !isOrganizer && (
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Booking Phone Number <span className="text-red-500">*</span></Label>
                         <Field
@@ -1953,11 +1972,7 @@ export default function CreateEvent({
                           name="bookingphonenumber"
                           type="tel"
                           placeholder="Enter booking phone number"
-                          disabled={isOrganizer}
                         />
-                        {isOrganizer && (
-                          <p className="text-xs text-muted-foreground">Default booking number set by admin</p>
-                        )}
                         {touched.bookingphonenumber && errors.bookingphonenumber && (
                           <p className="text-sm text-red-600">{errors.bookingphonenumber}</p>
                         )}
@@ -2553,16 +2568,18 @@ export default function CreateEvent({
                       )}
                     </div>
 
-                    {/* Featured Event Toggle */}
-                    <div className="flex items-center space-x-2">
-                      <Field
-                        as={Switch}
-                        name="isFeatured"
-                        checked={values.isFeatured}
-                        onCheckedChange={(checked: boolean) => setFieldValue("isFeatured", checked)}
-                      />
-                      <Label>Make as Featured Event</Label>
-                    </div>
+                    {/* Featured Event Toggle - Hidden for organizers */}
+                    {!isOrganizer && (
+                      <div className="flex items-center space-x-2">
+                        <Field
+                          as={Switch}
+                          name="isFeatured"
+                          checked={values.isFeatured}
+                          onCheckedChange={(checked: boolean) => setFieldValue("isFeatured", checked)}
+                        />
+                        <Label>Make as Featured Event</Label>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
