@@ -71,9 +71,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import {
   Command,
   CommandEmpty,
@@ -159,6 +162,11 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [organizerPopoverOpen, setOrganizerPopoverOpen] = React.useState(false)
   const [promoterPopoverOpen, setPromoterPopoverOpen] = React.useState(false)
 
+  // Approve/Reject state for review events
+  const [showRejectModal, setShowRejectModal] = React.useState(false)
+  const [rejectionReason, setRejectionReason] = React.useState("")
+  const [eventToReject, setEventToReject] = React.useState<string>("")
+
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
     if (typeof status === "number") {
@@ -175,7 +183,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   // API functions to fetch filter options
   const fetchFilterCities = async () => {
     try {
-      const response = await fetch('https://node.eventingclub.in/events/getAllEventCities', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllEventCities`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -212,7 +220,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterOrganizers = async () => {
     try {
-      const response = await fetch('https://node.eventingclub.in/organizer/getAll', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/organizer/getAll`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -252,7 +260,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterVenues = async () => {
     try {
-      const response = await fetch('https://node.eventingclub.in/venue/getall', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/venue/getall`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -292,7 +300,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterPromoters = async () => {
     try {
-      const response = await fetch('https://node.eventingclub.in/promoter/getAll', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/promoter/getAll`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -348,7 +356,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
       console.log('Fetching filter data for organizer with payload:', payload)
 
-      const response = await fetch('https://node.eventingclub.in/events/getVenueCitiesandPromoterDataforEvents', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getVenueCitiesandPromoterDataforEvents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -870,7 +878,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       }
 
       // Use the getAllPaginated endpoint for search
-      const searchEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://node.eventingclub.in'}/events/getAllPaginated`
+      const searchEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllPaginated`
 
       const response = await fetch(searchEndpoint, {
         method: "POST",
@@ -1298,6 +1306,132 @@ export default function EventsPage({ params }: EventsPageProps) {
     setSelectedEventId(eventId)
     setShowOrganizerPopup(true)
   }
+
+  // Handle approve event (change status to Published)
+  const handleApproveEvent = async (eventId: string) => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        toast({
+          title: "Error",
+          description: "Authentication required. Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const payload = {
+        event_id: eventId,
+        Status: "3" // Published status
+      }
+
+      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to approve event")
+      }
+
+      const data = await response.json()
+      
+      toast({
+        title: "Success",
+        description: data.message || "Event has been approved and published successfully.",
+      })
+
+      // Refresh the events data
+      getAllEventData(activeTab)
+
+    } catch (error) {
+      console.error("Error approving event:", error)
+      toast({
+        title: "Error",
+        description: "Failed to approve the event. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Handle reject event (change status to Rejected)
+  const handleRejectEvent = async () => {
+    if (!rejectionReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please provide a reason for rejection.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) {
+        toast({
+          title: "Error",
+          description: "Authentication required. Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const payload = {
+        event_id: eventToReject,
+        Status: "4", // Rejected status
+        RejectionReason: rejectionReason.trim()
+      }
+
+      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || "Failed to reject event")
+      }
+
+      const data = await response.json()
+      
+      toast({
+        title: "Success",
+        description: data.message || "Event has been rejected successfully.",
+      })
+
+      // Reset modal state
+      setShowRejectModal(false)
+      setRejectionReason("")
+      setEventToReject("")
+
+      // Refresh the events data
+      getAllEventData(activeTab)
+
+    } catch (error) {
+      console.error("Error rejecting event:", error)
+      toast({
+        title: "Error",
+        description: "Failed to reject the event. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Open reject modal
+  const openRejectModal = (eventId: string) => {
+    setEventToReject(eventId)
+    setRejectionReason("")
+    setShowRejectModal(true)
+  }
   
   // Function to render tab-specific content with table
   const renderTabContent = () => {
@@ -1471,6 +1605,27 @@ export default function EventsPage({ params }: EventsPageProps) {
                                   View & Add Tickets
                                 </DropdownMenuItem>
                               )}
+                              
+                              {/* Approve/Reject buttons for SuperAdmin in review tab */}
+                              {(role as UserRole) === "superadmin" && activeTab === "review" && (
+                                <>
+                                  <DropdownMenuItem 
+                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => handleApproveEvent(event._id)}
+                                  >
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                    Approve & Publish
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => openRejectModal(event._id)}
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Reject Event
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                              
                               {isEventDisabled(event) ? (
                                 <DropdownMenuItem 
                                   className="text-green-600 hover:text-green-700 hover:bg-green-50"
@@ -2182,6 +2337,49 @@ export default function EventsPage({ params }: EventsPageProps) {
         onClose={() => setShowOrganizerPopup(false)}
         organizerData={selectedOrganizerData}
       />
+
+      {/* Rejection Reason Modal */}
+      <Dialog open={showRejectModal} onOpenChange={setShowRejectModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Event</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this event. This will be visible to the organizer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label htmlFor="rejection-reason">Reason for Rejection</Label>
+              <Textarea
+                id="rejection-reason"
+                placeholder="Enter the reason for rejecting this event..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="mt-2 min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowRejectModal(false)
+                setRejectionReason("")
+                setEventToReject("")
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectEvent}
+              disabled={!rejectionReason.trim()}
+            >
+              Reject Event
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
