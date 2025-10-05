@@ -340,6 +340,12 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   // Function to fetch filter data for organizers using consolidated endpoint
   const fetchFilterDataForOrganizer = async () => {
+    // Only execute for organizer role
+    if ((role as UserRole) !== "organizer") {
+      console.log('fetchFilterDataForOrganizer: Skipping - not organizer role')
+      return
+    }
+
     try {
       const authToken = getValidToken()
       if (!user || !authToken) {
@@ -374,32 +380,32 @@ export default function EventsPage({ params }: EventsPageProps) {
       const data = await response.json()
       console.log('Filter data API response for organizer:', data)
       
-      if (data.success && data.data) {
-        const { cities, venues, promoters } = data.data
+      if (data.data) {
+        const { EventVenues, EventCities, EventPromoters } = data.data
         
         // Update cities
-        if (cities && Array.isArray(cities)) {
-          console.log('Cities data:', cities)
-          const citiesData = cities.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
+        if (EventCities && Array.isArray(EventCities)) {
+          console.log('Cities data:', EventCities)
+          const citiesData = EventCities.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
           setFilterCities([...new Set(citiesData)].sort())
         }
         
         // Update venues
-        if (venues && Array.isArray(venues)) {
-          console.log('Venues data:', venues)
-          const venuesData = venues.map((venue: any) => ({
-            id: venue._id || venue.venueId || venue.VenueId || venue.id,
+        if (EventVenues && Array.isArray(EventVenues)) {
+          console.log('Venues data:', EventVenues)
+          const venuesData = EventVenues.map((venue: any) => ({
+            id: venue.venue_id || venue._id || venue.venueId || venue.VenueId || venue.id,
             name: venue.VenueName || venue.venueName || venue.Name || venue.name || 'Unknown Venue'
           }))
           setFilterVenues(venuesData)
         }
         
         // Update promoters
-        if (promoters && Array.isArray(promoters)) {
-          console.log('Promoters data:', promoters)
-          const promotersData = promoters.map((promoter: any) => ({
-            id: promoter._id || promoter.promoterId || promoter.PromoterId || promoter.id,
-            name: promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
+        if (EventPromoters && Array.isArray(EventPromoters)) {
+          console.log('Promoters data:', EventPromoters)
+          const promotersData = EventPromoters.map((promoter: any) => ({
+            id: promoter.promoter_id || promoter._id || promoter.promoterId || promoter.PromoterId || promoter.id,
+            name: promoter.PromoterUsername || promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
           }))
           setFilterPromoters(promotersData)
         }
@@ -1577,11 +1583,22 @@ export default function EventsPage({ params }: EventsPageProps) {
                             </DropdownMenuTrigger>                            <DropdownMenuContent align="end">
                               <DropdownMenuLabel>Actions</DropdownMenuLabel>
                               <DropdownMenuItem 
-                                onClick={() => handleViewEditEvent(event._id)}
+                                onClick={() => {
+                                  const isViewOnly = (role as UserRole) === "organizer" && 
+                                    (event.eventStatus === "Published" || event.eventStatus === "To Be Reviewed" || 
+                                     normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "To Be Reviewed");
+                                  
+                                  if (isViewOnly) {
+                                    // Navigate to edit route but with viewOnly query parameter
+                                    router.push(`/${role}/events/edit/${event._id}?viewOnly=true`)
+                                  } else {
+                                    handleViewEditEvent(event._id)
+                                  }
+                                }}
                                 className="hover:bg-accent cursor-pointer"
                               >
                                 <Eye className="mr-2 h-4 w-4" />
-                                View & Edit
+                                {((role as UserRole) === "organizer" && (event.eventStatus === "Published" || event.eventStatus === "To Be Reviewed" || normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "To Be Reviewed")) ? "View Only" : "View & Edit"}
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => {
@@ -2232,7 +2249,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               To Be Reviewed
             </TabsTrigger>
           )}
-          {(role as UserRole) !== "promoter" && (
+          {(role as UserRole) !== "promoter" && (role as UserRole) !== "organizer" && (
             <TabsTrigger 
               value="self" 
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"

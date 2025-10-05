@@ -56,6 +56,7 @@ interface CreateEventProps {
   setEventCreationModal: ((value: boolean) => void) | (() => void)
   role: UserRole
   editMode?: boolean
+  viewOnly?: boolean
   existingEventData?: any
   eventId?: string
 }
@@ -229,6 +230,7 @@ export default function CreateEvent({
   setEventCreationModal,
   role,
   editMode = false,
+  viewOnly = false,
   existingEventData = null,
   eventId
 }: CreateEventProps) {
@@ -1915,7 +1917,19 @@ export default function CreateEvent({
 
           return (
             <Form>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              {/* View-Only Banner */}
+              {viewOnly && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center space-x-2">
+                    <Info className="h-5 w-5 text-blue-600" />
+                    <p className="text-blue-800 font-medium">
+                      View Only Mode - This event cannot be edited as it has been published or is under review.
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              <div className={`grid grid-cols-1 gap-6 lg:grid-cols-2 ${viewOnly ? 'pointer-events-none opacity-75' : ''}`}>
               {/* Left Column */}
               <div className="space-y-6">
                 {/* Event Configuration */}
@@ -2940,22 +2954,24 @@ export default function CreateEvent({
               </div>
             </div>
 
-            {/* Submit Buttons */}
-            <div className="flex justify-end space-x-4 mt-8">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => handleSubmit(values, EventStatus.Draft)}
-              >
-                Save as Draft
-              </Button>
-              <Button
-                type="button"
-                onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
-              >
-                {role === "organizer" ? "Send to Review" : "Publish Event"}
-              </Button>
-            </div>
+            {/* Submit Buttons - Hide in view-only mode */}
+            {!viewOnly && (
+              <div className="flex justify-end space-x-4 mt-8">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleSubmit(values, EventStatus.Draft)}
+                >
+                  Save as Draft
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
+                >
+                  {role === "organizer" ? "Send to Review" : "Publish Event"}
+                </Button>
+              </div>
+            )}
           </Form>
           )
         }}

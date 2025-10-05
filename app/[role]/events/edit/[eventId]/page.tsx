@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import CreateEvent from "@/components/create-event"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Loader2 } from "lucide-react"
@@ -18,6 +18,7 @@ interface EditEventPageProps {
 
 export default function EditEventPage({ params }: EditEventPageProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { user } = useAuth()
   const { toast } = useToast()
   
@@ -26,6 +27,9 @@ export default function EditEventPage({ params }: EditEventPageProps) {
   const [eventData, setEventData] = React.useState<any>(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
+  
+  // Check if this is view-only mode
+  const isViewOnly = searchParams.get('viewOnly') === 'true'
 
   // Fetch event data for editing
   React.useEffect(() => {
@@ -209,7 +213,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
               <div className="h-6 w-px bg-border dark:bg-border" />
               <div>
                 <h1 className="text-xl font-semibold text-foreground">
-                  Edit Event
+                  {isViewOnly ? "View Event" : "Edit Event"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {eventData?.EventName || eventData?.eventName || "Update event details"}
@@ -225,7 +229,8 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           eventSelectionFlag={eventData?.EventFormat || eventData?.eventFormat || 0}
           setEventCreationModal={handleEventUpdated}
           role={role}
-          editMode={true}
+          editMode={!isViewOnly}
+          viewOnly={isViewOnly}
           existingEventData={eventData}
           eventId={eventId}
         />
