@@ -263,12 +263,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // Desktop tabs component (existing style)
   const DesktopTabs = () => (
     <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-      <TabsList className="flex w-full overflow-x-auto whitespace-nowrap gap-1 bg-muted p-1 rounded-md scrollbar-hide lg:w-auto lg:overflow-visible">
+      <TabsList className="grid w-full grid-cols-3 bg-muted p-1 rounded-md lg:w-auto lg:inline-flex lg:grid-cols-none">
         {getAvailableTabs().map((tab) => (
           <TabsTrigger
             key={tab.value}
             value={tab.value}
-            className="text-xs whitespace-nowrap flex-shrink-0 lg:text-sm"
+            className="text-xs whitespace-nowrap px-4 py-2 min-w-0 flex-1 lg:flex-none lg:text-sm"
           >
             {tab.label} ({tab.count})
           </TabsTrigger>
@@ -971,20 +971,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    {(role as UserRole) !== "promoter" && (
-                      <Select value={statusFilter} onValueChange={setStatusFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Filter by Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Statuses</SelectItem>
-                          <SelectItem value="Confirmed">Confirmed</SelectItem>
-                          <SelectItem value="Booked">Booked</SelectItem>
-                          <SelectItem value="Pending">Pending</SelectItem>
-                          <SelectItem value="Cancelled">Cancelled</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
+
                     {(role as UserRole) !== "promoter" && (
                       <Select value={channelFilter} onValueChange={setChannelFilter}>
                         <SelectTrigger>
@@ -1017,21 +1004,21 @@ export default function BookingsPage({ params }: BookingsPageProps) {
               </div>
             )}
 
-            <TabsContent value={activeTab} className="mt-4">
-              <Card>
-                <CardHeader>                  <CardTitle>
-                    {activeTab === "all"
-                      ? "All Bookings"
-                      : activeTab === "my-bookings"
-                        ? "My Bookings"
-                        : activeTab === "promoter"
-                          ? "Promoter Bookings"
-                          : "Online Bookings"}
-                  </CardTitle>                  <CardDescription>
-                    {filteredBookings.length} booking(s) found
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="p-0 overflow-x-hidden">
+            <div className="px-4 sm:px-6">
+              <TabsContent value={activeTab} className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      {activeTab === "all"
+                        ? `All Bookings (${filteredBookings.length})`
+                        : activeTab === "my-bookings"
+                          ? `My Bookings (${filteredBookings.length})`
+                          : activeTab === "promoter"
+                            ? `Promoter (${filteredBookings.length})`
+                            : `Online (${filteredBookings.length})`}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 overflow-x-hidden">
                   {/* Mobile Card View */}
                                  {/* Desktop Table View */}
                   <div className="w-full">
@@ -1108,6 +1095,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 </CardContent>
               </Card>
             </TabsContent>
+            </div>
           </Tabs>        </div>        {/* Mobile Filter Sheet */}
         <Sheet open={isFilterSheetOpen} onOpenChange={setIsFilterSheetOpen}>
           <SheetContent side="bottom" className="h-[85vh] flex flex-col">
@@ -1134,24 +1122,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   />
                 </div>
 
-                {/* Status Filter */}
-                {(role as UserRole) !== "promoter" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Booking Status</label>
-                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="h-12">
-                        <SelectValue placeholder="Filter by Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Statuses</SelectItem>
-                        <SelectItem value="Confirmed">Confirmed</SelectItem>
-                        <SelectItem value="Booked">Booked</SelectItem>
-                        <SelectItem value="Pending">Pending</SelectItem>
-                        <SelectItem value="Cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+
 
                 {/* Channel Filter */}
                 {(role as UserRole) !== "promoter" && (

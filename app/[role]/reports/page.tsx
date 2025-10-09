@@ -258,7 +258,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
       console.log("Using HARDCODED endpoint:", apiEndpoint)
       console.log("Request payload:", requestPayload)
-      console.log("🔍 Payload verification:")
+      console.log(" Payload verification:")
       console.log("- AdminRole:", requestPayload.AdminRole, typeof requestPayload.AdminRole)
       console.log("- user_id:", requestPayload.user_id, typeof requestPayload.user_id)
       console.log("- EventName:", requestPayload.EventName, typeof requestPayload.EventName)

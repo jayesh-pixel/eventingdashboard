@@ -50,74 +50,213 @@ export function BookingsTable({
     setIsDetailModalOpen(true)
   }
 
-  // Condensed Table Component
-  const CondensedTable = () => (
-    <div className="w-full overflow-x-auto shadow-md sm:rounded-lg border border-gray-200 dark:border-gray-700">
-      <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+  // Complete Table Component with All Columns
+  const CompleteTable = () => (
+    <div className="w-full overflow-x-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+      <table className="w-full table-fixed text-sm text-left bg-white dark:bg-gray-800">
+        <thead className="bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
           <tr>
-            <th scope="col" className="px-3 py-3 min-w-[140px]">Customer Name</th>
-            <th scope="col" className="px-2 py-3 min-w-[100px]">Booking ID</th>
-            <th scope="col" className="px-2 py-3 min-w-[100px] hidden lg:table-cell">Phone No.</th>
-            <th scope="col" className="px-2 py-3 min-w-[150px] hidden xl:table-cell">Email</th>
-            <th scope="col" className="px-2 py-3 min-w-[120px]">Event</th>
-            <th scope="col" className="px-2 py-3 min-w-[100px]">Booking Date & Time</th>
-            <th scope="col" className="px-2 py-3 min-w-[60px] text-center">Quantity</th>            <th scope="col" className="px-2 py-3 min-w-[90px] hidden lg:table-cell">Ticket Price</th>
-            <th scope="col" className="px-2 py-3 min-w-[120px]">Venue</th>
-            <th scope="col" className="px-2 py-3 min-w-[100px] text-center">Actions</th>
+            <th scope="col" className="w-36 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Customer Name
+            </th>
+            <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Booking ID
+            </th>
+            <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Phone
+            </th>
+            <th scope="col" className="w-48 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Email
+            </th>
+            <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Booking Date
+            </th>
+            <th scope="col" className="w-40 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Event
+            </th>
+            <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Event Date
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Source
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              City
+            </th>
+            <th scope="col" className="w-36 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Venue
+            </th>
+            <th scope="col" className="w-20 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Quantity
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Check In
+            </th>
+            <th scope="col" className="w-32 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Ticket Name
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Type
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-right text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Price
+            </th>
+            <th scope="col" className="w-28 px-3 py-3 text-right text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Total
+            </th>
+            <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Remark
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Status
+            </th>
+            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Actions
+            </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {bookings.length === 0 ? (
             <tr>
-              <td colSpan={10} className="text-center py-8 text-gray-500 dark:text-gray-400">
-                {searchTerm || statusFilter !== "all" || channelFilter !== "all"
-                  ? "No bookings found matching your filters"
-                  : "No bookings found"}
+              <td colSpan={19} className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <div className="flex flex-col items-center space-y-3">
+                  <div className="text-lg font-medium">
+                    {searchTerm || statusFilter !== "all" || channelFilter !== "all"
+                      ? "No bookings found matching your filters"
+                      : "No bookings found"}
+                  </div>
+                </div>
               </td>
             </tr>
           ) : (
-            bookings.map((booking) => (
+            bookings.map((booking, index) => (
               <tr 
                 key={booking._id}
-                className={`${
-                  booking.bookingStatus === "Cancelled" 
-                    ? "bg-red-50 hover:bg-red-100 dark:bg-red-950 dark:hover:bg-red-900" 
-                    : "bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700"
-                } border-b dark:border-gray-700 transition-colors`}
-              >                <td className="px-3 py-3 font-medium text-gray-900 dark:text-white max-w-[140px] truncate" title={booking.CustomerName || booking.customerName}>
-                  {booking.CustomerName || booking.customerName}
-                </td>                <td className="px-2 py-3 font-medium text-gray-900 dark:text-white">
-                  <span className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs font-mono">
-                    {booking.Booking_id || booking._id.slice(-6)}
+                className="hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-600"
+              >
+                {/* Customer Name */}
+                <td className="w-36 px-3 py-3 text-left">
+                  <div className="font-medium text-gray-900 dark:text-white truncate">
+                    {booking.CustomerName || booking.customerName || "N/A"}
+                  </div>
+                </td>
+                {/* Booking ID */}
+                <td className="w-28 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.Booking_id || booking._id.slice(-8) || "N/A"}
                   </span>
-                </td><td className="px-2 py-3 text-gray-700 dark:text-gray-300 hidden lg:table-cell max-w-[100px] truncate">
-                  {booking.PhoneNumber || booking.phoneNumber || "-"}
-                </td>                <td className="px-2 py-3 text-gray-700 dark:text-gray-300 hidden xl:table-cell max-w-[150px] truncate" title={booking.Email || booking.customerEmail}>
-                  {booking.Email || booking.customerEmail}
-                </td>                <td className="px-2 py-3 text-gray-700 dark:text-gray-300 max-w-[120px] truncate" title={booking.EventName || booking.eventName}>
-                  {booking.EventName || booking.eventName || "-"}
-                </td><td className="px-2 py-3 text-gray-700 dark:text-gray-300 whitespace-nowrap text-xs">
-                  {formatDate(booking.BookingDateTime || booking.bookingDate)}
                 </td>
-                <td className="px-2 py-3 text-center">                  <span className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-medium">
-                    {booking.TicketQuantity || booking.quantity}
+                {/* Phone Number */}
+                <td className="w-28 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.PhoneNumber || booking.phoneNumber || "N/A"}
                   </span>
-                </td>                <td className="px-2 py-3 font-medium text-gray-900 dark:text-gray-100 hidden lg:table-cell text-xs">
-                  {(booking.TicketPrice ?? booking.ticketPrice) ? formatCurrency(booking.TicketPrice ?? booking.ticketPrice ?? 0) : "-"}
                 </td>
-                <td className="px-2 py-3 text-gray-700 dark:text-gray-300 max-w-[120px] truncate" title={booking.EventVenueName || booking.venue}>
-                  {booking.EventVenueName || booking.venue || "-"}
+                {/* Email */}
+                <td className="w-48 px-3 py-3 text-left">
+                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                    {booking.Email || booking.customerEmail || "N/A"}
+                  </span>
                 </td>
-                <td className="px-2 py-3 text-center">
+                {/* Booking Date & Time */}
+                <td className="w-32 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {formatDate(booking.BookingDateTime || booking.bookingDate)}
+                  </span>
+                </td>
+                {/* Event Name */}
+                <td className="w-40 px-3 py-3 text-left">
+                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                    {booking.EventName || booking.eventName || "N/A"}
+                  </span>
+                </td>
+                {/* Event Date */}
+                <td className="w-28 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {(booking.TicketDate || booking.ticketDate) ? formatDate(booking.TicketDate || booking.ticketDate || "") : "N/A"}
+                  </span>
+                </td>
+                {/* Source (Booking Channel) */}
+                <td className="w-24 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.bookingChannel || "Online"}
+                  </span>
+                </td>
+                {/* City */}
+                <td className="w-24 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.EventCityName || booking.city || "N/A"}
+                  </span>
+                </td>
+                {/* Venue */}
+                <td className="w-36 px-3 py-3 text-left">
+                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                    {booking.EventVenueName || booking.venue || "N/A"}
+                  </span>
+                </td>
+                {/* Quantity */}
+                <td className="w-20 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.TicketQuantity || booking.quantity || "N/A"}
+                  </span>
+                </td>
+                {/* Check In Status */}
+                <td className="w-24 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    Pending
+                  </span>
+                </td>
+                {/* Ticket Name */}
+                <td className="w-32 px-3 py-3 text-left">
+                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                    {booking.TicketName || booking.ticketName || "N/A"}
+                  </span>
+                </td>
+                {/* Ticket Type */}
+                <td className="w-24 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {booking.EventTicketType || booking.ticketType || "N/A"}
+                  </span>
+                </td>
+                {/* Ticket Price */}
+                <td className="w-24 px-3 py-3 text-right">
+                  <span className="text-sm text-gray-900 dark:text-white">
+                    {(booking.TicketPrice ?? booking.ticketPrice) ? formatCurrency(booking.TicketPrice ?? booking.ticketPrice ?? 0) : "N/A"}
+                  </span>
+                </td>
+                {/* Total Amount */}
+                <td className="w-28 px-3 py-3 text-right">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                    {formatCurrency(booking.TotalAmount || booking.totalAmount)}
+                  </span>
+                </td>
+                {/* Remark */}
+                <td className="w-28 px-3 py-3 text-center">
+                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                    {booking.Remark || booking.remark || "N/A"}
+                  </span>
+                </td>
+                {/* Status */}
+                <td className="w-24 px-3 py-3 text-center">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    booking.bookingStatus === 'Confirmed' 
+                      ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'
+                      : booking.bookingStatus === 'Pending'
+                      ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'
+                  }`}>
+                    {booking.bookingStatus || "N/A"}
+                  </span>
+                </td>
+                {/* Actions */}
+                <td className="w-24 px-3 py-3 text-center">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handleViewDetails(booking)}
                     className="text-xs"
                   >
-                    <Eye className="h-3 w-3 mr-1" />
-                    View Details
+                    View
                   </Button>
                 </td>
               </tr>
@@ -235,7 +374,7 @@ export function BookingsTable({
     <div className="w-full">
       {/* Desktop View */}
       <div className="hidden md:block">
-        <CondensedTable />
+        <CompleteTable />
         <DetailedModal />
       </div>
 

@@ -103,7 +103,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   // Search and filter state
   const [searchTerm, setSearchTerm] = React.useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<string>("all")
   const [channelFilter, setChannelFilter] = React.useState<string>("all")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
 
@@ -375,7 +374,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
   // Filter bookings based on search term and filters
   React.useEffect(() => {
-    if (debouncedSearchTerm === "" && statusFilter === "all" && channelFilter === "all") {
+    if (debouncedSearchTerm === "" && channelFilter === "all") {
       setBookingsData(originalData)
       return
     }
@@ -395,17 +394,13 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       )
     }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.bookingStatus === statusFilter)
-    }
-
     if (channelFilter !== "all") {
       filtered = filtered.filter((booking) => booking.bookingChannel === channelFilter)
     }
 
     setBookingsData(filtered)
     setCurrentPage(1)
-  }, [debouncedSearchTerm, statusFilter, channelFilter, originalData])
+  }, [debouncedSearchTerm, channelFilter, originalData])
 
   // Filter bookings based on tab
   const filteredBookings = React.useMemo(() => {
@@ -469,7 +464,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   // Reset all filters
   const resetAllFilters = () => {
     setSearchTerm("")
-    setStatusFilter("all")
     setChannelFilter("all")
   }
 
@@ -573,52 +567,119 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           </div>
         </div>
 
-        {/* Filters and Search */}
+        {/* Bookings Header and Actions */}
         <div className="px-4 sm:px-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Filter Bookings</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Bookings</CardTitle>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={exportToExcel}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Report
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Input
-                placeholder="Search by Customer Name, Booking ID, Phone, Email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {(role as UserRole) !== "promoter" && (
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filter by Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="Confirmed">Confirmed</SelectItem>
-                    <SelectItem value="Booked">Booked</SelectItem>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="Cancelled">Cancelled</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-              <Select value={channelFilter} onValueChange={setChannelFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by Channel" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Channels</SelectItem>
-                  <SelectItem value="Promoter">Promoter</SelectItem>
-                  <SelectItem value="Online">Online</SelectItem>
-                  <SelectItem value="Bulk">Bulk</SelectItem>
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={resetAllFilters}>
-                  <X className="mr-2 h-4 w-4" />
-                  Reset
-                </Button>
-                <Button variant="outline" onClick={exportToExcel}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Export
-                </Button>
+            <CardContent className="space-y-4">
+              {/* Search */}
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Search By Customer Name and Booking ID"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="max-w-md"
+                  />
+                </div>
+              </div>
+
+              {/* Date Selection */}
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Select Date:</span>
+                  <Select value="all" onValueChange={() => {}}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="All" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Event Filters */}
+              <div className="border-t pt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-medium">Event Filter</h3>
+                  <Button variant="outline" size="sm" onClick={resetAllFilters}>
+                    Reset All
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* City */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">City</label>
+                    <Select value="delhi" onValueChange={() => {}}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select City" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="delhi">Delhi</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Venue */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Venue</label>
+                    <Select value="odeum" onValueChange={() => {}}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Venue" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="odeum">Odeum By Prism: Hyderabad</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Organizers */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Organizers</label>
+                    <Select value="icenation" onValueChange={() => {}}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Organizer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="icenation">icenation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Event Name */}
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Event Name</label>
+                    <Select value="goa-takeover" onValueChange={() => {}}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select Event" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="goa-takeover">Goa Takeover by DJ Chetas at HAMMERZ 21 Dec</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-4">
+                  <Button variant="outline" size="sm">
+                    Close
+                  </Button>
+                  <Button size="sm">
+                    Search
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -660,7 +721,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
                       bookings={currentBookings}
                       role={role as UserRole}
                       searchTerm={searchTerm}
-                      statusFilter={statusFilter}
+                      statusFilter="all"
                       channelFilter={channelFilter}
                       formatDate={formatDate}
                       formatCurrency={formatCurrency}

@@ -164,7 +164,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   // Approve/Reject state for review events
   const [showRejectModal, setShowRejectModal] = React.useState(false)
-  const [rejectionReason, setRejectionReason] = React.useState("")
+  const [EventRejectRemark, setEventRejectRemark] = React.useState("")
   const [eventToReject, setEventToReject] = React.useState<string>("")
 
   // Helper function to normalize event status for display
@@ -1326,10 +1326,54 @@ export default function EventsPage({ params }: EventsPageProps) {
         return
       }
 
+      // Find the event to get complete event data
+      const eventToApproveData = allEventsData.find(event => event._id === eventId)
+      
+      if (!eventToApproveData) {
+        throw new Error("Event not found")
+      }
+
+      console.log('Complete event data for approval:', eventToApproveData)
+
+      // Create payload with complete event data
       const payload = {
         event_id: eventId,
-        Status: "3" // Published status
+        Status: "3", // Published status
+        
+        // Include all event fields from the original data
+        EventName: eventToApproveData.EventName || eventToApproveData.eventName,
+        EventDescription: eventToApproveData.EventDescription || eventToApproveData.eventDescription,
+        EventLanguages: eventToApproveData.EventLanguages || eventToApproveData.eventLanguages || [],
+        EventTermsCondition: eventToApproveData.EventTermsCondition || eventToApproveData.eventTermsCondition || "",
+        
+        // Event flags and settings
+        TourEvent: (eventToApproveData.TourEvent ?? eventToApproveData.tourEvent ?? 0).toString(),
+        VenueEventFlag: eventToApproveData.VenueEventFlag ?? eventToApproveData.venueEventFlag ?? 1,
+        EventType: eventToApproveData.EventType ?? eventToApproveData.eventType ?? 1,
+        OnlineEventFlag: eventToApproveData.OnlineEventFlag ?? eventToApproveData.onlineEventFlag ?? 0,
+        FeaturedEventFlag: eventToApproveData.FeaturedEventFlag ?? eventToApproveData.featuredEventFlag ?? 0,
+        VenueToBeAnnounced: eventToApproveData.VenueToBeAnnounced ?? eventToApproveData.venueToBeAnnounced ?? 0,
+        EventVisibility: eventToApproveData.EventVisibility ?? eventToApproveData.eventVisibility ?? 1,
+        
+        // Additional fields
+        BestSuitedFor: eventToApproveData.BestSuitedFor ?? eventToApproveData.bestSuitedFor ?? "21",
+        venue_id: eventToApproveData.venue_id ?? eventToApproveData.venueId,
+        
+        // Online event link if applicable
+        ...(eventToApproveData.OnlineEventFlag === 1 && {
+          Online_Event_Link: eventToApproveData.Online_Event_Link ?? eventToApproveData.onlineEventLink
+        }),
+        
+        // Venue to be announced fields if applicable
+        ...(eventToApproveData.VenueToBeAnnounced === 1 && {
+          VenueToBeAnnouncedCity: eventToApproveData.VenueToBeAnnouncedCity ?? eventToApproveData.venueToBeAnnouncedCity,
+          VenueToBeAnnouncedCityIsoCode: eventToApproveData.VenueToBeAnnouncedCityIsoCode ?? eventToApproveData.venueToBeAnnouncedCityIsoCode,
+          VenueToBeAnnouncedState: eventToApproveData.VenueToBeAnnouncedState ?? eventToApproveData.venueToBeAnnouncedState,
+          VenueToBeAnnouncedStateIsoCode: eventToApproveData.VenueToBeAnnouncedStateIsoCode ?? eventToApproveData.venueToBeAnnouncedStateIsoCode
+        })
       }
+
+      console.log('Complete approve payload being sent:', payload)
 
       const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
@@ -1367,7 +1411,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   // Handle reject event (change status to Rejected)
   const handleRejectEvent = async () => {
-    if (!rejectionReason.trim()) {
+    if (!EventRejectRemark.trim()) {
       toast({
         title: "Error",
         description: "Please provide a reason for rejection.",
@@ -1387,11 +1431,56 @@ export default function EventsPage({ params }: EventsPageProps) {
         return
       }
 
+      // Find the event to get complete event data
+      const eventToRejectData = allEventsData.find(event => event._id === eventToReject)
+      
+      if (!eventToRejectData) {
+        throw new Error("Event not found")
+      }
+
+      console.log('Complete event data for rejection:', eventToRejectData)
+      console.log('Rejection reason:', EventRejectRemark.trim())
+
+      // Create payload with complete event data plus rejection remark
       const payload = {
         event_id: eventToReject,
         Status: "4", // Rejected status
-        RejectionReason: rejectionReason.trim()
+        EventRejectRemark: EventRejectRemark.trim(), // Rejection remark
+        
+        // Include all event fields from the original data
+        EventName: eventToRejectData.EventName || eventToRejectData.eventName,
+        EventDescription: eventToRejectData.EventDescription || eventToRejectData.eventDescription,
+        EventLanguages: eventToRejectData.EventLanguages || eventToRejectData.eventLanguages || [],
+        EventTermsCondition: eventToRejectData.EventTermsCondition || eventToRejectData.eventTermsCondition || "",
+        
+        // Event flags and settings
+        TourEvent: (eventToRejectData.TourEvent ?? eventToRejectData.tourEvent ?? 0).toString(),
+        VenueEventFlag: eventToRejectData.VenueEventFlag ?? eventToRejectData.venueEventFlag ?? 1,
+        EventType: eventToRejectData.EventType ?? eventToRejectData.eventType ?? 1,
+        OnlineEventFlag: eventToRejectData.OnlineEventFlag ?? eventToRejectData.onlineEventFlag ?? 0,
+        FeaturedEventFlag: eventToRejectData.FeaturedEventFlag ?? eventToRejectData.featuredEventFlag ?? 0,
+        VenueToBeAnnounced: eventToRejectData.VenueToBeAnnounced ?? eventToRejectData.venueToBeAnnounced ?? 0,
+        EventVisibility: eventToRejectData.EventVisibility ?? eventToRejectData.eventVisibility ?? 1,
+        
+        // Additional fields
+        BestSuitedFor: eventToRejectData.BestSuitedFor ?? eventToRejectData.bestSuitedFor ?? "21",
+        venue_id: eventToRejectData.venue_id ?? eventToRejectData.venueId,
+        
+        // Online event link if applicable
+        ...(eventToRejectData.OnlineEventFlag === 1 && {
+          Online_Event_Link: eventToRejectData.Online_Event_Link ?? eventToRejectData.onlineEventLink
+        }),
+        
+        // Venue to be announced fields if applicable
+        ...(eventToRejectData.VenueToBeAnnounced === 1 && {
+          VenueToBeAnnouncedCity: eventToRejectData.VenueToBeAnnouncedCity ?? eventToRejectData.venueToBeAnnouncedCity,
+          VenueToBeAnnouncedCityIsoCode: eventToRejectData.VenueToBeAnnouncedCityIsoCode ?? eventToRejectData.venueToBeAnnouncedCityIsoCode,
+          VenueToBeAnnouncedState: eventToRejectData.VenueToBeAnnouncedState ?? eventToRejectData.venueToBeAnnouncedState,
+          VenueToBeAnnouncedStateIsoCode: eventToRejectData.VenueToBeAnnouncedStateIsoCode ?? eventToRejectData.venueToBeAnnouncedStateIsoCode
+        })
       }
+
+      console.log('Complete reject payload with remark being sent:', payload)
 
       const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
@@ -1416,7 +1505,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
       // Reset modal state
       setShowRejectModal(false)
-      setRejectionReason("")
+      setEventRejectRemark("")
       setEventToReject("")
 
       // Refresh the events data
@@ -1435,7 +1524,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Open reject modal
   const openRejectModal = (eventId: string) => {
     setEventToReject(eventId)
-    setRejectionReason("")
+    setEventRejectRemark("")
     setShowRejectModal(true)
   }
   
@@ -2164,7 +2253,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                       className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
                       disabled={!startDate || !endDate}
                     >
-                      ✅ Apply Dates
+                       Apply Dates
                     </Button>
                   </div>
                 </div>
@@ -2370,8 +2459,8 @@ export default function EventsPage({ params }: EventsPageProps) {
               <Textarea
                 id="rejection-reason"
                 placeholder="Enter the reason for rejecting this event..."
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
+                value={EventRejectRemark}
+                onChange={(e) => setEventRejectRemark(e.target.value)}
                 className="mt-2 min-h-[100px]"
               />
             </div>
@@ -2381,7 +2470,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               variant="outline"
               onClick={() => {
                 setShowRejectModal(false)
-                setRejectionReason("")
+                setEventRejectRemark("")
                 setEventToReject("")
               }}
             >
@@ -2390,7 +2479,7 @@ export default function EventsPage({ params }: EventsPageProps) {
             <Button
               variant="destructive"
               onClick={handleRejectEvent}
-              disabled={!rejectionReason.trim()}
+              disabled={!EventRejectRemark.trim()}
             >
               Reject Event
             </Button>
