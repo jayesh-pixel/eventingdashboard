@@ -442,11 +442,16 @@ export default function TicketsPage() {
             console.log("Auto-populating forms with EventDateTime_id:", firstDateTime._id)
             console.log("Automatic ticket type:", automaticTicketType)
             
-            // Auto-populate both forms with the first event date/time and automatic ticket type
+            // Determine default visibility level based on event privacy
+            const eventVisibility = data.data.EventVisibility || data.data.eventVisibility
+            const defaultVisibilityLevel = eventVisibility === 2 ? 3 : 1 // Private events default to Promoters (3), Public events default to All (1)
+            
+            // Auto-populate both forms with the first event date/time, automatic ticket type, and proper visibility
             setNormalFormData(prev => ({ 
               ...prev, 
               EventDateTime_id: firstDateTime._id,
-              TicketType: automaticTicketType
+              TicketType: automaticTicketType,
+              VisibilityLevel: defaultVisibilityLevel
             }))
             setBulkFormData(prev => ({ 
               ...prev, 
@@ -2009,54 +2014,102 @@ export default function TicketsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {/* Only show "All" and "All Customers" for public events */}
                         {(() => {
                           const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
-                          return eventData && eventVisibility !== 2 && (
-                            <>
-                              <SelectItem value="1">All</SelectItem>
-                              <SelectItem value="2">All Customers</SelectItem>
-                            </>
-                          )
+                          
+                          if (eventVisibility === 2) {
+                            // Private Event - Only show Promoters option
+                            return (
+                              <SelectItem value="3">Promoters</SelectItem>
+                            )
+                          } else {
+                            // Public Event - Show All, All Customers, and Promoters
+                            return (
+                              <>
+                                <SelectItem value="1">All</SelectItem>
+                                <SelectItem value="2">All Customers</SelectItem>
+                                <SelectItem value="3">Promoters</SelectItem>
+                              </>
+                            )
+                          }
                         })()}
-                        <SelectItem value="3">Promoters</SelectItem>
                       </SelectContent>
                     </Select>
                     {/* Show info message for private events */}
                     {(() => {
                       const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
                       return eventData && eventVisibility === 2 && (
-                        <p className="text-xs text-muted-foreground">
-                          This is a private event. Tickets can only be visible to selected promoters.
+                        <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
+                          🔒 This is a private event. Tickets can only be assigned to promoters.
                         </p>
                       )
-                    })()}                    {normalFormData.VisibilityLevel === 3 && selectedPromoters.length > 0 && (
-                      <div className="text-sm text-muted-foreground space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span>{selectedPromoters.length} promoter(s) selected</span>
+                    })()}
+                    {/* Show info for promoters visibility */}
+                    {normalFormData.VisibilityLevel === 3 && (
+                      <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                        💡 This ticket will only be visible to the promoters you select below.
+                      </p>
+                    )}                    {normalFormData.VisibilityLevel === 3 && (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor="promoterSelect">Assign to Promoters</Label>
+                          <p className="text-xs text-muted-foreground">
+                            Select which promoters assigned to this event can sell this ticket
+                          </p>
                           <Button
                             type="button"
                             variant="outline"
-                            size="sm"
                             onClick={() => {
                               setPromoterSearchTerm("")
                               setShowPromoterModal(true)
                             }}
+                            className="w-full justify-start h-auto p-3 border-dashed"
                           >
-                            Edit Selection
+                            <Users className="mr-2 h-4 w-4" />
+                            <div className="flex flex-col items-start">
+                              <span className="font-medium">
+                                {selectedPromoters.length > 0 
+                                  ? `${selectedPromoters.length} Promoter(s) Selected`
+                                  : 'Choose Promoters'
+                                }
+                              </span>
+                              <span className="text-xs text-muted-foreground mt-1">
+                                {selectedPromoters.length > 0 
+                                  ? 'Click to modify selection'
+                                  : `${filteredPromoters.length} promoters assigned to this event`
+                                }
+                              </span>
+                            </div>
                           </Button>
                         </div>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedPromoters.map(promoterId => {
-                            const promoter = promoters.find(p => p._id === promoterId)
-                            return promoter ? (
-                              <Badge key={promoterId} variant="secondary" className="text-xs">
-                                {promoter.FullName}
-                              </Badge>
-                            ) : null
-                          })}
-                        </div>
-                      </div>                    )}                  </div>
+                        
+                        {selectedPromoters.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Selected Promoters:</Label>
+                            <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg">
+                              {selectedPromoters.map(promoterId => {
+                                const promoter = promoters.find(p => p._id === promoterId)
+                                return promoter ? (
+                                  <Badge key={promoterId} variant="secondary" className="text-xs">
+                                    {promoter.FullName}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setSelectedPromoters(prev => prev.filter(id => id !== promoterId))
+                                      }}
+                                      className="ml-1 hover:bg-destructive/20 rounded-sm"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ) : null
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}                  </div>
                 </div>
 
                 {/* Event Date & Time Selection */}

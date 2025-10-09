@@ -171,6 +171,8 @@ export const promoterEndPointPannel = {
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING: BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilter",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING:
     BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportByPromoterId",
+  CANCEL_EVENT_TICKET: BASE_URL + "/eventticketsbooking/cancelEventTicket",
+  RESEND_EVENT_TICKET: BASE_URL + "/eventticketsbooking/resendEventTicket",
 }
 // Event API Endpoints
 export const eventEndPoint = {

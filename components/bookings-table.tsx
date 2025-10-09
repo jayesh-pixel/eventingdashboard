@@ -30,6 +30,8 @@ interface BookingsTableProps {
   formatDate: (date: Date | string | number) => string
   formatCurrency: (amount: number) => string
   getStatusBadgeVariant: (status: string) => "default" | "secondary" | "destructive" | "outline"
+  onCancelBooking?: (booking: Booking) => void
+  onResendTicket?: (booking: Booking) => void
 }
 
 export function BookingsTable({ 
@@ -40,7 +42,9 @@ export function BookingsTable({
   channelFilter,
   formatDate,
   formatCurrency,
-  getStatusBadgeVariant
+  getStatusBadgeVariant,
+  onCancelBooking,
+  onResendTicket
 }: BookingsTableProps) {
   const [selectedBooking, setSelectedBooking] = React.useState<Booking | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = React.useState(false)
@@ -110,7 +114,7 @@ export function BookingsTable({
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Status
             </th>
-            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+            <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Actions
             </th>
           </tr>
@@ -249,15 +253,40 @@ export function BookingsTable({
                   </span>
                 </td>
                 {/* Actions */}
-                <td className="w-24 px-3 py-3 text-center">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewDetails(booking)}
-                    className="text-xs"
-                  >
-                    View
-                  </Button>
+                <td className="w-32 px-3 py-3 text-center">
+                  <div className="flex gap-1 justify-center">
+                    {booking.bookingStatus === "Booked" || booking.bookingStatus === "Confirmed" ? (
+                      <>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => onCancelBooking?.(booking)}
+                          className="text-xs px-2 py-1"
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => onResendTicket?.(booking)}
+                          className="text-xs px-2 py-1"
+                        >
+                          Resend
+                        </Button>
+                      </>
+                    ) : booking.bookingStatus === "Cancelled" ? (
+                      <span className="text-xs text-gray-500">-</span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(booking)}
+                        className="text-xs px-2 py-1"
+                      >
+                        View
+                      </Button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))

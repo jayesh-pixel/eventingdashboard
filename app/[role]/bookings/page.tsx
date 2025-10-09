@@ -480,7 +480,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         
         // Add filter parameters for promoter endpoint
         if (filters?.searchTerm) {
-          requestPayload.search = filters.searchTerm
+          requestPayload.searchkeyword = filters.searchTerm
         }
       } else {
         // For superadmin/organizer, use different endpoints based on active tab
@@ -511,7 +511,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         
         // Add filter parameters to the payload
         if (filters?.searchTerm) {
-          requestPayload.search = filters.searchTerm
+          requestPayload.searchkeyword = filters.searchTerm
         }
         if (filters?.statusFilter && filters.statusFilter !== "all") {
           requestPayload.status = filters.statusFilter
@@ -867,6 +867,114 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }
   }
 
+  // Cancel booking function
+  const handleCancelBooking = async (booking: Booking) => {
+    // Show confirmation dialog
+    const isConfirmed = window.confirm("Are you sure you want to cancel this booking? This action cannot be undone.")
+    if (!isConfirmed) {
+      return
+    }
+
+    try {
+      const authToken = localStorage.getItem("authToken")
+      if (!authToken) {
+        toast({
+          title: "Error",
+          description: "No authentication token found. Please login again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(promoterEndPointPannel.CANCEL_EVENT_TICKET, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          booking_id: booking.Booking_id || booking._id
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Booking cancelled successfully",
+        })
+        // Refresh bookings data
+        fetchBookingsData()
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to cancel booking",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error cancelling booking:", error)
+      toast({
+        title: "Error",
+        description: "An error occurred while cancelling the booking",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Resend ticket function
+  const handleResendTicket = async (booking: Booking) => {
+    // Show confirmation dialog
+    const isConfirmed = window.confirm("Are you sure you want to resend the ticket to the customer?")
+    if (!isConfirmed) {
+      return
+    }
+
+    try {
+      const authToken = localStorage.getItem("authToken")
+      if (!authToken) {
+        toast({
+          title: "Error",
+          description: "No authentication token found. Please login again.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const response = await fetch(promoterEndPointPannel.RESEND_EVENT_TICKET, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          booking_id: booking.Booking_id || booking._id
+        }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: "Ticket resent successfully to customer",
+        })
+      } else {
+        const errorData = await response.json()
+        toast({
+          title: "Error",
+          description: errorData.message || "Failed to resend ticket",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error resending ticket:", error)
+      toast({
+        title: "Error",
+        description: "An error occurred while resending the ticket",
+        variant: "destructive",
+      })
+    }
+  }
+
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
       case "Confirmed":
@@ -1037,6 +1145,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         formatDate={formatDate}
                         formatCurrency={formatCurrency}
                         getStatusBadgeVariant={getStatusBadgeVariant}
+                        onCancelBooking={handleCancelBooking}
+                        onResendTicket={handleResendTicket}
                       />
                     )}
                   </div>
