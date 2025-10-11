@@ -229,7 +229,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           eventSelectionFlag={eventData?.EventFormat || eventData?.eventFormat || 0}
           setEventCreationModal={handleEventUpdated}
           role={role}
-          editMode={!isViewOnly}
+          editMode={true}
           viewOnly={isViewOnly}
           existingEventData={eventData}
           eventId={eventId}

@@ -57,11 +57,12 @@ export const indianLanguages = [
 ]
 
 // Years/Age options
+// Note: API uses "1" for "All age group", and age numbers for restrictions
 export const yearsOptions = [
-  { value: "All age group", label: "All age group" },
-  { value: "18+", label: "18+" },
-  { value: "21+", label: "21+" },
-  { value: "25+", label: "25+" },
-  
- 
+  { value: "1", label: "All age group" },
+  { value: "13", label: "13+" },
+  { value: "16", label: "16+" },
+  { value: "18", label: "18+" },
+  { value: "21", label: "21+" },
+  { value: "25", label: "25+" },
 ]

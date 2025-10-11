@@ -429,7 +429,19 @@ export default function CreateEvent({
   const getInitialValues = (): EventFormValues => {
     if (editMode && existingEventData) {
       // Pre-populate form with existing event data
-      // console.log("🔄 Processing existing event data for edit mode:", existingEventData) // Debug log
+      console.log("🔄 Processing existing event data for edit mode:", existingEventData)
+      
+      // Debug log for age restriction field to identify the correct field name
+      console.log("🔍 Age Restriction field mapping:", {
+        BestSuitedFor: existingEventData.BestSuitedFor,
+        bestSuitedFor: existingEventData.bestSuitedFor,
+        AgeRestriction: existingEventData.AgeRestriction,
+        ageRestriction: existingEventData.ageRestriction,
+        Age_Restriction: existingEventData.Age_Restriction,
+        age_restriction: existingEventData.age_restriction,
+        EventAgeRestriction: existingEventData.EventAgeRestriction,
+        eventAgeRestriction: existingEventData.eventAgeRestriction
+      })
       
       const initialValues = {
         eventname: existingEventData.EventName || existingEventData.eventName || "",
@@ -457,7 +469,10 @@ export default function CreateEvent({
         languages: transformExistingLanguageData(existingEventData.EventLanguages || existingEventData.eventLanguages),
         
         eventTour_id: existingEventData.EventTour_id || existingEventData.eventTour_id || "",
-        ageRestriction: existingEventData.AgeRestriction || existingEventData.ageRestriction || "",
+        
+        // Age Restriction - Check BestSuitedFor field from API
+        ageRestriction: String(existingEventData.BestSuitedFor || existingEventData.bestSuitedFor || existingEventData.AgeRestriction || existingEventData.ageRestriction || existingEventData.Age_Restriction || existingEventData.age_restriction || existingEventData.EventAgeRestriction || existingEventData.eventAgeRestriction || "").trim(),
+        
         isFeatured: existingEventData.FeaturedEventFlag === 1 || existingEventData.featuredEventFlag === 1 || false,
         feeunit: existingEventData.ConvinienceFeeUnit || existingEventData.convinienceFeeUnit || ConvinienceFeeUnit.Percentage,
         feevalue: existingEventData.ConvinienceFeeValue || existingEventData.convinienceFeeValue || 0,
@@ -496,6 +511,15 @@ export default function CreateEvent({
   //     languages: languageOptions.length
   //   }
   // })
+      
+      // Log age restriction specifically
+      console.log("🎯 Age Restriction in initialValues:", {
+        ageRestriction: initialValues.ageRestriction,
+        BestSuitedFor: existingEventData.BestSuitedFor,
+        type: typeof initialValues.ageRestriction,
+        willMatch: yearsOptions.some(opt => opt.value === initialValues.ageRestriction)
+      })
+      
       return initialValues
     }
     
@@ -1476,8 +1500,9 @@ export default function CreateEvent({
         }
       }
 
-      // Add BestSuitedFor field
-      submitData.append("BestSuitedFor", "1")
+      // Add BestSuitedFor (Age Restriction) field
+      // API expects: "1" for all ages, or age numbers like "13", "16", "18", "21", "25"
+      submitData.append("BestSuitedFor", values.ageRestriction || "1")
 
       // Submit to API
       const authToken = getValidToken()
@@ -1911,9 +1936,15 @@ export default function CreateEvent({
                 length: values.languages?.length,
                 type: typeof values.languages,
                 sample: values.languages?.[0]
+              },
+              ageRestriction: {
+                value: values.ageRestriction,
+                type: typeof values.ageRestriction,
+                matchedOption: yearsOptions.find(opt => opt.value === values.ageRestriction),
+                availableOptions: yearsOptions
               }
             })
-          }, [values.organizers, values.categories, values.artists, values.genres, values.languages])
+          }, [values.organizers, values.categories, values.artists, values.genres, values.languages, values.ageRestriction])
 
           return (
             <Form>
@@ -2054,7 +2085,10 @@ export default function CreateEvent({
                       <Select
                         options={yearsOptions}
                         value={yearsOptions.find(option => option.value === values.ageRestriction)}
-                        onChange={(selected) => setFieldValue("ageRestriction", selected?.value || "")}
+                        onChange={(selected) => {
+                          console.log("🎯 Age Restriction changed:", selected);
+                          setFieldValue("ageRestriction", selected?.value || "")
+                        }}
                         placeholder="Select age group..."
                         className="basic-single"
                         classNamePrefix="select"

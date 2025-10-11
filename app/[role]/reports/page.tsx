@@ -462,7 +462,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           requestPayload = {
             promoter_id: user!.user_id,
             event_id: matchedEvent._id,
-            limit: "50",
+            limit: "10",
             page: "1"
           }
         } else if (reportType === "Transaction") {
@@ -470,7 +470,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           requestPayload = {
             promoter_id: user!.user_id,
             event_id: matchedEvent._id,
-            limit: "50",
+            limit: "10",
             page: "1"
           }
         }
@@ -487,7 +487,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             AdminRole: adminRole,
             user_id: user!.user_id,
             event_id: matchedEvent._id,
-            limit: "50",
+            limit: "10",
             page: "1"
           }
         } else if (reportType === "Transaction") {
@@ -498,7 +498,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
 
             event_id: matchedEvent._id,
-            limit: "50",
+            limit: "10",
             page: "1"
           }
         }

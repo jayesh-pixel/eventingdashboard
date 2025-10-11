@@ -61,6 +61,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import PromoterEventCard from "@/components/create-event/promotereventcard"
 import AddPromoterAndShow from "@/components/add-promoter-and-show"
+import OrganizerPromoterView from "@/components/organizer-promoter-view"
 import MultipleOrganizersDisplay from "@/components/multiple-organizers-display"
 import OrganizersCirclesOnly from "@/components/organizers-circles-only"
 import PromoterIndicator from "@/components/promoter-indicator"
@@ -1638,13 +1639,11 @@ export default function EventsPage({ params }: EventsPageProps) {
                             />
                           </div>
                         ) : ((role as UserRole) === "organizer") ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm">{event.promoterName || ""}</span>
-                            <AddPromoterAndShow 
-                              eventData={event} 
-                              onPromoterUpdate={() => getAllEventData(activeTab)}
-                            />
-                          </div>
+                          <OrganizerPromoterView 
+                            promoters={event.EventPromoter || []}
+                            onPromoterClick={handlePromoterClick}
+                            eventId={event._id}
+                          />
                         ) : (
                           event.promoterName || "N/A"
                         )}
@@ -1732,22 +1731,25 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 </>
                               )}
                               
-                              {isEventDisabled(event) ? (
-                                <DropdownMenuItem 
-                                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                  onClick={() => handleToggleEventStatus(event._id, "enable")}
-                                >
-                                  <CheckCircle className="mr-2 h-4 w-4" />
-                                  Enable Event
-                                </DropdownMenuItem>
-                              ) : (
-                                <DropdownMenuItem 
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => handleToggleEventStatus(event._id, "disable")}
-                                >
-                                  <X className="mr-2 h-4 w-4" />
-                                  Disable Event
-                                </DropdownMenuItem>
+                              {/* Enable/Disable Event - Only for SuperAdmin */}
+                              {(role as UserRole) === "superadmin" && (
+                                isEventDisabled(event) ? (
+                                  <DropdownMenuItem 
+                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    onClick={() => handleToggleEventStatus(event._id, "enable")}
+                                  >
+                                    <CheckCircle className="mr-2 h-4 w-4" />
+                                    Enable Event
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem 
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => handleToggleEventStatus(event._id, "disable")}
+                                  >
+                                    <X className="mr-2 h-4 w-4" />
+                                    Disable Event
+                                  </DropdownMenuItem>
+                                )
                               )}
                             </DropdownMenuContent>
                           </DropdownMenu>

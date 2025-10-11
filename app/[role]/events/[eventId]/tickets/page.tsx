@@ -216,7 +216,7 @@ export default function TicketsPage() {
   // Tab and filter states
   const [activeTab, setActiveTab] = React.useState("normal")
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [availabilityFilter, setAvailabilityFilter] = React.useState<string>("all")
+  const [dateFilter, setDateFilter] = React.useState<string>("all")
   const [statusFilter, setStatusFilter] = React.useState<string>("all")
   
   // Track which tabs have been loaded to avoid unnecessary API calls
@@ -557,6 +557,84 @@ export default function TicketsPage() {
     }
   }
 
+  const fetchTicketsByFilter = async () => {
+    try {
+      setLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      console.log("Fetching filtered tickets for eventId:", eventId)
+      
+      // Build filter payload
+      const filterPayload: any = {
+        event_id: eventId,
+      }
+
+      // Add name filter if search term exists
+      if (searchTerm.trim()) {
+        filterPayload.name = searchTerm.trim()
+      }
+
+      // Add date filter if not "all"
+      if (dateFilter !== "all") {
+        filterPayload.eventDateTime_id = dateFilter
+      }
+
+      // Add status filter if not "all"
+      if (statusFilter !== "all") {
+        filterPayload.status = statusFilter === "active" ? 1 : 0
+      }
+
+      console.log("Filter API Payload:", JSON.stringify(filterPayload, null, 2))
+
+      const response = await fetch(`${BASE_URL}/eventstickets/getTicketsByFilter`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(filterPayload),
+      })
+
+      console.log("Filter API response status:", response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Filter API response data:", JSON.stringify(data, null, 2))
+        
+        if (!data.error && data.data) {
+          // API returns data.TicektsData (note the typo in API)
+          const ticketsData = data.data.TicektsData || data.data.TicketsData || []
+          console.log("Filtered tickets count:", ticketsData.length)
+          if (ticketsData.length > 0) {
+            console.log("First filtered ticket sample:", JSON.stringify(ticketsData[0], null, 2))
+          }
+          setNormalTickets(ticketsData)
+        } else {
+          console.error("Filter API returned error:", data)
+          setNormalTickets([])
+        }
+      } else {
+        const errorText = await response.text()
+        console.error("Filter API call failed:", response.status, errorText)
+        toast({
+          title: "Error",
+          description: "Failed to load filtered tickets",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching filtered tickets:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load filtered tickets",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const fetchBulkTickets = async () => {
     try {
       setLoading(true)
@@ -618,6 +696,79 @@ export default function TicketsPage() {
     }
   }
 
+  const fetchBulkTicketsByFilter = async () => {
+    try {
+      setLoading(true)
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      console.log("Fetching filtered bulk tickets for eventId:", eventId)
+      
+      // Build filter payload for bulk tickets
+      const filterPayload: any = {
+        event_id: eventId,
+      }
+
+      // Add name filter if search term exists
+      if (searchTerm.trim()) {
+        filterPayload.name = searchTerm.trim()
+      }
+
+      // Add status filter if not "all"
+      if (statusFilter !== "all") {
+        filterPayload.status = statusFilter === "active" ? 1 : 0
+      }
+
+      console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
+
+      const response = await fetch(`${BASE_URL}/eventbulktickets/getBulkTicketsOfEvent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(filterPayload),
+      })
+
+      console.log("Bulk Filter API response status:", response.status)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Bulk Filter API response data:", JSON.stringify(data, null, 2))
+        
+        if (!data.error && data.data) {
+          // Handle response structure for bulk tickets
+          const bulkTicketsData = data.data.EventBulkTicketsData || data.data || []
+          console.log("Filtered bulk tickets count:", bulkTicketsData.length)
+          if (bulkTicketsData.length > 0) {
+            console.log("First filtered bulk ticket sample:", JSON.stringify(bulkTicketsData[0], null, 2))
+          }
+          setBulkTickets(bulkTicketsData)
+        } else {
+          console.error("Bulk Filter API returned error:", data)
+          setBulkTickets([])
+        }
+      } else {
+        const errorText = await response.text()
+        console.error("Bulk Filter API call failed:", response.status, errorText)
+        toast({
+          title: "Error",
+          description: "Failed to load filtered bulk tickets",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error fetching filtered bulk tickets:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load filtered bulk tickets",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleToggleStatus = async (ticketId: string, currentStatus: number, isNormal: boolean, ticketName?: string) => {
     // Show confirmation dialog first
     // currentStatus: 1 = currently active, 0 = currently disabled
@@ -647,8 +798,8 @@ export default function TicketsPage() {
       // Use the correct API endpoints
       const endpoint = isNormal
         ? (newStatus === 1 
-          ? 'https://devapi.eventingclub.in/eventstickets/enableEventTicket'
-          : 'https://devapi.eventingclub.in/eventstickets/disableEventTicket')
+          ? `${BASE_URL}/eventstickets/enableEventTicket`
+          : `${BASE_URL}/eventstickets/disableEventTicket`)
         : (newStatus === 1 
           ? ticketEndPoint.ENABLE_BULK_TICKET 
           : ticketEndPoint.DISABLE_BULK_TICKET)
@@ -1333,6 +1484,50 @@ export default function TicketsPage() {
     }
   }, [eventId, user])
 
+  // Effect to handle filter changes for normal tickets
+  React.useEffect(() => {
+    // Only run if component is mounted and user is authenticated
+    if (!user || !eventId || activeTab !== "normal") return
+
+    // Debounce search term to avoid excessive API calls
+    const timer = setTimeout(() => {
+      // Check if any filters are active
+      const hasActiveFilters = searchTerm.trim() || dateFilter !== "all" || statusFilter !== "all"
+      
+      if (hasActiveFilters) {
+        // Use filter API when filters are active
+        fetchTicketsByFilter()
+      } else {
+        // Use regular fetch when no filters are active
+        fetchNormalTickets()
+      }
+    }, searchTerm ? 500 : 0) // 500ms debounce for search term, immediate for dropdowns
+
+    return () => clearTimeout(timer)
+  }, [searchTerm, dateFilter, statusFilter, activeTab, eventId, user])
+
+  // Effect to handle filter changes for bulk tickets
+  React.useEffect(() => {
+    // Only run if component is mounted and user is authenticated
+    if (!user || !eventId || activeTab !== "bulk") return
+
+    // Debounce search term to avoid excessive API calls
+    const timer = setTimeout(() => {
+      // Check if any filters are active (bulk tickets don't have availability filter)
+      const hasActiveFilters = searchTerm.trim() || statusFilter !== "all"
+      
+      if (hasActiveFilters) {
+        // Use filter API when filters are active
+        fetchBulkTicketsByFilter()
+      } else {
+        // Use regular fetch when no filters are active
+        fetchBulkTickets()
+      }
+    }, searchTerm ? 500 : 0) // 500ms debounce for search term, immediate for dropdown
+
+    return () => clearTimeout(timer)
+  }, [searchTerm, statusFilter, activeTab, eventId, user])
+
   // Handle tab changes - load data only when switching to a new tab
   const handleTabChange = (newTab: string) => {
     setActiveTab(newTab)
@@ -1463,52 +1658,13 @@ export default function TicketsPage() {
     return matchesSearch
   })
 
-  const filteredNormalTickets = normalTickets.filter(ticket => {
-    const extendedTicket = ticket as ExtendedNormalTicket
-    const ticketName = extendedTicket.Name || ticket.TicketName || ''
-    
-    // Check availability based on the actual API response structure
-    // EventTicketAvailability: 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
-    const isSoldOut = extendedTicket.EventTicketAvailability === 0 ||
-                      extendedTicket.IsSoldOut === true || 
-                      extendedTicket.AvailabilityStatus === "SoldOut" || 
-                      extendedTicket.AvailabilityStatus === "sold_out"
-    
-    // Check status (Active/Disabled)
-    const isActive = (typeof extendedTicket.TicketStatus === 'number')
-      ? extendedTicket.TicketStatus !== 0
-      : (typeof extendedTicket.EventTicketStatus === 'number' 
-          ? extendedTicket.EventTicketStatus !== 0 
-          : true)
-    
-    const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesAvailability = availabilityFilter === "all" || 
-                               (availabilityFilter === "available" && !isSoldOut) ||
-                               (availabilityFilter === "soldout" && isSoldOut)
-    const matchesStatus = statusFilter === "all" || 
-                         (statusFilter === "active" && isActive) ||
-                         (statusFilter === "disabled" && !isActive)
-    
-    return matchesSearch && matchesAvailability && matchesStatus
-  })
-  const filteredBulkTickets = bulkTickets.filter(ticket => {
-    const extendedTicket = ticket as ExtendedBulkTicket
-    const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || ''
-    
-    // Check status (Active/Disabled) for bulk tickets
-    const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-      ? extendedTicket.BulkTicketStatus !== 0
-      : (typeof extendedTicket.Status === 'number' 
-          ? extendedTicket.Status !== 0 
-          : true)
-    
-    const matchesSearch = ticketName.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || 
-                         (statusFilter === "active" && isActive) ||
-                         (statusFilter === "disabled" && !isActive)
-    
-    return matchesSearch && matchesStatus
-  })
+  // Normal tickets are already filtered by the API when filters are active
+  // No client-side filtering needed since fetchTicketsByFilter handles it
+  const filteredNormalTickets = normalTickets
+
+  // Bulk tickets are already filtered by the API when filters are active
+  // No client-side filtering needed since fetchBulkTicketsByFilter handles it
+  const filteredBulkTickets = bulkTickets
 
   return (
     <div className="space-y-6">
@@ -1576,7 +1732,7 @@ export default function TicketsPage() {
         </CardHeader>        <CardContent>
           <div className="flex flex-col gap-4 md:flex-row">
             <div className="flex-1">
-              <Label htmlFor="search">Search</Label>
+              <Label htmlFor="search">Name Filter</Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -1589,15 +1745,24 @@ export default function TicketsPage() {
               </div>
             </div>
             <div className="w-full md:min-w-[200px] md:w-auto">
-              <Label htmlFor="availability">Availability</Label>
-              <Select value={availabilityFilter} onValueChange={setAvailabilityFilter}>
+              <Label htmlFor="dateFilter">Date Filter</Label>
+              <Select value={dateFilter} onValueChange={setDateFilter}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Filter by availability" />
+                  <SelectValue placeholder="Filter by date" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Availability</SelectItem>
-                  <SelectItem value="available" className="text-green-600">Available</SelectItem>
-                  <SelectItem value="soldout" className="text-red-600">Sold Out</SelectItem>
+                  <SelectItem value="all">All Dates</SelectItem>
+                  {eventDateTimes.map((dateTime) => (
+                    <SelectItem key={dateTime._id} value={dateTime._id}>
+                      {new Date(dateTime.EventStartDateTime).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1625,10 +1790,13 @@ export default function TicketsPage() {
             <Ticket className="h-4 w-4" />
             Normal Tickets ({filteredNormalTickets.length})
           </TabsTrigger>
-          <TabsTrigger value="bulk" className="flex items-center gap-2">
-            <Ticket className="h-4 w-4" />
-            Bulk Tickets ({filteredBulkTickets.length})
-          </TabsTrigger>
+          {/* Bulk Tickets tab - Only visible to SuperAdmins */}
+          {getNumericRole(role) === 1 && (
+            <TabsTrigger value="bulk" className="flex items-center gap-2">
+              <Ticket className="h-4 w-4" />
+              Bulk Tickets ({filteredBulkTickets.length})
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Normal Tickets Tab */}
@@ -1640,14 +1808,17 @@ export default function TicketsPage() {
                 Manage individual event tickets and pricing
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Table */}
               <div className="rounded-md border">
                 <Table>                  <TableHeader>
                     <TableRow>
                       <TableHead>Ticket Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Price</TableHead>
                       <TableHead>Quantity</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Ticket Date</TableHead>
+                      <TableHead>Pending Quantity</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Availability</TableHead>
                       <TableHead>Created</TableHead>
@@ -1657,30 +1828,52 @@ export default function TicketsPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredNormalTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           No tickets found
                         </TableCell>
                       </TableRow>
                     ) : (                      filteredNormalTickets.map((ticket) => {
                         const extendedTicket = ticket as ExtendedNormalTicket
+                        
+                        // Get the event date for this ticket
+                        const ticketEventDate = eventDateTimes.find(
+                          (edt) => edt._id === ticket.EventDateTime_id
+                        )
+                        
+                        // Calculate pending quantity (remaining tickets)
+                        const totalQuantity = extendedTicket.Quantity || ticket.TicketQuantity || 0
+                        const soldTickets = ticket.SoldTickets || 0
+                        const pendingQuantity = ticket.RemainingTickets !== undefined 
+                          ? ticket.RemainingTickets 
+                          : (totalQuantity - soldTickets)
+                        
                         return (
                           <TableRow key={ticket._id}>
                             <TableCell className="font-medium">
                               {extendedTicket.Name || ticket.TicketName || 'N/A'}
                             </TableCell>
                             <TableCell>
-                              {getTicketTypeName(extendedTicket.EventTicketType || ticket.TicketType || 1)}
+                              {totalQuantity}
                             </TableCell>
                             <TableCell>
                               {formatCurrency(extendedTicket.Price || ticket.TicketPrice || 0)}
-                            </TableCell>                            <TableCell>
-                              {extendedTicket.Quantity || ticket.TicketQuantity || 0}
+                            </TableCell>
+                            <TableCell>
+                              {getTicketTypeName(extendedTicket.EventTicketType || ticket.TicketType || 1)}
+                            </TableCell>
+                            <TableCell>
+                              {ticketEventDate 
+                                ? formatDate(ticketEventDate.EventStartDateTime)
+                                : 'N/A'}
+                            </TableCell>
+                            <TableCell>
+                              {pendingQuantity}
                             </TableCell>
                             <TableCell>
                               <Badge variant={(() => {
@@ -1800,16 +1993,18 @@ export default function TicketsPage() {
           </Card>
         </TabsContent>
 
-        {/* Bulk Tickets Tab */}
-        <TabsContent value="bulk" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bulk Tickets</CardTitle>
-              <CardDescription>
-                Manage bulk tickets for large groups and promoters
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+        {/* Bulk Tickets Tab - Only visible to SuperAdmins */}
+        {getNumericRole(role) === 1 && (
+          <TabsContent value="bulk" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Bulk Tickets</CardTitle>
+                <CardDescription>
+                  Manage bulk tickets for large groups and promoters
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Table */}
               <div className="rounded-md border">
                 <Table>                  <TableHeader>
                     <TableRow>
@@ -1973,6 +2168,7 @@ export default function TicketsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* Create Modal */}
@@ -1988,9 +2184,12 @@ export default function TicketsPage() {
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className={`grid w-full ${getNumericRole(role) === 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
               <TabsTrigger value="normal">Normal Ticket</TabsTrigger>
-              <TabsTrigger value="bulk">Bulk Ticket</TabsTrigger>
+              {/* Bulk Ticket tab - Only visible to SuperAdmins */}
+              {getNumericRole(role) === 1 && (
+                <TabsTrigger value="bulk">Bulk Ticket</TabsTrigger>
+              )}
             </TabsList>
 
             {/* Normal Ticket Form */}

@@ -19,6 +19,8 @@ import { useToast } from "@/hooks/use-toast"
 import { getValidToken } from "@/lib/token-utils"
 import { promoterEndpoint, eventEndPoint } from "@/lib/api-endpoints"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
+import type { UserRole } from "@/lib/navigation"
 
 interface PromoterData {
   _id: string
@@ -48,11 +50,21 @@ const AddNewPromoterModal = ({
   onPromoterUpdate,
 }: AddNewPromoterModalProps) => {
   const { toast } = useToast()
+  const { user } = useAuth()
   const [apiAllPromoterData, setApiAllPromoterData] = useState<PromoterData[]>([])
   const [selectedPromoterIds, setSelectedPromoterIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Check if user has permission to manage promoters (only SuperAdmin)
+  const userRole = user?.AdminRole?.toLowerCase() as UserRole
+  const canManagePromoters = userRole === "superadmin"
+
+  // If user doesn't have permission, don't render the modal
+  if (!canManagePromoters) {
+    return null
+  }
 
   useEffect(() => {
     if (open) {

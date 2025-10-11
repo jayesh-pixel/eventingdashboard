@@ -506,7 +506,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           AdminRole: adminRole,
           user_id: user.user_id,
           page: currentPage.toString(),
-          limit: "50", // Increased limit to get more data
+          limit: "10", // Increased limit to get more data
         }
         
         // Add filter parameters to the payload

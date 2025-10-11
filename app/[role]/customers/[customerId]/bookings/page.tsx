@@ -101,7 +101,7 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         body: JSON.stringify({
           customer_id: customerId,
           page: 1,
-          limit: 50 // Get more bookings for the dedicated page
+          limit: 10 // Get more bookings for the dedicated page
         })
       })
 
