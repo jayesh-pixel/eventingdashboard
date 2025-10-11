@@ -1719,10 +1719,17 @@ export default function TicketsPage() {
               )}
             </p>
           </div>
-        </div>        <Button onClick={handleOpenCreateModal} disabled={eventLoading || eventDateTimes.length === 0}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Ticket
-        </Button>
+        </div>
+        {/* Add Ticket button - Hidden for Organizers when viewing Bulk Tickets tab */}
+        {!(activeTab === "bulk" && getNumericRole(role) === 2) && (
+          <Button 
+            onClick={handleOpenCreateModal} 
+            disabled={eventLoading || eventDateTimes.length === 0}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Ticket
+          </Button>
+        )}
       </div>
 
       {/* Filters */}
@@ -1790,8 +1797,8 @@ export default function TicketsPage() {
             <Ticket className="h-4 w-4" />
             Normal Tickets ({filteredNormalTickets.length})
           </TabsTrigger>
-          {/* Bulk Tickets tab - Only visible to SuperAdmins */}
-          {getNumericRole(role) === 1 && (
+          {/* Bulk Tickets tab - Visible to SuperAdmins and Organizers */}
+          {(getNumericRole(role) === 1 || getNumericRole(role) === 2) && (
             <TabsTrigger value="bulk" className="flex items-center gap-2">
               <Ticket className="h-4 w-4" />
               Bulk Tickets ({filteredBulkTickets.length})
@@ -1993,8 +2000,8 @@ export default function TicketsPage() {
           </Card>
         </TabsContent>
 
-        {/* Bulk Tickets Tab - Only visible to SuperAdmins */}
-        {getNumericRole(role) === 1 && (
+        {/* Bulk Tickets Tab - Visible to SuperAdmins and Organizers */}
+        {(getNumericRole(role) === 1 || getNumericRole(role) === 2) && (
           <TabsContent value="bulk" className="space-y-4">
             <Card>
               <CardHeader>
