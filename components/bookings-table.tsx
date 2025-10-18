@@ -114,15 +114,17 @@ export function BookingsTable({
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Status
             </th>
-            <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Actions
-            </th>
+            {role !== "organizer" && (
+              <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+                Actions
+              </th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {bookings.length === 0 ? (
             <tr>
-              <td colSpan={19} className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <td colSpan={role === "organizer" ? 18 : 19} className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-lg font-medium">
                     {searchTerm || statusFilter !== "all" || channelFilter !== "all"
@@ -140,61 +142,61 @@ export function BookingsTable({
               >
                 {/* Customer Name */}
                 <td className="w-36 px-3 py-3 text-left">
-                  <div className="font-medium text-gray-900 dark:text-white truncate">
+                  <div className="font-medium text-gray-900 dark:text-white truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.CustomerName || booking.customerName || "N/A"}>
                     {booking.CustomerName || booking.customerName || "N/A"}
                   </div>
                 </td>
                 {/* Booking ID */}
                 <td className="w-28 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.Booking_id || booking._id.slice(-8) || "N/A"}>
                     {booking.Booking_id || booking._id.slice(-8) || "N/A"}
                   </span>
                 </td>
                 {/* Phone Number */}
                 <td className="w-28 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.PhoneNumber || booking.phoneNumber || "N/A"}>
                     {booking.PhoneNumber || booking.phoneNumber || "N/A"}
                   </span>
                 </td>
                 {/* Email */}
                 <td className="w-48 px-3 py-3 text-left">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.Email || booking.customerEmail || "N/A"}>
                     {booking.Email || booking.customerEmail || "N/A"}
                   </span>
                 </td>
                 {/* Booking Date & Time */}
                 <td className="w-32 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {formatDate(booking.BookingDateTime || booking.bookingDate)}
                   </span>
                 </td>
                 {/* Event Name */}
                 <td className="w-40 px-3 py-3 text-left">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventName || booking.eventName || "N/A"}>
                     {booking.EventName || booking.eventName || "N/A"}
                   </span>
                 </td>
                 {/* Event Date */}
                 <td className="w-28 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {(booking.TicketDate || booking.ticketDate) ? formatDate(booking.TicketDate || booking.ticketDate || "") : "N/A"}
                   </span>
                 </td>
                 {/* Source (Booking Channel) */}
                 <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {booking.bookingChannel || "Online"}
                   </span>
                 </td>
                 {/* City */}
                 <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventCityName || booking.city || "N/A"}>
                     {booking.EventCityName || booking.city || "N/A"}
                   </span>
                 </td>
                 {/* Venue */}
                 <td className="w-36 px-3 py-3 text-left">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventVenueName || booking.venue || "N/A"}>
                     {booking.EventVenueName || booking.venue || "N/A"}
                   </span>
                 </td>
@@ -212,31 +214,31 @@ export function BookingsTable({
                 </td>
                 {/* Ticket Name */}
                 <td className="w-32 px-3 py-3 text-left">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.TicketName || booking.ticketName || "N/A"}>
                     {booking.TicketName || booking.ticketName || "N/A"}
                   </span>
                 </td>
                 {/* Ticket Type */}
                 <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventTicketType || booking.ticketType || "N/A"}>
                     {booking.EventTicketType || booking.ticketType || "N/A"}
                   </span>
                 </td>
                 {/* Ticket Price */}
                 <td className="w-24 px-3 py-3 text-right">
-                  <span className="text-sm text-gray-900 dark:text-white">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {(booking.TicketPrice ?? booking.ticketPrice) ? formatCurrency(booking.TicketPrice ?? booking.ticketPrice ?? 0) : "N/A"}
                   </span>
                 </td>
                 {/* Total Amount */}
                 <td className="w-28 px-3 py-3 text-right">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {formatCurrency(booking.TotalAmount || booking.totalAmount)}
                   </span>
                 </td>
                 {/* Remark */}
                 <td className="w-28 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white truncate">
+                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.Remark || booking.remark || "N/A"}>
                     {booking.Remark || booking.remark || "N/A"}
                   </span>
                 </td>
@@ -252,42 +254,44 @@ export function BookingsTable({
                     {booking.bookingStatus || "N/A"}
                   </span>
                 </td>
-                {/* Actions */}
-                <td className="w-32 px-3 py-3 text-center">
-                  <div className="flex gap-1 justify-center">
-                    {booking.bookingStatus === "Booked" || booking.bookingStatus === "Confirmed" ? (
-                      <>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => onCancelBooking?.(booking)}
-                          className="text-xs px-2 py-1"
-                        >
-                          Cancel
-                        </Button>
+                {/* Actions - Hidden for Organizers */}
+                {role !== "organizer" && (
+                  <td className="w-32 px-3 py-3 text-center">
+                    <div className="flex gap-1 justify-center">
+                      {booking.bookingStatus === "Booked" || booking.bookingStatus === "Confirmed" ? (
+                        <>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => onCancelBooking?.(booking)}
+                            className="text-xs px-2 py-1"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => onResendTicket?.(booking)}
+                            className="text-xs px-2 py-1"
+                          >
+                            Resend
+                          </Button>
+                        </>
+                      ) : booking.bookingStatus === "Cancelled" ? (
+                        <span className="text-xs text-gray-500">-</span>
+                      ) : (
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => onResendTicket?.(booking)}
+                          onClick={() => handleViewDetails(booking)}
                           className="text-xs px-2 py-1"
                         >
-                          Resend
+                          View
                         </Button>
-                      </>
-                    ) : booking.bookingStatus === "Cancelled" ? (
-                      <span className="text-xs text-gray-500">-</span>
-                    ) : (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(booking)}
-                        className="text-xs px-2 py-1"
-                      >
-                        View
-                      </Button>
-                    )}
-                  </div>
-                </td>
+                      )}
+                    </div>
+                  </td>
+                )}
               </tr>
             ))
           )}
