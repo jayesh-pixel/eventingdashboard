@@ -59,6 +59,11 @@ interface CreateEventProps {
   viewOnly?: boolean
   existingEventData?: any
   eventId?: string
+  showApprovalButtons?: boolean
+  onApproveEvent?: () => void
+  onRejectEvent?: () => void
+  isApproving?: boolean
+  isRejecting?: boolean
 }
 
 interface SelectOption {
@@ -232,7 +237,12 @@ export default function CreateEvent({
   editMode = false,
   viewOnly = false,
   existingEventData = null,
-  eventId
+  eventId,
+  showApprovalButtons = false,
+  onApproveEvent,
+  onRejectEvent,
+  isApproving = false,
+  isRejecting = false
 }: CreateEventProps) {
   const { user } = useAuth()
   const { toast } = useToast()
@@ -2991,19 +3001,72 @@ export default function CreateEvent({
             {/* Submit Buttons - Hide in view-only mode */}
             {!viewOnly && (
               <div className="flex justify-end space-x-4 mt-8">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleSubmit(values, EventStatus.Draft)}
-                >
-                  Save as Draft
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
-                >
-                  {role === "organizer" ? "Send to Review" : "Publish Event"}
-                </Button>
+                {showApprovalButtons ? (
+                  <>
+                    {/* Approval Buttons for SuperAdmin */}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={onRejectEvent}
+                      disabled={isApproving || isRejecting}
+                    >
+                      {isRejecting ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Rejecting...
+                        </>
+                      ) : (
+                        <>
+                          <X className="mr-2 h-4 w-4" />
+                          Reject Event
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={onApproveEvent}
+                      disabled={isApproving || isRejecting}
+                    >
+                      {isApproving ? (
+                        <>
+                          <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Approving...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Approve & Publish
+                        </>
+                      )}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {/* Normal Save/Publish Buttons */}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => handleSubmit(values, EventStatus.Draft)}
+                    >
+                      Save as Draft
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
+                    >
+                      {role === "organizer" ? "Send to Review" : "Publish Event"}
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </Form>

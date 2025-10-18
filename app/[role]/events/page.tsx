@@ -1711,26 +1711,6 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 </DropdownMenuItem>
                               )}
                               
-                              {/* Approve/Reject buttons for SuperAdmin in review tab */}
-                              {(role as UserRole) === "superadmin" && activeTab === "review" && (
-                                <>
-                                  <DropdownMenuItem 
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    onClick={() => handleApproveEvent(event._id)}
-                                  >
-                                    <CheckCircle className="mr-2 h-4 w-4" />
-                                    Approve & Publish
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    onClick={() => openRejectModal(event._id)}
-                                  >
-                                    <X className="mr-2 h-4 w-4" />
-                                    Reject Event
-                                  </DropdownMenuItem>
-                                </>
-                              )}
-                              
                               {/* Enable/Disable Event - Only for SuperAdmin */}
                               {(role as UserRole) === "superadmin" && (
                                 isEventDisabled(event) ? (
