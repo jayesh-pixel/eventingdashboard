@@ -34,7 +34,7 @@ interface PromoterData {
 interface PromoterPopupProps {
   isOpen: boolean
   onClose: () => void
-  promoterData: PromoterData | null
+  promoterData: PromoterData[] | PromoterData | null
   eventId?: string
 }
 
@@ -43,8 +43,57 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
 
   if (!promoterData) return null
 
-  const promoterName = promoterData.PromoterName || promoterData.promoterName || "Unknown Promoter"
-  const promoterId = promoterData.promoter_id
+  // Normalize to array format
+  const promoters = Array.isArray(promoterData) ? promoterData : [promoterData]
+  
+  // If showing multiple promoters, use a simpler list view
+  if (promoters.length > 1 || (promoters.length === 1 && !promoters[0].email && !promoters[0].phone)) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="w-[300px] max-w-[90vw]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <User className="h-5 w-5" />
+              <div>
+                <div className="font-semibold text-base">
+                  Event Promoters ({promoters.length})
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            {promoters.map((promoter, index) => {
+              const promoterName = promoter.PromoterName || promoter.promoterName || "Unknown Promoter"
+
+              return (
+                <div key={promoter.promoter_id || index} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-xs">
+                      {promoterName.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="font-medium text-sm">{promoterName}</span>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Close Button */}
+          <div className="flex justify-end pt-4 border-t">
+            <Button variant="outline" onClick={onClose} className="text-sm">
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  // Single promoter with detailed view
+  const promoter = promoters[0]
+  const promoterName = promoter.PromoterName || promoter.promoterName || "Unknown Promoter"
+  const promoterId = promoter.promoter_id
 
   const copyPromoterId = () => {
     if (promoterId) {
@@ -101,25 +150,25 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
               Contact Information
             </h4>
             
-            {promoterData.email && (
+            {promoter.email && (
               <div className="flex items-center gap-2">
                 <Mail className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs break-all">{promoterData.email}</span>
+                <span className="text-xs break-all">{promoter.email}</span>
               </div>
             )}
             
-            {promoterData.phone && (
+            {promoter.phone && (
               <div className="flex items-center gap-2">
                 <Phone className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                <span className="text-xs">{promoterData.phone}</span>
+                <span className="text-xs">{promoter.phone}</span>
               </div>
             )}
             
-            {(promoterData.address || promoterData.city) && (
+            {(promoter.address || promoter.city) && (
               <div className="flex items-start gap-2">
                 <MapPin className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <span className="text-xs">
-                  {[promoterData.address, promoterData.city, promoterData.state, promoterData.country]
+                  {[promoter.address, promoter.city, promoter.state, promoter.country]
                     .filter(Boolean)
                     .join(', ')}
                 </span>
@@ -131,26 +180,26 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
 
           {/* Stats */}
           <div className="grid grid-cols-2 gap-2">
-            {promoterData.totalEvents !== undefined && (
+            {promoter.totalEvents !== undefined && (
               <div className="text-center p-2 bg-muted/20 rounded-md">
-                <div className="text-lg font-bold text-primary">{promoterData.totalEvents}</div>
+                <div className="text-lg font-bold text-primary">{promoter.totalEvents}</div>
                 <div className="text-xs text-muted-foreground">Events</div>
               </div>
             )}
             
-            {promoterData.commissionRate !== undefined && (
+            {promoter.commissionRate !== undefined && (
               <div className="text-center p-2 bg-muted/20 rounded-md">
-                <div className="text-lg font-bold text-green-600">{promoterData.commissionRate}%</div>
+                <div className="text-lg font-bold text-green-600">{promoter.commissionRate}%</div>
                 <div className="text-xs text-muted-foreground">Commission</div>
               </div>
             )}
           </div>
 
           {/* Status */}
-          {promoterData.status && (
+          {promoter.status && (
             <div className="flex items-center justify-center">
-              <Badge variant={promoterData.status === 'active' ? 'default' : 'secondary'} className="text-xs">
-                {promoterData.status}
+              <Badge variant={promoter.status === 'active' ? 'default' : 'secondary'} className="text-xs">
+                {promoter.status}
               </Badge>
             </div>
           )}

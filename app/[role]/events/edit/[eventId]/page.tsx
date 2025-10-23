@@ -131,51 +131,72 @@ export default function EditEventPage({ params }: EditEventPageProps) {
         return
       }
 
-      // Create payload with complete event data
-      const payload = {
-        event_id: eventId,
-        Status: "3", // Published status
-        
-        // Include all event fields from the original data
-        EventName: eventData.EventName || eventData.eventName,
-        EventDescription: eventData.EventDescription || eventData.eventDescription,
-        EventLanguages: eventData.EventLanguages || eventData.eventLanguages || [],
-        EventTermsCondition: eventData.EventTermsCondition || eventData.eventTermsCondition || "",
-        
-        // Event flags and settings
-        TourEvent: (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString(),
-        VenueEventFlag: eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1,
-        EventType: eventData.EventType ?? eventData.eventType ?? 1,
-        OnlineEventFlag: eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0,
-        FeaturedEventFlag: eventData.FeaturedEventFlag ?? eventData.featuredEventFlag ?? 0,
-        VenueToBeAnnounced: eventData.VenueToBeAnnounced ?? eventData.venueToBeAnnounced ?? 0,
-        EventVisibility: eventData.EventVisibility ?? eventData.eventVisibility ?? 1,
-        
-        // Additional fields
-        BestSuitedFor: eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21",
-        venue_id: eventData.venue_id ?? eventData.venueId,
-        
-        // Online event link if applicable
-        ...(eventData.OnlineEventFlag === 1 && {
-          Online_Event_Link: eventData.Online_Event_Link ?? eventData.onlineEventLink
-        }),
-        
-        // Venue to be announced fields if applicable
-        ...(eventData.VenueToBeAnnounced === 1 && {
-          VenueToBeAnnouncedCity: eventData.VenueToBeAnnouncedCity ?? eventData.venueToBeAnnouncedCity,
-          VenueToBeAnnouncedCityIsoCode: eventData.VenueToBeAnnouncedCityIsoCode ?? eventData.venueToBeAnnouncedCityIsoCode,
-          VenueToBeAnnouncedState: eventData.VenueToBeAnnouncedState ?? eventData.venueToBeAnnouncedState,
-          VenueToBeAnnouncedStateIsoCode: eventData.VenueToBeAnnouncedStateIsoCode ?? eventData.venueToBeAnnouncedStateIsoCode
-        })
+      // Create FormData for multer support
+      const formData = new FormData()
+      
+      // Add event ID
+      formData.append("event_id", eventId)
+      
+      // Add status
+      formData.append("Status", "3") // Published status
+      
+      // Include all event fields from the original data
+      formData.append("EventName", eventData.EventName || eventData.eventName || "")
+      formData.append("EventDescription", eventData.EventDescription || eventData.eventDescription || "")
+      formData.append("EventTermsCondition", eventData.EventTermsCondition || eventData.eventTermsCondition || "")
+      
+      // Event Languages
+      if (eventData.EventLanguages || eventData.eventLanguages) {
+        const languages = eventData.EventLanguages || eventData.eventLanguages
+        formData.append("EventLanguages", JSON.stringify(languages))
+      } else {
+        formData.append("EventLanguages", JSON.stringify([]))
+      }
+      
+      // Event flags and settings
+      formData.append("TourEvent", (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString())
+      formData.append("VenueEventFlag", (eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1).toString())
+      formData.append("EventType", (eventData.EventType ?? eventData.eventType ?? 1).toString())
+      formData.append("OnlineEventFlag", (eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0).toString())
+      formData.append("FeaturedEventFlag", (eventData.FeaturedEventFlag ?? eventData.featuredEventFlag ?? 0).toString())
+      formData.append("VenueToBeAnnounced", (eventData.VenueToBeAnnounced ?? eventData.venueToBeAnnounced ?? 0).toString())
+      formData.append("EventVisibility", (eventData.EventVisibility ?? eventData.eventVisibility ?? 1).toString())
+      
+      // Additional fields
+      formData.append("BestSuitedFor", (eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21").toString())
+      
+      if (eventData.venue_id || eventData.venueId) {
+        formData.append("venue_id", eventData.venue_id ?? eventData.venueId)
+      }
+      
+      // Online event link if applicable
+      if ((eventData.OnlineEventFlag === 1 || eventData.onlineEventFlag === 1) && (eventData.Online_Event_Link || eventData.onlineEventLink)) {
+        formData.append("Online_Event_Link", eventData.Online_Event_Link ?? eventData.onlineEventLink)
+      }
+      
+      // Venue to be announced fields if applicable
+      if (eventData.VenueToBeAnnounced === 1 || eventData.venueToBeAnnounced === 1) {
+        if (eventData.VenueToBeAnnouncedCity || eventData.venueToBeAnnouncedCity) {
+          formData.append("VenueToBeAnnouncedCity", eventData.VenueToBeAnnouncedCity ?? eventData.venueToBeAnnouncedCity)
+        }
+        if (eventData.VenueToBeAnnouncedCityIsoCode || eventData.venueToBeAnnouncedCityIsoCode) {
+          formData.append("VenueToBeAnnouncedCityIsoCode", eventData.VenueToBeAnnouncedCityIsoCode ?? eventData.venueToBeAnnouncedCityIsoCode)
+        }
+        if (eventData.VenueToBeAnnouncedState || eventData.venueToBeAnnouncedState) {
+          formData.append("VenueToBeAnnouncedState", eventData.VenueToBeAnnouncedState ?? eventData.venueToBeAnnouncedState)
+        }
+        if (eventData.VenueToBeAnnouncedStateIsoCode || eventData.venueToBeAnnouncedStateIsoCode) {
+          formData.append("VenueToBeAnnouncedStateIsoCode", eventData.VenueToBeAnnouncedStateIsoCode ?? eventData.venueToBeAnnouncedStateIsoCode)
+        }
       }
 
       const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type - let browser set it with boundary for multipart/form-data
         },
-        body: JSON.stringify(payload),
+        body: formData,
       })
 
       if (!response.ok) {
@@ -230,52 +251,73 @@ export default function EditEventPage({ params }: EditEventPageProps) {
         return
       }
 
-      // Create payload with complete event data plus rejection remark
-      const payload = {
-        event_id: eventId,
-        Status: "4", // Rejected status
-        EventRejectRemark: eventRejectRemark.trim(), // Rejection remark
-        
-        // Include all event fields from the original data
-        EventName: eventData.EventName || eventData.eventName,
-        EventDescription: eventData.EventDescription || eventData.eventDescription,
-        EventLanguages: eventData.EventLanguages || eventData.eventLanguages || [],
-        EventTermsCondition: eventData.EventTermsCondition || eventData.eventTermsCondition || "",
-        
-        // Event flags and settings
-        TourEvent: (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString(),
-        VenueEventFlag: eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1,
-        EventType: eventData.EventType ?? eventData.eventType ?? 1,
-        OnlineEventFlag: eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0,
-        FeaturedEventFlag: eventData.FeaturedEventFlag ?? eventData.featuredEventFlag ?? 0,
-        VenueToBeAnnounced: eventData.VenueToBeAnnounced ?? eventData.venueToBeAnnounced ?? 0,
-        EventVisibility: eventData.EventVisibility ?? eventData.eventVisibility ?? 1,
-        
-        // Additional fields
-        BestSuitedFor: eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21",
-        venue_id: eventData.venue_id ?? eventData.venueId,
-        
-        // Online event link if applicable
-        ...(eventData.OnlineEventFlag === 1 && {
-          Online_Event_Link: eventData.Online_Event_Link ?? eventData.onlineEventLink
-        }),
-        
-        // Venue to be announced fields if applicable
-        ...(eventData.VenueToBeAnnounced === 1 && {
-          VenueToBeAnnouncedCity: eventData.VenueToBeAnnouncedCity ?? eventData.venueToBeAnnouncedCity,
-          VenueToBeAnnouncedCityIsoCode: eventData.VenueToBeAnnouncedCityIsoCode ?? eventData.venueToBeAnnouncedCityIsoCode,
-          VenueToBeAnnouncedState: eventData.VenueToBeAnnouncedState ?? eventData.venueToBeAnnouncedState,
-          VenueToBeAnnouncedStateIsoCode: eventData.VenueToBeAnnouncedStateIsoCode ?? eventData.venueToBeAnnouncedStateIsoCode
-        })
+      // Create FormData for multer support
+      const formData = new FormData()
+      
+      // Add event ID
+      formData.append("event_id", eventId)
+      
+      // Add status and rejection remark
+      formData.append("Status", "4") // Rejected status
+      formData.append("EventRejectRemark", eventRejectRemark.trim())
+      
+      // Include all event fields from the original data
+      formData.append("EventName", eventData.EventName || eventData.eventName || "")
+      formData.append("EventDescription", eventData.EventDescription || eventData.eventDescription || "")
+      formData.append("EventTermsCondition", eventData.EventTermsCondition || eventData.eventTermsCondition || "")
+      
+      // Event Languages
+      if (eventData.EventLanguages || eventData.eventLanguages) {
+        const languages = eventData.EventLanguages || eventData.eventLanguages
+        formData.append("EventLanguages", JSON.stringify(languages))
+      } else {
+        formData.append("EventLanguages", JSON.stringify([]))
+      }
+      
+      // Event flags and settings
+      formData.append("TourEvent", (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString())
+      formData.append("VenueEventFlag", (eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1).toString())
+      formData.append("EventType", (eventData.EventType ?? eventData.eventType ?? 1).toString())
+      formData.append("OnlineEventFlag", (eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0).toString())
+      formData.append("FeaturedEventFlag", (eventData.FeaturedEventFlag ?? eventData.featuredEventFlag ?? 0).toString())
+      formData.append("VenueToBeAnnounced", (eventData.VenueToBeAnnounced ?? eventData.venueToBeAnnounced ?? 0).toString())
+      formData.append("EventVisibility", (eventData.EventVisibility ?? eventData.eventVisibility ?? 1).toString())
+      
+      // Additional fields
+      formData.append("BestSuitedFor", (eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21").toString())
+      
+      if (eventData.venue_id || eventData.venueId) {
+        formData.append("venue_id", eventData.venue_id ?? eventData.venueId)
+      }
+      
+      // Online event link if applicable
+      if ((eventData.OnlineEventFlag === 1 || eventData.onlineEventFlag === 1) && (eventData.Online_Event_Link || eventData.onlineEventLink)) {
+        formData.append("Online_Event_Link", eventData.Online_Event_Link ?? eventData.onlineEventLink)
+      }
+      
+      // Venue to be announced fields if applicable
+      if (eventData.VenueToBeAnnounced === 1 || eventData.venueToBeAnnounced === 1) {
+        if (eventData.VenueToBeAnnouncedCity || eventData.venueToBeAnnouncedCity) {
+          formData.append("VenueToBeAnnouncedCity", eventData.VenueToBeAnnouncedCity ?? eventData.venueToBeAnnouncedCity)
+        }
+        if (eventData.VenueToBeAnnouncedCityIsoCode || eventData.venueToBeAnnouncedCityIsoCode) {
+          formData.append("VenueToBeAnnouncedCityIsoCode", eventData.VenueToBeAnnouncedCityIsoCode ?? eventData.venueToBeAnnouncedCityIsoCode)
+        }
+        if (eventData.VenueToBeAnnouncedState || eventData.venueToBeAnnouncedState) {
+          formData.append("VenueToBeAnnouncedState", eventData.VenueToBeAnnouncedState ?? eventData.venueToBeAnnouncedState)
+        }
+        if (eventData.VenueToBeAnnouncedStateIsoCode || eventData.venueToBeAnnouncedStateIsoCode) {
+          formData.append("VenueToBeAnnouncedStateIsoCode", eventData.VenueToBeAnnouncedStateIsoCode ?? eventData.venueToBeAnnouncedStateIsoCode)
+        }
       }
 
       const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
+          // Don't set Content-Type - let browser set it with boundary for multipart/form-data
         },
-        body: JSON.stringify(payload),
+        body: formData,
       })
 
       if (!response.ok) {

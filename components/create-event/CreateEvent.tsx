@@ -2274,7 +2274,7 @@ export default function CreateEvent({
                 </Card>
 
                 {/* Organizers Selection - Hidden for organizer role */}
-                {role !== "organizer" ? (
+                {role !== "organizer" && (
                   <Card>
                     <CardHeader>
                     </CardHeader>
@@ -2294,33 +2294,6 @@ export default function CreateEvent({
                         />{touched.organizers && errors.organizers && (
                           <p className="text-sm text-red-600">{String(errors.organizers)}</p>
                         )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Event Organizer</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <div className="p-3 bg-muted/50 rounded-lg">
-                          <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium text-primary">
-                                {values.organizers[0]?.label?.charAt(0) || user?.Username?.charAt(0) || 'O'}
-                              </span>
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">
-                                {values.organizers[0]?.label || user?.Username || 'Current Organizer'}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                You are the organizer for this event
-                              </p>
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -3052,18 +3025,26 @@ export default function CreateEvent({
                 ) : (
                   <>
                     {/* Normal Save/Publish Buttons */}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleSubmit(values, EventStatus.Draft)}
-                    >
-                      Save as Draft
-                    </Button>
+                    {/* Show "Save as Draft" only if NOT (superadmin in edit mode) */}
+                    {!(role === "superadmin" && editMode) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => handleSubmit(values, EventStatus.Draft)}
+                      >
+                        Save as Draft
+                      </Button>
+                    )}
                     <Button
                       type="button"
                       onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
                     >
-                      {role === "organizer" ? "Send to Review" : "Publish Event"}
+                      {role === "organizer" 
+                        ? "Send to Review" 
+                        : (editMode && role === "superadmin") 
+                          ? "Update" 
+                          : "Publish Event"
+                      }
                     </Button>
                   </>
                 )}

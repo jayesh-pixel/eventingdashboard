@@ -1264,6 +1264,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       day: "numeric",
       month: "long",
       year: "numeric",
+      timeZone: "UTC",
     })
   }
 
@@ -1556,8 +1557,8 @@ export default function EventsPage({ params }: EventsPageProps) {
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="font-semibold text-foreground bg-muted/30">Event Name</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30">Start Date</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30">Time</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">Start Date & Time</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30">End Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
                   {(role as UserRole) !== "organizer" && (
                     <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[120px]">Organizer</TableHead>
@@ -1613,8 +1614,13 @@ export default function EventsPage({ params }: EventsPageProps) {
                           <div className="text-xs text-muted-foreground">{event.eventType}</div>
                         </div>
                       </TableCell>
-                      <TableCell>{formatDateForDisplay(event.eventStartDate)}</TableCell>
-                      <TableCell>{formatTime(event.eventStartDate)}</TableCell>
+                      <TableCell>
+                        <div>
+                          <div>{formatDateForDisplay(event.arrangedEventDateTime?.[0]?.EventStartDateTime || event.eventStartDate || event.EventStartDate)}</div>
+                          <div className="text-xs text-muted-foreground">{formatTime(event.arrangedEventDateTime?.[0]?.EventStartDateTime || event.eventStartDate || event.EventStartDate)}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{formatTime(event.arrangedEventDateTime?.[0]?.EventEndDateTime || event.eventEndDate || event.EventEndDate || event.eventStartDate)}</TableCell>
                       <TableCell>{event.categoryName}</TableCell>
                       {(role as UserRole) !== "organizer" && (
                         <TableCell className="min-w-[120px]">
@@ -1640,7 +1646,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                           </div>
                         ) : ((role as UserRole) === "organizer") ? (
                           <OrganizerPromoterView 
-                            promoters={event.EventPromoter || []}
+                            promoters={event.PopUpPromoterData || event.eventPromoters || event.EventPromoter || []}
                             onPromoterClick={handlePromoterClick}
                             eventId={event._id}
                           />

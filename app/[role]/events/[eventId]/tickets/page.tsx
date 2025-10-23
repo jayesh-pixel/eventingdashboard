@@ -94,6 +94,7 @@ interface ExtendedNormalTicket extends NormalTicket {
   // Availability status fields - based on actual API response
   EventTicketAvailability?: number  // 1 = Available, 0 = Sold Out (THIS IS THE CORRECT FIELD)
   EventTicketStatus?: number        // Different field, may be for internal status
+  Status?: number                   // Standard status field: 1 = Active, 0 = Disabled
   AvailabilityStatus?: string
   IsSoldOut?: boolean
   // Visibility and promoter fields
@@ -215,9 +216,8 @@ export default function TicketsPage() {
   
   // Tab and filter states
   const [activeTab, setActiveTab] = React.useState("normal")
-  const [searchTerm, setSearchTerm] = React.useState("")
+  const [nameFilter, setNameFilter] = React.useState<string>("all")
   const [dateFilter, setDateFilter] = React.useState<string>("all")
-  const [statusFilter, setStatusFilter] = React.useState<string>("all")
   
   // Track which tabs have been loaded to avoid unnecessary API calls
   const [loadedTabs, setLoadedTabs] = React.useState<Set<string>>(new Set())
@@ -570,19 +570,14 @@ export default function TicketsPage() {
         event_id: eventId,
       }
 
-      // Add name filter if search term exists
-      if (searchTerm.trim()) {
-        filterPayload.name = searchTerm.trim()
+      // Add name filter if not "all"
+      if (nameFilter !== "all") {
+        filterPayload.name = nameFilter
       }
 
       // Add date filter if not "all"
       if (dateFilter !== "all") {
         filterPayload.eventDateTime_id = dateFilter
-      }
-
-      // Add status filter if not "all"
-      if (statusFilter !== "all") {
-        filterPayload.status = statusFilter === "active" ? 1 : 0
       }
 
       console.log("Filter API Payload:", JSON.stringify(filterPayload, null, 2))
@@ -709,14 +704,9 @@ export default function TicketsPage() {
         event_id: eventId,
       }
 
-      // Add name filter if search term exists
-      if (searchTerm.trim()) {
-        filterPayload.name = searchTerm.trim()
-      }
-
-      // Add status filter if not "all"
-      if (statusFilter !== "all") {
-        filterPayload.status = statusFilter === "active" ? 1 : 0
+      // Add name filter if not "all"
+      if (nameFilter !== "all") {
+        filterPayload.name = nameFilter
       }
 
       console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
@@ -1489,44 +1479,36 @@ export default function TicketsPage() {
     // Only run if component is mounted and user is authenticated
     if (!user || !eventId || activeTab !== "normal") return
 
-    // Debounce search term to avoid excessive API calls
-    const timer = setTimeout(() => {
-      // Check if any filters are active
-      const hasActiveFilters = searchTerm.trim() || dateFilter !== "all" || statusFilter !== "all"
-      
-      if (hasActiveFilters) {
-        // Use filter API when filters are active
-        fetchTicketsByFilter()
-      } else {
-        // Use regular fetch when no filters are active
-        fetchNormalTickets()
-      }
-    }, searchTerm ? 500 : 0) // 500ms debounce for search term, immediate for dropdowns
-
-    return () => clearTimeout(timer)
-  }, [searchTerm, dateFilter, statusFilter, activeTab, eventId, user])
+    // No debounce needed since we're using dropdowns
+    // Check if any filters are active
+    const hasActiveFilters = nameFilter !== "all" || dateFilter !== "all"
+    
+    if (hasActiveFilters) {
+      // Use filter API when filters are active
+      fetchTicketsByFilter()
+    } else {
+      // Use regular fetch when no filters are active
+      fetchNormalTickets()
+    }
+  }, [nameFilter, dateFilter, activeTab, eventId, user])
 
   // Effect to handle filter changes for bulk tickets
   React.useEffect(() => {
     // Only run if component is mounted and user is authenticated
     if (!user || !eventId || activeTab !== "bulk") return
 
-    // Debounce search term to avoid excessive API calls
-    const timer = setTimeout(() => {
-      // Check if any filters are active (bulk tickets don't have availability filter)
-      const hasActiveFilters = searchTerm.trim() || statusFilter !== "all"
-      
-      if (hasActiveFilters) {
-        // Use filter API when filters are active
-        fetchBulkTicketsByFilter()
-      } else {
-        // Use regular fetch when no filters are active
-        fetchBulkTickets()
-      }
-    }, searchTerm ? 500 : 0) // 500ms debounce for search term, immediate for dropdown
-
-    return () => clearTimeout(timer)
-  }, [searchTerm, statusFilter, activeTab, eventId, user])
+    // No debounce needed since we're using dropdowns
+    // Check if any filters are active (bulk tickets only have name filter)
+    const hasActiveFilters = nameFilter !== "all"
+    
+    if (hasActiveFilters) {
+      // Use filter API when filters are active
+      fetchBulkTicketsByFilter()
+    } else {
+      // Use regular fetch when no filters are active
+      fetchBulkTickets()
+    }
+  }, [nameFilter, activeTab, eventId, user])
 
   // Handle tab changes - load data only when switching to a new tab
   const handleTabChange = (newTab: string) => {
@@ -1738,18 +1720,28 @@ export default function TicketsPage() {
           <CardTitle>Filters</CardTitle>
         </CardHeader>        <CardContent>
           <div className="flex flex-col gap-4 md:flex-row">
-            <div className="flex-1">
-              <Label htmlFor="search">Name Filter</Label>
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="search"
-                  placeholder="Search tickets..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
+            <div className="w-full md:min-w-[200px] md:w-auto">
+              <Label htmlFor="nameFilter">Name Filter</Label>
+              <Select value={nameFilter} onValueChange={setNameFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by name" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Names</SelectItem>
+                  {/* Get unique ticket names from current tickets */}
+                  {Array.from(new Set(
+                    (activeTab === "normal" ? normalTickets : bulkTickets).map((ticket: any) => 
+                      activeTab === "normal" 
+                        ? (ticket.Name || ticket.TicketName)
+                        : (ticket.TicketName || ticket.BulkTicketName)
+                    ).filter(Boolean)
+                  )).map((name) => (
+                    <SelectItem key={name} value={name}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="w-full md:min-w-[200px] md:w-auto">
               <Label htmlFor="dateFilter">Date Filter</Label>
@@ -1770,19 +1762,6 @@ export default function TicketsPage() {
                       })}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="w-full md:min-w-[200px] md:w-auto">
-              <Label htmlFor="status">Status</Label>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="active" className="text-green-600">Active</SelectItem>
-                  <SelectItem value="disabled" className="text-red-600">Disabled</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1826,7 +1805,6 @@ export default function TicketsPage() {
                       <TableHead>Type</TableHead>
                       <TableHead>Ticket Date</TableHead>
                       <TableHead>Pending Quantity</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead>Availability</TableHead>
                       <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
@@ -1835,13 +1813,13 @@ export default function TicketsPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredNormalTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="text-center py-8">
+                        <TableCell colSpan={9} className="text-center py-8">
                           No tickets found
                         </TableCell>
                       </TableRow>
@@ -1881,25 +1859,6 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {pendingQuantity}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={(() => {
-                                const isActive = (typeof extendedTicket.TicketStatus === 'number')
-                                  ? extendedTicket.TicketStatus !== 0
-                                  : (typeof extendedTicket.EventTicketStatus === 'number' 
-                                      ? extendedTicket.EventTicketStatus !== 0 
-                                      : true)
-                                return isActive ? "default" : "secondary"
-                              })()}>
-                                {(() => {
-                                  const isActive = (typeof extendedTicket.TicketStatus === 'number')
-                                    ? extendedTicket.TicketStatus !== 0
-                                    : (typeof extendedTicket.EventTicketStatus === 'number' 
-                                        ? extendedTicket.EventTicketStatus !== 0 
-                                        : true)
-                                  return isActive ? "Active" : "Disabled"
-                                })()}
-                              </Badge>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -1959,30 +1918,45 @@ export default function TicketsPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
-                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
-                                        ? extendedTicket.TicketStatus !== 0
-                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
-                                            ? extendedTicket.EventTicketStatus !== 0 
-                                            : true)
+                                      // Check multiple possible field names for ticket status
+                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.EventTicketStatus ?? 
+                                                         extendedTicket.Status ?? 
+                                                         extendedTicket.TicketStatus ?? 
+                                                         ticket.EventTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       const ticketName = extendedTicket.Name || ticket.TicketName || 'ticket'
                                       // Pass the current status (1 if active, 0 if disabled) so the function can toggle it correctly
                                       handleToggleStatus(ticket._id, isActive ? 1 : 0, true, ticketName)
                                     }}
                                     className={(() => {
-                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
-                                        ? extendedTicket.TicketStatus !== 0
-                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
-                                            ? extendedTicket.EventTicketStatus !== 0 
-                                            : true)
+                                      // Check multiple possible field names for ticket status
+                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.EventTicketStatus ?? 
+                                                         extendedTicket.Status ?? 
+                                                         extendedTicket.TicketStatus ?? 
+                                                         ticket.EventTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       return isActive ? "text-destructive" : "text-green-600"
                                     })()}
                                   >
                                     {(() => {
-                                      const isActive = (typeof extendedTicket.TicketStatus === 'number')
-                                        ? extendedTicket.TicketStatus !== 0
-                                        : (typeof extendedTicket.EventTicketStatus === 'number' 
-                                            ? extendedTicket.EventTicketStatus !== 0 
-                                            : true)
+                                      // Check multiple possible field names for ticket status
+                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.EventTicketStatus ?? 
+                                                         extendedTicket.Status ?? 
+                                                         extendedTicket.TicketStatus ?? 
+                                                         ticket.EventTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       return isActive ? "Disable" : "Enable"
                                     })()}
                                   </DropdownMenuItem>
@@ -2025,7 +1999,6 @@ export default function TicketsPage() {
                       <TableHead>Ticket Created</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Check In</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead>Ticket Price</TableHead>
                       <TableHead>Total Amount</TableHead>
                       <TableHead className="text-right">Action</TableHead>
@@ -2034,13 +2007,13 @@ export default function TicketsPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredBulkTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={14} className="text-center py-8">
+                        <TableCell colSpan={13} className="text-center py-8">
                           No bulk tickets found
                         </TableCell>
                       </TableRow>
@@ -2088,25 +2061,6 @@ export default function TicketsPage() {
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={(() => {
-                                const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-                                  ? extendedTicket.BulkTicketStatus !== 0
-                                  : (typeof extendedTicket.Status === 'number' 
-                                      ? extendedTicket.Status !== 0 
-                                      : true)
-                                return isActive ? "default" : "secondary"
-                              })()}>
-                                {(() => {
-                                  const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-                                    ? extendedTicket.BulkTicketStatus !== 0
-                                    : (typeof extendedTicket.Status === 'number' 
-                                        ? extendedTicket.Status !== 0 
-                                        : true)
-                                  return isActive ? "Active" : "Disabled"
-                                })()}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
                               {formatCurrency(ticketPrice)}
                             </TableCell>
                             <TableCell>
@@ -2124,31 +2078,37 @@ export default function TicketsPage() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       const batchId = ticket.BatchId || ticket._id || ''
-                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-                                        ? extendedTicket.BulkTicketStatus !== 0
-                                        : (typeof extendedTicket.Status === 'number' 
-                                            ? extendedTicket.Status !== 0 
-                                            : true)
+                                      // Check multiple possible field names for bulk ticket status
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.Status ?? 
+                                                         extendedTicket.BulkTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || 'bulk ticket'
                                       // Pass the current status (1 if active, 0 if disabled) so the function can toggle it correctly
                                       if (batchId) handleToggleStatus(batchId, isActive ? 1 : 0, false, ticketName)
                                     }}
                                     className={(() => {
-                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-                                        ? extendedTicket.BulkTicketStatus !== 0
-                                        : (typeof extendedTicket.Status === 'number' 
-                                            ? extendedTicket.Status !== 0 
-                                            : true)
+                                      // Check multiple possible field names for bulk ticket status
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.Status ?? 
+                                                         extendedTicket.BulkTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       return isActive ? "text-destructive" : "text-green-600"
                                     })()}
                                   >
                                     <X className="mr-2 h-4 w-4" />
                                     {(() => {
-                                      const isActive = (typeof extendedTicket.BulkTicketStatus === 'number')
-                                        ? extendedTicket.BulkTicketStatus !== 0
-                                        : (typeof extendedTicket.Status === 'number' 
-                                            ? extendedTicket.Status !== 0 
-                                            : true)
+                                      // Check multiple possible field names for bulk ticket status
+                                      // Status field: 1 = Active, 0 = Disabled
+                                      const statusValue = extendedTicket.Status ?? 
+                                                         extendedTicket.BulkTicketStatus ?? 
+                                                         ticket.Status ?? 
+                                                         1 // Default to active if not found
+                                      const isActive = statusValue === 1
                                       return isActive ? "Disable" : "Enable"
                                     })()}
                                   </DropdownMenuItem>
