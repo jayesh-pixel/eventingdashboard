@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 
 interface EditEventPageProps {
   params: Promise<{ role: UserRole; eventId: string }>
@@ -364,6 +366,18 @@ export default function EditEventPage({ params }: EditEventPageProps) {
     return status === 2 || status === "2" || status === "To Be Reviewed"
   }
 
+  // Check if event is rejected
+  const isEventRejected = () => {
+    if (!eventData) return false
+    const status = eventData.Status || eventData.status || eventData.EventStatus
+    return status === 4 || status === "4" || status === "Rejected"
+  }
+
+  // Get rejection remark
+  const getRejectionRemark = () => {
+    return eventData?.EventRejectRemark || eventData?.eventRejectRemark || ""
+  }
+
   if (!eventId) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -488,6 +502,19 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           </div>
         </div>
       </div>
+
+      {/* Rejection Alert - Only for Organizer when event is rejected */}
+      {(role as UserRole) === "organizer" && isEventRejected() && getRejectionRemark() && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Event Rejected</AlertTitle>
+            <AlertDescription>
+              <strong>Rejection Reason:</strong> {getRejectionRemark()}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Content */}
       <div className="py-6">

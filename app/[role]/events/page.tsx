@@ -1717,8 +1717,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 </DropdownMenuItem>
                               )}
                               
-                              {/* Enable/Disable Event - Only for SuperAdmin */}
-                              {(role as UserRole) === "superadmin" && (
+                              {/* Enable/Disable Event - Only for SuperAdmin. Hide in 'To Be Reviewed' tab */}
+                              {(role as UserRole) === "superadmin" && activeTab !== "review" && (
                                 isEventDisabled(event) ? (
                                   <DropdownMenuItem 
                                     className="text-green-600 hover:text-green-700 hover:bg-green-50"
