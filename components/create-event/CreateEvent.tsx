@@ -248,6 +248,13 @@ export default function CreateEvent({
   const { toast } = useToast()
   const isOrganizer = role === "organizer"
 
+  // Helper function to check if event is rejected
+  const isEventRejected = () => {
+    if (!existingEventData) return false
+    const status = existingEventData.Status || existingEventData.status || existingEventData.EventStatus
+    return status === 4 || status === "4" || status === "Rejected"
+  }
+
   // State for external data
   const [venues, setVenues] = React.useState<SelectOption[]>([])
   const [organizers, setOrganizers] = React.useState<SelectOption[]>([])
@@ -3025,8 +3032,8 @@ export default function CreateEvent({
                 ) : (
                   <>
                     {/* Normal Save/Publish Buttons */}
-                    {/* Show "Save as Draft" only if NOT (superadmin in edit mode) */}
-                    {!(role === "superadmin" && editMode) && (
+                    {/* Show "Save as Draft" only if NOT (superadmin in edit mode) AND NOT (organizer with rejected event) */}
+                    {!(role === "superadmin" && editMode) && !(role === "organizer" && editMode && isEventRejected()) && (
                       <Button
                         type="button"
                         variant="outline"
