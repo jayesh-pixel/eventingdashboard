@@ -1382,10 +1382,10 @@ export default function CreateEvent({
         submitData.append("VenueToBeAnnounced", "1")
         submitData.append("VenueEventFlag", "0")
         submitData.append("OnlineEventFlag", "0")
-        if (values.stateIsoCode) submitData.append("StateIsoCode", values.stateIsoCode)
-        if (values.stateName) submitData.append("StateName", values.stateName)
-        if (values.cityIsoCode) submitData.append("CityIsoCode", values.cityIsoCode)
-        if (values.cityName) submitData.append("CityName", values.cityName)
+        if (values.stateIsoCode) submitData.append("VenueToBeAnnouncedStateIsoCode", values.stateIsoCode)
+        if (values.stateName) submitData.append("VenueToBeAnnouncedState", values.stateName)
+        if (values.cityIsoCode) submitData.append("VenueToBeAnnouncedCityIsoCode", values.cityIsoCode)
+        if (values.cityName) submitData.append("VenueToBeAnnouncedCity", values.cityName)
       }
 
       // Add relationship arrays only if they have values - matching API format
