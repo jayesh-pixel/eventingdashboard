@@ -167,6 +167,7 @@ interface EventDateTime {
 interface Promoter {
   _id: string
   FullName: string
+  Username: string
   Email: string
   Phone1: string
   Status: string
@@ -332,7 +333,8 @@ export default function TicketsPage() {
   const mapToPromoter = (p: any): Promoter => {
     return {
       _id: p?._id ?? p?.promoter_id ?? p?.id ?? "",
-      FullName: p?.FullName ?? p?.PromoterName ?? p?.Username ?? p?.name ?? "Unknown Promoter",
+      FullName: p?.FullName ?? p?.PromoterName ?? p?.name ?? "Unknown Promoter",
+      Username: p?.Username ?? p?.username ?? p?.FullName ?? "",
       Email: p?.Email ?? p?.email ?? "",
       Phone1: p?.Phone1 ?? p?.phone ?? p?.Phone ?? "",
       Status: normalizeStatus(p?.Status ?? p?.status ?? p?.PromoterStatus ?? p?.is_active),
@@ -1378,6 +1380,8 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
+      console.log("🚫 Cancelling bulk ticket:", { batchId })
+
       // Call the cancel bulk ticket API endpoint with correct payload
       const response = await fetch(ticketEndPoint.CANCEL_BULK_TICKET, {
         method: "POST",
@@ -1390,21 +1394,36 @@ export default function TicketsPage() {
         }),
       })
 
+      const data = await response.json()
+      console.log("📝 Cancel bulk ticket API response:", data)
+
       if (response.ok) {
-        const data = await response.json()
+        // Update the bulk ticket status locally immediately for better UX
+        setBulkTickets(prevTickets => 
+          prevTickets.map(ticket => 
+            (ticket.BatchId === batchId || ticket._id === batchId)
+              ? { ...ticket, Status: 2, TicketStatus: 2, IsCancelled: true }  // Status 2 typically means cancelled
+              : ticket
+          )
+        )
+
         toast({
           title: "Success",
           description: data.message || "Bulk ticket cancelled successfully",
         })
-        fetchBulkTickets() // Refresh the bulk tickets list
+        
+        // Reload the page after a short delay to ensure backend has processed
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
       } else {
-        throw new Error("Failed to cancel bulk ticket")
+        throw new Error(data.message || "Failed to cancel bulk ticket")
       }
     } catch (error) {
       console.error("Error cancelling bulk ticket:", error)
       toast({
         title: "Error",
-        description: "Failed to cancel bulk ticket",
+        description: error instanceof Error ? error.message : "Failed to cancel bulk ticket",
         variant: "destructive",
       })
     }
@@ -1634,6 +1653,7 @@ export default function TicketsPage() {
     // Then check if promoter matches search term
     const matchesSearch = 
       promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
+      (promoter.Username && promoter.Username.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
       (promoter.Email && promoter.Email.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
       (promoter.Phone1 && promoter.Phone1.includes(promoterSearchTerm))
     
@@ -1838,8 +1858,17 @@ export default function TicketsPage() {
                           ? ticket.RemainingTickets 
                           : (totalQuantity - soldTickets)
                         
+                        // Check if ticket is disabled
+                        const statusValue = extendedTicket.EventTicketStatus ?? 
+                                           extendedTicket.Status ?? 
+                                           extendedTicket.TicketStatus ?? 
+                                           ticket.EventTicketStatus ?? 
+                                           ticket.Status ?? 
+                                           1
+                        const isDisabled = statusValue === 0
+                        
                         return (
-                          <TableRow key={ticket._id}>
+                          <TableRow key={ticket._id} className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}>
                             <TableCell className="font-medium">
                               {extendedTicket.Name || ticket.TicketName || 'N/A'}
                             </TableCell>
@@ -2024,8 +2053,15 @@ export default function TicketsPage() {
                         const quantity = extendedTicket.Quantity || ticket.MaxBulkTicketPerTransaction || 0
                         const totalAmount = ticketPrice * quantity
                         
+                        // Check if bulk ticket is disabled
+                        const statusValue = extendedTicket.Status ?? 
+                                           extendedTicket.BulkTicketStatus ?? 
+                                           ticket.Status ?? 
+                                           1
+                        const isDisabled = statusValue === 0
+                        
                         return (
-                          <TableRow key={ticket._id || ticket.BatchId}>
+                          <TableRow key={ticket._id || ticket.BatchId} className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}>
                             <TableCell className="font-medium">
                               {ticket.BatchId || ticket._id || 'N/A'}
                             </TableCell>
@@ -2845,8 +2881,7 @@ export default function TicketsPage() {
                       onCheckedChange={() => handlePromoterSelection(promoter._id)}
                     />
                     <div className="flex-1">
-                      <div className="font-medium">{promoter.FullName}</div>
-                      <div className="text-sm text-muted-foreground">{promoter.Email || 'No email'}</div>
+                      <div className="font-medium">{promoter.Username || promoter.FullName || 'No username'}</div>
                       <div className="text-sm text-muted-foreground">{promoter.Phone1 || 'No phone'}</div>
                     </div>
                     <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>

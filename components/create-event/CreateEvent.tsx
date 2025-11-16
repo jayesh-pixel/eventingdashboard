@@ -1980,184 +1980,10 @@ export default function CreateEvent({
               <div className={`grid grid-cols-1 gap-6 lg:grid-cols-2 ${viewOnly ? 'pointer-events-none opacity-75' : ''}`}>
               {/* Left Column */}
               <div className="space-y-6">
-                {/* Event Configuration */}
+                {/* 1. Upload Carousel Images */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Configuration</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Event Visibility */}
-                    <div className="space-y-3">
-                      <Label className="text-base font-semibold">Event Visibility <span className="text-red-500">*</span></Label>
-                      <div className="flex space-x-4">
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventVisibility"
-                            value="1"
-                            className="w-4 h-4"
-                          />
-                          <Label>Public (Online/Offline)</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventVisibility"
-                            value="2"
-                            className="w-4 h-4"
-                          />
-                          <Label>Private (Offline Only)</Label>
-                        </div>
-                      </div>
-                      {touched.eventVisibility && errors.eventVisibility && (
-                        <p className="text-sm text-red-600">{errors.eventVisibility}</p>
-                      )}
-                    </div>
-
-                    {/* Event Type - Hidden for organizers, defaulted to Booking */}
-                    {!isOrganizer && (
-                      <div className="space-y-3">
-                        <Label className="text-base font-semibold">Event Type <span className="text-red-500">*</span></Label>
-                        <div className="flex space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <Field
-                              type="radio"
-                              name="eventType"
-                              value="1"
-                              className="w-4 h-4"
-                            />
-                            <Label>Booking</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Field
-                              type="radio"
-                              name="eventType"
-                              value="2"
-                              className="w-4 h-4"
-                            />
-                            <Label>Registration</Label>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Field
-                              type="radio"
-                              name="eventType"
-                              value="3"
-                              className="w-4 h-4"
-                            />
-                            <Label>Free</Label>
-                          </div>
-                        </div>
-                        {touched.eventType && errors.eventType && (
-                          <p className="text-sm text-red-600">{errors.eventType}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Booking Phone Number - Only for Booking type and SuperAdmin */}
-                    {values.eventType === "1" && !isOrganizer && (
-                      <div className="space-y-2">
-                        <Label className="text-base font-semibold">Booking Phone Number <span className="text-red-500">*</span></Label>
-                        <Field
-                          as={Input}
-                          name="bookingphonenumber"
-                          type="tel"
-                          placeholder="Enter booking phone number"
-                        />
-                        {touched.bookingphonenumber && errors.bookingphonenumber && (
-                          <p className="text-sm text-red-600">{errors.bookingphonenumber}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* WhatsApp Number - Only for Free type */}
-                    {values.eventType === "3" && (
-                      <div className="space-y-2">
-                        <Label className="text-base font-semibold">WhatsApp Number <span className="text-red-500">*</span></Label>
-                        <Field
-                          as={Input}
-                          name="whatsappnumber"
-                          type="tel"
-                          placeholder="Enter WhatsApp number"
-                        />
-                        {touched.whatsappnumber && errors.whatsappnumber && (
-                          <p className="text-sm text-red-600">{errors.whatsappnumber}</p>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Featured Event Toggle - Hidden for organizers */}
-                    {!isOrganizer && (
-                      <div className="flex items-center space-x-2">
-                        <Switch
-                          checked={values.isFeatured}
-                          onCheckedChange={(checked) => setFieldValue("isFeatured", checked)}
-                        />
-                        <Label>Mark as Featured Event</Label>
-                      </div>
-                    )}
-
-                    {/* Age Restriction */}
-                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Age Restriction <span className="text-red-500">*</span></Label>
-                      <Select
-                        options={yearsOptions}
-                        value={yearsOptions.find(option => option.value === values.ageRestriction)}
-                        onChange={(selected) => {
-                          console.log("🎯 Age Restriction changed:", selected);
-                          setFieldValue("ageRestriction", selected?.value || "")
-                        }}
-                        placeholder="Select age group..."
-                        className="basic-single"
-                        classNamePrefix="select"
-                        styles={getSelectStyles()}
-                      />
-                      {touched.ageRestriction && errors.ageRestriction && (
-                        <p className="text-sm text-red-600">{errors.ageRestriction}</p>
-                      )}
-                    </div>
-
-                    {/* Convenience Fee - Hidden for organizers, only SuperAdmin can set */}
-                    {!isOrganizer && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
-                          <UISelect
-                            value={values.feeunit.toString()}
-                            onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
-                              <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </UISelect>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
-                          <Field
-                            as={Input}
-                            name="feevalue"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="Enter fee value"
-                          />
-                          {touched.feevalue && errors.feevalue && (
-                            <p className="text-sm text-red-600">{errors.feevalue}</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-                {/* Carousel Images Upload Section */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center gap-2">
-                      <Info className="h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <CardTitle>Upload Carousel Images <span className="text-red-500">*</span></CardTitle>
                     <p className="text-sm text-muted-foreground">
                       First image will be used for thumbnail. Maximum file size: 500KB. Dimensions: 612x408
                     </p>
@@ -2280,41 +2106,125 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Organizers Selection - Hidden for organizer role */}
-                {role !== "organizer" && (
+                {/* 2. Event Visibility */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Event Visibility <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <Field
+                          type="radio"
+                          name="eventVisibility"
+                          value="1"
+                          className="w-4 h-4"
+                        />
+                        <Label>Public (Online/Offline)</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Field
+                          type="radio"
+                          name="eventVisibility"
+                          value="2"
+                          className="w-4 h-4"
+                        />
+                        <Label>Private (Offline Only)</Label>
+                      </div>
+                    </div>
+                    {touched.eventVisibility && errors.eventVisibility && (
+                      <p className="text-sm text-red-600">{errors.eventVisibility}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 3. Event Type - Hidden for organizers */}
+                {!isOrganizer && (
                   <Card>
                     <CardHeader>
+                      <CardTitle>Event Type <span className="text-red-500">*</span></CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        <Label>Select organizers <span className="text-red-500">*</span></Label>
-                        <Select
-                          isMulti
-                          options={organizers}
-                          value={values.organizers}
-                          onChange={(selected) => handleSelectChange(selected, "organizers", setFieldValue)}
-                          placeholder="Select "
-                          isLoading={loadingOrganizers}
-                          className="basic-multi-select"
-                          classNamePrefix="select"
-                          styles={getSelectStyles()}
-                        />{touched.organizers && errors.organizers && (
-                          <p className="text-sm text-red-600">{String(errors.organizers)}</p>
-                        )}
+                    <CardContent className="space-y-4">
+                      <div className="flex space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <Field
+                            type="radio"
+                            name="eventType"
+                            value="1"
+                            className="w-4 h-4"
+                          />
+                          <Label>Booking</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Field
+                            type="radio"
+                            name="eventType"
+                            value="2"
+                            className="w-4 h-4"
+                          />
+                          <Label>Registration</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Field
+                            type="radio"
+                            name="eventType"
+                            value="3"
+                            className="w-4 h-4"
+                          />
+                          <Label>Free</Label>
+                        </div>
                       </div>
+                      {touched.eventType && errors.eventType && (
+                        <p className="text-sm text-red-600">{errors.eventType}</p>
+                      )}
+
+                      {/* Booking Phone Number - Only for Booking type */}
+                      {values.eventType === "1" && (
+                        <div className="space-y-2 mt-4">
+                          <Label>Booking Phone Number <span className="text-red-500">*</span></Label>
+                          <Field
+                            as={Input}
+                            name="bookingphonenumber"
+                            type="tel"
+                            placeholder="Enter booking phone number"
+                          />
+                          {touched.bookingphonenumber && errors.bookingphonenumber && (
+                            <p className="text-sm text-red-600">{errors.bookingphonenumber}</p>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
 
-                {/* Location & Venue */}
+                {/* 4. WhatsApp Number - Only for Free type */}
+                {values.eventType === "3" && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>WhatsApp Number <span className="text-red-500">*</span></CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <Field
+                        as={Input}
+                        name="whatsappnumber"
+                        type="tel"
+                        placeholder="Enter WhatsApp number"
+                      />
+                      {touched.whatsappnumber && errors.whatsappnumber && (
+                        <p className="text-sm text-red-600">{errors.whatsappnumber}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 5. Location & Venue - comes before Organizers */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Location & Venue</CardTitle>
+                    <CardTitle>Location & Venue <span className="text-red-500">*</span></CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Location Type */}
                     <div className="space-y-3">
-                      <Label className="text-base font-semibold">Location Type <span className="text-red-500">*</span></Label>
+                      <Label className="text-base font-semibold">Location Type</Label>
                       <div className="flex space-x-4">
                         <div className="flex items-center space-x-2">
                           <Field
@@ -2373,7 +2283,6 @@ export default function CreateEvent({
                             )}
                           </div>
 
-                          {/* Venue Layout Upload */}
                           <div className="space-y-2">
                             <Label>Venue Layout (Optional)</Label>
                             <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 hover:border-muted-foreground/50 transition-colors">
@@ -2480,18 +2389,46 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Categories Selection */}
+                {/* 6. Organizers Selection - Hidden for organizer role */}
+                {role !== "organizer" && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Organizers <span className="text-red-500">*</span></CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <Select
+                          isMulti
+                          options={organizers}
+                          value={values.organizers}
+                          onChange={(selected) => handleSelectChange(selected, "organizers", setFieldValue)}
+                          placeholder="Select..."
+                          isLoading={loadingOrganizers}
+                          className="basic-multi-select"
+                          classNamePrefix="select"
+                          styles={getSelectStyles()}
+                        />
+                        {touched.organizers && errors.organizers && (
+                          <p className="text-sm text-red-600">{String(errors.organizers)}</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* 7. Categories Selection */}
                 <Card>
-                  
+                  <CardHeader>
+                    <CardTitle>Select Category <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select categories <span className="text-red-500">*</span></Label>
                       <Select
                         isMulti
                         options={categories}
                         value={values.categories}
                         onChange={(selected) => handleSelectChange(selected, "categories", setFieldValue)}
-                        placeholder="Select categories"
+                        placeholder="Select..."
                         isLoading={loadingCategories}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2504,18 +2441,19 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Artists Selection */}
+                {/* 8. Artists Selection */}
                 <Card>
-                 
+                  <CardHeader>
+                    <CardTitle>Select Artist <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select artists <span className="text-red-500">*</span></Label>
                       <Select
                         isMulti
                         options={artists}
                         value={values.artists}
                         onChange={(selected) => handleSelectChange(selected, "artists", setFieldValue)}
-                        placeholder="Select artists"
+                        placeholder="Select..."
                         isLoading={loadingArtists}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2528,18 +2466,19 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Genres Selection */}
+                {/* 9. Genres Selection */}
                 <Card>
-             
+                  <CardHeader>
+                    <CardTitle>Select Genre <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select genres <span className="text-red-500">*</span></Label>
                       <Select
                         isMulti
                         options={genres}
                         value={values.genres}
                         onChange={(selected) => handleSelectChange(selected, "genres", setFieldValue)}
-                        placeholder="Select genres"
+                        placeholder="Select..."
                         isLoading={loadingGenres}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2552,18 +2491,19 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* Languages Selection */}
+                {/* 10. Languages Selection */}
                 <Card>
-              
+                  <CardHeader>
+                    <CardTitle>Select Language <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      <Label>Select languages <span className="text-red-500">*</span></Label>
                       <Select
                         isMulti
                         options={languageOptions}
                         value={values.languages}
                         onChange={(selected) => setFieldValue("languages", selected || [])}
-                        placeholder="Select languages"
+                        placeholder="Select..."
                         isLoading={loadingLanguages}
                         className="basic-multi-select"
                         classNamePrefix="select"
@@ -2575,67 +2515,133 @@ export default function CreateEvent({
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* 11. Age Restriction */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Select Age <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Select
+                      options={yearsOptions}
+                      value={yearsOptions.find(option => option.value === values.ageRestriction)}
+                      onChange={(selected) => {
+                        setFieldValue("ageRestriction", selected?.value || "")
+                      }}
+                      placeholder="Select..."
+                      className="basic-single"
+                      classNamePrefix="select"
+                      styles={getSelectStyles()}
+                    />
+                    {touched.ageRestriction && errors.ageRestriction && (
+                      <p className="text-sm text-red-600">{errors.ageRestriction}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 12. Event Video URL */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Add Video URL</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Field
+                      as={Input}
+                      name="eventVideoUrl"
+                      type="url"
+                      placeholder="Enter event link here"
+                    />
+                    {touched.eventVideoUrl && errors.eventVideoUrl && (
+                      <p className="text-sm text-red-600">{errors.eventVideoUrl}</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* 13. Convenience Fee - Hidden for organizers, only SuperAdmin can set */}
+                {!isOrganizer && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Convenience Fee</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
+                          <UISelect
+                            value={values.feeunit.toString()}
+                            onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Amount" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
+                              <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
+                            </SelectContent>
+                          </UISelect>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
+                          <Field
+                            as={Input}
+                            name="feevalue"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            placeholder="Enter fee value"
+                          />
+                          {touched.feevalue && errors.feevalue && (
+                            <p className="text-sm text-red-600">{errors.feevalue}</p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
 
               {/* Right Column */}
               <div className="space-y-6">
-                {/* Event Information */}
+                {/* Event Name */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Information</CardTitle>
+                    <CardTitle>Event Name <span className="text-red-500">*</span></CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Name <span className="text-red-500">*</span></Label>
-                      <Field
-                        as={Input}
-                        name="eventname"
-                        placeholder="Enter event name"
-                      />
-                      {touched.eventname && errors.eventname && (
-                        <p className="text-sm text-red-600">{errors.eventname}</p>
-                      )}
-                    </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Description <span className="text-red-500">*</span></Label>
-                      <ReactQuillWrapper
-                        value={values.eventDescription}
-                        onChange={(content) => setFieldValue("eventDescription", content)}
-                        placeholder="Enter detailed event description..."
-                        theme="snow"
-                        style={{ height: "150px", marginBottom: "50px" }}
-                      />
-                      {touched.eventDescription && errors.eventDescription && (
-                        <p className="text-sm text-red-600">{errors.eventDescription}</p>
-                      )}
-                    </div>                    <div className="space-y-2">
-                      <Label className="text-base font-semibold">Terms and Conditions <span className="text-red-500">*</span></Label>
-                      <ReactQuillWrapper
-                        value={values.eventTermsandConditions}
-                        onChange={(content) => setFieldValue("eventTermsandConditions", content)}
-                        placeholder="Enter terms and conditions..."
-                        theme="snow"
-                        style={{ height: "150px", marginBottom: "50px" }}
-                      />
-                      {touched.eventTermsandConditions && errors.eventTermsandConditions && (
-                        <p className="text-sm text-red-600">{errors.eventTermsandConditions}</p>
-                      )}
-                    </div>
+                  <CardContent>
+                    <Field
+                      as={Input}
+                      name="eventname"
+                      placeholder="Enter event name"
+                    />
+                    {touched.eventname && errors.eventname && (
+                      <p className="text-sm text-red-600">{errors.eventname}</p>
+                    )}
+                  </CardContent>
+                </Card>
 
-                    <div className="space-y-2">
-                      <Label>Video URL (Optional)</Label>
-                      <Field
-                        as={Input}
-                        name="eventVideoUrl"
-                        type="url"
-                        placeholder="Enter YouTube or promotional video URL"
-                      />
-                      {touched.eventVideoUrl && errors.eventVideoUrl && (
-                        <p className="text-sm text-red-600">{errors.eventVideoUrl}</p>
-                      )}
-                    </div>
+                {/* Event Description */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Event Description <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ReactQuillWrapper
+                      value={values.eventDescription}
+                      onChange={(content) => setFieldValue("eventDescription", content)}
+                      placeholder="Enter detailed event description..."
+                      theme="snow"
+                      style={{ height: "150px", marginBottom: "50px" }}
+                    />
+                    {touched.eventDescription && errors.eventDescription && (
+                      <p className="text-sm text-red-600">{errors.eventDescription}</p>
+                    )}
+                  </CardContent>
+                </Card>
 
-                    {/* Featured Event Toggle - Hidden for organizers */}
-                    {!isOrganizer && (
+                {/* Featured Event - Hidden for organizers */}
+                {!isOrganizer && (
+                  <Card>
+                    <CardContent className="pt-6">
                       <div className="flex items-center space-x-2">
                         <Field
                           as={Switch}
@@ -2643,8 +2649,27 @@ export default function CreateEvent({
                           checked={values.isFeatured}
                           onCheckedChange={(checked: boolean) => setFieldValue("isFeatured", checked)}
                         />
-                        <Label>Make as Featured Event</Label>
+                        <Label>Make As Featured Event</Label>
                       </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Event Terms and Conditions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Event Terms and Conditions <span className="text-red-500">*</span></CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ReactQuillWrapper
+                      value={values.eventTermsandConditions}
+                      onChange={(content) => setFieldValue("eventTermsandConditions", content)}
+                      placeholder="Enter terms and conditions..."
+                      theme="snow"
+                      style={{ height: "150px", marginBottom: "50px" }}
+                    />
+                    {touched.eventTermsandConditions && errors.eventTermsandConditions && (
+                      <p className="text-sm text-red-600">{errors.eventTermsandConditions}</p>
                     )}
                   </CardContent>
                 </Card>
@@ -2653,13 +2678,12 @@ export default function CreateEvent({
                 {eventSelectionFlag === 1 && (
                   <Card>
                     <CardHeader>
+                      <CardTitle>Event Tour Selection</CardTitle>
                       <p className="text-sm text-muted-foreground">
                         Link this event to an existing tour/campaign series
                       </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                    
-                      
                       <div className="space-y-2">
                         <Label className="text-base font-semibold">Available Tours</Label>
                         <Select
@@ -2847,6 +2871,67 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
+                {/* Gallery Images Upload */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Upload Gallery Images</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                      Optional: Add additional images for the event gallery
+                    </p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/jpg"
+                          multiple
+                          onChange={(e) => handleGalleryImageAdd(e.target.files)}
+                          className="hidden"
+                          id="gallery-upload"
+                        />
+                        <label htmlFor="gallery-upload" className="cursor-pointer">
+                          <div className="flex flex-col items-center space-y-2">
+                            <ImagePlus className="h-8 w-8 text-muted-foreground" />
+                            <p className="text-muted-foreground">Upload Gallery Images</p>
+                          </div>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    {galleryImagePreviews.length > 0 && (
+                      <div className="mt-4 grid grid-cols-3 gap-4">
+                        {galleryImagePreviews.map((image, index) => (
+                          <div key={index} className="relative">
+                            <img
+                              src={image}
+                              alt={`Gallery ${index + 1}`}
+                              className="w-full h-24 object-cover rounded"
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-1 right-1 h-6 w-6 p-0"
+                              onClick={() => removeGalleryImage(index)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {galleryImages.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-sm text-muted-foreground">
+                          {galleryImages.length} gallery image(s) selected
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
                 {/* FAQ Management */}
                 <Card>
                   <CardHeader>
@@ -2907,70 +2992,6 @@ export default function CreateEvent({
                             </div>
                           </div>
                         ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Gallery Images Upload */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Upload Gallery Images</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      Optional: Add additional images for the event gallery
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <input
-                          type="file"
-                          accept="image/jpeg,image/png,image/jpg"
-
-
-
-                          multiple
-                          onChange={(e) => handleGalleryImageAdd(e.target.files)}
-                          className="hidden"
-                          id="gallery-upload"
-                        />
-                        <label htmlFor="gallery-upload" className="cursor-pointer">
-                          <div className="flex flex-col items-center space-y-2">
-                            <ImagePlus className="h-8 w-8 text-muted-foreground" />
-                            <p className="text-muted-foreground">Upload Gallery Images</p>
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                    
-                    {galleryImagePreviews.length > 0 && (
-                      <div className="mt-4 grid grid-cols-3 gap-4">
-                        {galleryImagePreviews.map((image, index) => (
-                          <div key={index} className="relative">
-                            <img
-                              src={image}
-                              alt={`Gallery ${index + 1}`}
-                              className="w-full h-24 object-cover rounded"
-                            />
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              size="sm"
-                              className="absolute top-1 right-1 h-6 w-6 p-0"
-                              onClick={() => removeGalleryImage(index)}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {galleryImages.length > 0 && (
-                      <div className="mt-4">
-                        <p className="text-sm text-muted-foreground">
-                          {galleryImages.length} gallery image(s) selected
-                        </p>
                       </div>
                     )}
                   </CardContent>

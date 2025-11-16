@@ -204,6 +204,8 @@ export interface Booking {
   email?: string
   promoterId?: string
   promoterName?: string
+  organizerId?: string
+  organizerName?: string
   bookingChannel: "Online" | "Promoter" | "Bulk"
   bookingStatus: "Confirmed" | "Pending" | "Cancelled" | "Booked"
   totalAmount: number
@@ -227,6 +229,8 @@ export interface Booking {
   EventCityName?: string
   EventVenueName?: string
   PromoterName?: string
+  OrganizerName?: string
+  OrganizerId?: string
   TicketQuantity?: number
   TicketName?: string
   EventTicketType?: string
