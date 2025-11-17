@@ -445,19 +445,22 @@ export default function ScannerUsersPage() {
       setSubmitting(false)
     }
   }
-  const openEditDialog = (user: ScannerUser) => {
+  const openEditDialog = async (user: ScannerUser) => {
     setSelectedUser(user)
+    
+    const selectedOrganizerIds = Array.isArray(user.Organizers) ? user.Organizers.map(o => o.organizer_id) : []
+    
     setFormData({
       username: user.Username,
       password: "", // Don't show existing password
       userType: user.UserType.toString(),
       selectedEvents: Array.isArray(user.Events) ? user.Events.map(e => e.event_id) : [],
-      selectedOrganizers: Array.isArray(user.Organizers) ? user.Organizers.map(o => o.organizer_id) : [],
+      selectedOrganizers: selectedOrganizerIds,
     })
     
-    // Fetch organizers if this is an organizer scanner
+    // Fetch organizers if this is an organizer scanner and wait for them to load
     if (user.UserType === ScannerUserType.Organizer) {
-      fetchOrganizers()
+      await fetchOrganizers()
     }
     
     setIsEditDialogOpen(true)
@@ -680,12 +683,21 @@ export default function ScannerUsersPage() {
                                      phone.includes(organizerSearchTerm) ||
                                      company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
                             })
-                            .map((organizer) => (
-                            <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                            .sort((a, b) => {
+                              const aSelected = formData.selectedOrganizers.includes(a._id)
+                              const bSelected = formData.selectedOrganizers.includes(b._id)
+                              if (aSelected && !bSelected) return -1
+                              if (!aSelected && bSelected) return 1
+                              return 0
+                            })
+                            .map((organizer) => {
+                              const isSelected = formData.selectedOrganizers.includes(organizer._id)
+                              return (
+                            <div key={organizer._id} className={`flex items-start space-x-3 p-2 rounded border transition-colors ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50'}`}>
                               <input
                                 type="checkbox"
                                 id={`organizer-${organizer._id}`}
-                                checked={formData.selectedOrganizers.includes(organizer._id)}
+                                checked={isSelected}
                                 onChange={(e) => {
                                   if (e.target.checked) {
                                     setFormData({
@@ -702,7 +714,7 @@ export default function ScannerUsersPage() {
                                 className="rounded border-gray-300 mt-1"
                               />
                               <div className="flex-1">
-                                <Label htmlFor={`organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
+                                <Label htmlFor={`organizer-${organizer._id}`} className={`text-sm font-medium cursor-pointer ${isSelected ? 'text-blue-700' : ''}`}>
                                   {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
                                 </Label>
                                 <div className="text-xs text-muted-foreground mt-1">
@@ -714,7 +726,7 @@ export default function ScannerUsersPage() {
                                 </div>
                               </div>
                             </div>
-                          ))}
+                          )})}
                           {organizers.filter((organizer) => {
                             const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
                             const email = organizer.Email || ''
@@ -958,12 +970,21 @@ export default function ScannerUsersPage() {
                                    phone.includes(organizerSearchTerm) ||
                                    company.toLowerCase().includes(organizerSearchTerm.toLowerCase())
                           })
-                          .map((organizer) => (
-                          <div key={organizer._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
+                          .sort((a, b) => {
+                            const aSelected = formData.selectedOrganizers.includes(a._id)
+                            const bSelected = formData.selectedOrganizers.includes(b._id)
+                            if (aSelected && !bSelected) return -1
+                            if (!aSelected && bSelected) return 1
+                            return 0
+                          })
+                          .map((organizer) => {
+                            const isSelected = formData.selectedOrganizers.includes(organizer._id)
+                            return (
+                          <div key={organizer._id} className={`flex items-start space-x-3 p-2 rounded border transition-colors ${isSelected ? 'bg-blue-50 border-blue-300 shadow-sm' : 'hover:bg-gray-50'}`}>
                             <input
                               type="checkbox"
                               id={`edit-organizer-${organizer._id}`}
-                              checked={formData.selectedOrganizers.includes(organizer._id)}
+                              checked={isSelected}
                               onChange={(e) => {
                                 if (e.target.checked) {
                                   setFormData({
@@ -980,7 +1001,7 @@ export default function ScannerUsersPage() {
                               className="rounded border-gray-300 mt-1"
                             />
                             <div className="flex-1">
-                              <Label htmlFor={`edit-organizer-${organizer._id}`} className="text-sm font-medium cursor-pointer">
+                              <Label htmlFor={`edit-organizer-${organizer._id}`} className={`text-sm font-medium cursor-pointer ${isSelected ? 'text-blue-700' : ''}`}>
                                 {organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'}
                               </Label>
                               <div className="text-xs text-muted-foreground mt-1">
@@ -992,7 +1013,7 @@ export default function ScannerUsersPage() {
                               </div>
                             </div>
                           </div>
-                        ))}
+                        )})}
                         {organizers.filter((organizer) => {
                           const organizerName = organizer.Username || organizer.FullName || organizer.CompanyName || 'Unnamed Organizer'
                           const email = organizer.Email || ''

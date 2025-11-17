@@ -1817,7 +1817,8 @@ export default function TicketsPage() {
             <CardContent className="space-y-4">
               {/* Table */}
               <div className="rounded-md border">
-                <Table>                  <TableHeader>
+                <Table>
+                  <TableHeader>
                     <TableRow>
                       <TableHead>Ticket Name</TableHead>
                       <TableHead>Quantity</TableHead>
@@ -1864,12 +1865,13 @@ export default function TicketsPage() {
                                            extendedTicket.TicketStatus ?? 
                                            ticket.EventTicketStatus ?? 
                                            ticket.Status ?? 
+                                           ticket.TicketStatus ??
                                            1
                         const isDisabled = statusValue === 0
                         
                         return (
-                          <TableRow key={ticket._id} className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}>
-                            <TableCell className="font-medium">
+                          <TableRow key={ticket._id} className={isDisabled ? "bg-red-50 hover:bg-red-50" : ""}>
+                            <TableCell className={`font-medium ${isDisabled ? "border-l-4 border-l-red-600" : ""}`}>
                               {extendedTicket.Name || ticket.TicketName || 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -2016,7 +2018,8 @@ export default function TicketsPage() {
               <CardContent className="space-y-4">
                 {/* Table */}
               <div className="rounded-md border">
-                <Table>                  <TableHeader>
+                <Table>
+                  <TableHeader>
                     <TableRow>
                       <TableHead>Batch ID</TableHead>
                       <TableHead>Event Name</TableHead>
@@ -2056,13 +2059,18 @@ export default function TicketsPage() {
                         // Check if bulk ticket is disabled
                         const statusValue = extendedTicket.Status ?? 
                                            extendedTicket.BulkTicketStatus ?? 
+                                           extendedTicket.EventTicketStatus ?? 
+                                           extendedTicket.TicketStatus ?? 
                                            ticket.Status ?? 
+                                           ticket.BulkTicketStatus ??
+                                           ticket.EventTicketStatus ??
+                                           ticket.TicketStatus ??
                                            1
                         const isDisabled = statusValue === 0
                         
                         return (
-                          <TableRow key={ticket._id || ticket.BatchId} className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}>
-                            <TableCell className="font-medium">
+                          <TableRow key={ticket._id || ticket.BatchId} className={isDisabled ? "bg-red-50 hover:bg-red-50" : ""}>
+                            <TableCell className={`font-medium ${isDisabled ? "border-l-4 border-l-red-600" : ""}`}>
                               {ticket.BatchId || ticket._id || 'N/A'}
                             </TableCell>
                             <TableCell>

@@ -1602,11 +1602,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   currentEvents.map((event) => (
                     <TableRow 
                       key={event._id} 
-                      className={`hover:bg-muted/50 transition-colors ${
-                        isEventDisabled(event) 
-                          ? "bg-red-50 hover:bg-red-100 border-l-4 border-l-red-500" 
-                          : ""
-                      }`}
+                      className={isEventDisabled(event) ? "bg-red-50 hover:bg-red-50 border-l-4 border-l-red-600" : ""}
                     >
                       <TableCell className="font-medium">
                         <div>

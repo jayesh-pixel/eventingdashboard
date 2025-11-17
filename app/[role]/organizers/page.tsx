@@ -1091,7 +1091,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   return (
                     <TableRow 
                       key={org._id}
-                      className={isDisabled ? "border-l-4 border-l-red-500 bg-red-50/50" : ""}
+                      className={isDisabled ? "bg-red-50 hover:bg-red-50 border-l-4 border-l-red-600" : ""}
                     >
                       <TableCell className="font-medium">{org.Username || "N/A"}</TableCell>
                       <TableCell>{org.FullName || "N/A"}</TableCell>
