@@ -3,6 +3,7 @@
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { TruncatedText } from "@/components/truncated-text"
 import {
   Calendar,
   MapPin,
@@ -34,10 +35,16 @@ export default function PromoterEventCard({
   getStatusBadgeVariant,
   normalizeEventStatus,
 }: PromoterEventCardProps) {
+  const isDisabled = event.EventIsEnableOrDisable === 2
+  
   return (
     <Card
       key={event._id}
-      className="group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border -mt-16 border-border"
+      className={`group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border -mt-16 ${
+        isDisabled 
+          ? 'border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/20' 
+          : 'border-border'
+      }`}
     >
       {/* Image */}
       <div className="relative w-full h-48">
@@ -50,8 +57,15 @@ export default function PromoterEventCard({
         {/* Overlay gradient */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
+        {/* Disabled badge */}
+        {isDisabled && (
+          <div className="absolute top-2 right-2 bg-red-600 text-white px-3 py-1 text-xs font-bold rounded-full shadow-md">
+            DISABLED
+          </div>
+        )}
+
         {/* Featured badge */}
-        {event.featuredEvent && (
+        {event.featuredEvent && !isDisabled && (
           <div className="absolute top-2 left-2 bg-yellow-500 text-white px-3 py-1 text-xs font-semibold rounded-full shadow-md flex items-center gap-1">
             <Star className="w-3 h-3 fill-white" />
             Featured
@@ -69,7 +83,14 @@ export default function PromoterEventCard({
           {event.eventName}
         </h3>
 
-
+        {/* Event Description - Truncated */}
+        {event.eventDescription && (
+          <TruncatedText 
+            text={event.eventDescription} 
+            maxLines={2}
+            className="my-2"
+          />
+        )}
 
         {/* Date & Time */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

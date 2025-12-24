@@ -776,20 +776,20 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
             </div>
           ) : (
             <>
-              <Table>                <TableHeader>
+              <Table>
+<TableHeader>
                   <TableRow>
-                    <TableHead>Artist</TableHead>
-                    <TableHead>Priority</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Images</TableHead>
-
-                    <TableHead>Actions</TableHead>
+<TableHead>Artist</TableHead>
+<TableHead>Priority</TableHead>
+<TableHead>Description</TableHead>
+<TableHead>Images</TableHead>
+<TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+<TableBody>
                   {paginatedArtists.map((artist) => (
-                  <TableRow key={artist._id}>
-                    <TableCell>
+<TableRow key={artist._id}>
+<TableCell>
                       <div className="flex items-center space-x-3">
                         {/* Artist Image */}
                         <div className="flex-shrink-0">
@@ -815,13 +815,13 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                 
                         </div>
                       </div>
-                    </TableCell>
-                      <TableCell>
+</TableCell>
+<TableCell>
                         <Badge variant="outline" className="font-mono">
                           {artist.Priority || 0}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
+</TableCell>
+<TableCell>
                         <div className="max-w-xs">
                           {artist.Description ? (
                             <div className="flex items-start">
@@ -834,8 +834,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                             <span className="text-sm text-muted-foreground italic">No description</span>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell>
+</TableCell>
+<TableCell>
                         <div className="flex items-center space-x-1">
                           {artist.Images && artist.Images.length > 0 ? (
                             <>
@@ -863,9 +863,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                             <span className="text-sm text-muted-foreground">No images</span>
                           )}
                         </div>
-                      </TableCell>
-      
-                      <TableCell>
+</TableCell>
+<TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="h-8 w-8 p-0">
@@ -887,11 +886,11 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+</TableCell>
+</TableRow>
                   ))}
-                </TableBody>
-              </Table>
+</TableBody>
+</Table>
 
               {/* Pagination */}
               {totalPages > 1 && (

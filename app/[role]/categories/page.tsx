@@ -42,7 +42,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 
 interface CategoriesPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
 interface Category {
@@ -117,7 +117,14 @@ const mockCategories: Category[] = [
 const ITEMS_PER_PAGE = 10
 
 export default function CategoriesPage({ params }: CategoriesPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
   const { toast } = useToast()
   const { user } = useAuth()
 
@@ -198,7 +205,15 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.log("Categories API response:", data)
 
       // Set the data from API
-      setCategories(data.data.CategoryData || [])
+      const fetchedCategories = data.data.CategoryData || []
+      console.log("📊 Fetched categories count:", fetchedCategories.length)
+      
+      // Log status of each category to verify what backend is returning
+      fetchedCategories.forEach((cat: Category) => {
+        console.log(`📋 Category: ${cat.Name} | Status: ${cat.status} | Disabled: ${cat.status === 0}`)
+      })
+      
+      setCategories(fetchedCategories)
       setTotalPages(data.data.totalPages || 1)
       setTotalCategories(data.data.totalCategories || 0)
       setUseMockData(false)
@@ -658,35 +673,94 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   }
 
   const handleToggleStatus = async (categoryId: string) => {
-    setLoading(true)
+    console.log("🔄 handleToggleStatus called with categoryId:", categoryId)
+    
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const authToken = getValidToken()
+      if (!authToken) {
+        console.error("❌ No auth token available")
+        toast({
+          title: "Error",
+          description: "Authentication required. Please log in again.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      const updatedCategories = categories.map((category) =>
-        category._id === categoryId
+      // Find the category to get its current data
+      const category = categories.find(cat => cat._id === categoryId)
+      if (!category) {
+        console.error("❌ Category not found:", categoryId)
+        toast({
+          title: "Error",
+          description: "Category not found",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const newStatus = category.status === 1 ? 0 : 1
+      console.log("📝 Current status:", category.status, "→ New status:", newStatus)
+
+      const requestBody = {
+        category_id: categoryId,
+        Name: category.Name,
+        Description: category.Description || "",
+        Priority: category.Priority || 1,
+        status: newStatus,
+      }
+      console.log("📤 Sending request to:", categorieEndPoint.CATEGORIES_DATA_UPDATED)
+      console.log("📦 Request body:", requestBody)
+
+      // Call the update API with the new status and all existing data
+      const response = await fetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      console.log("📥 Response status:", response.status)
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("❌ API Error:", response.status, errorText)
+        throw new Error("Failed to update category status")
+      }
+
+      const data = await handleApiResponse(response)
+      console.log("✅ API Response:", data)
+
+      // Update local state to reflect the change
+      const updatedCategories = categories.map((cat) =>
+        cat._id === categoryId
           ? {
-              ...category,
-              status: category.status === 1 ? 0 : 1,
+              ...cat,
+              status: newStatus,
               FilterationDateTime: new Date().toISOString(),
             }
-          : category,
+          : cat,
       )
 
       setCategories(updatedCategories)
 
       toast({
         title: "Success",
-        description: "Category status updated successfully",
+        description: data.message || `Category ${newStatus === 1 ? 'activated' : 'deactivated'} successfully`,
       })
+
+      console.log("🔄 Refreshing categories list...")
+      // Refresh the categories list to ensure consistency
+      fetchCategories(currentPage)
     } catch (error) {
+      console.error("❌ Error toggling category status:", error)
       toast({
         title: "Error",
-        description: "Failed to update category status",
+        description: getApiErrorMessage(error, "Failed to update category status"),
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
   }
   const openEditDialog = (category: Category) => {
@@ -856,13 +930,13 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
           <CardDescription>Manage event categories in the system.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>            <TableHeader>
+          <Table>
+            <TableHeader>
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Category Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Priority</TableHead>
-  
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -876,30 +950,40 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   </TableCell>
                 </TableRow>
               ) : (
-                currentCategories.map((category) => (
-                  <TableRow key={category._id}>
+                currentCategories.map((category) => {
+                  const isDisabled = category.status === 0
+                  return (
+                  <TableRow 
+                    key={category._id}
+                    className={isDisabled ? "bg-red-100 dark:bg-red-950/50 hover:bg-red-200 dark:hover:bg-red-950/70 border-l-[6px] border-l-red-600 dark:border-l-red-500" : ""}
+                  >
                     <TableCell>
                       {getCategoryImage(category) !== "/placeholder.svg" ? (
                         <img
                           src={getCategoryImage(category)}
                           alt={category.Name}
-                          className="w-12 h-12 rounded-lg object-cover"
+                          className={`w-12 h-12 rounded-lg object-cover ${isDisabled ? 'opacity-60' : ''}`}
                         />
                       ) : (
                         <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                          <Upload className="h-6 w-6 text-muted-foreground" />
+                          <Upload className={`h-6 w-6 ${isDisabled ? 'text-red-500' : 'text-muted-foreground'}`} />
                         </div>
                       )}
                     </TableCell>
-                    <TableCell className="font-medium">{category.Name}</TableCell>
-                    <TableCell className="max-w-xs truncate">
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span className={isDisabled ? "text-red-600 dark:text-red-400 line-through" : ""}>{category.Name}</span>
+                        {isDisabled && (
+                          <Badge variant="destructive" className="text-xs font-bold animate-pulse">DISABLED</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className={`max-w-xs truncate ${isDisabled ? 'text-red-600 dark:text-red-400' : ''}`}>
                       {category.Description || "No description"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className={isDisabled ? 'text-red-600 dark:text-red-400' : ''}>
                       {category.Priority || 0}
                     </TableCell>
-          
-      
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -914,9 +998,6 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleStatus(category._id)}>
-                            {category.status === 1 ? "Deactivate" : "Activate"}
-                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteCategory(category._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
@@ -925,7 +1006,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>

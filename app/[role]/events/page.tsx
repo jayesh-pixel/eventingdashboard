@@ -68,6 +68,7 @@ import PromoterIndicator from "@/components/promoter-indicator"
 import PromoterPopup from "@/components/promoter-popup"
 import OrganizerIndicator from "@/components/organizer-indicator"
 import OrganizerPopup from "@/components/organizer-popup"
+import { TruncatedText } from "@/components/truncated-text"
 import {
   Dialog,
   DialogContent,
@@ -1557,6 +1558,8 @@ export default function EventsPage({ params }: EventsPageProps) {
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="font-semibold text-foreground bg-muted/30">Event Name</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[200px]">Description</TableHead>
+                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[200px]">Terms & Conditions</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Start Date & Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">End Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
@@ -1568,14 +1571,13 @@ export default function EventsPage({ params }: EventsPageProps) {
                   <TableHead className="font-semibold text-foreground bg-muted/30">Visibility</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Venue</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">City</TableHead>
-
                   <TableHead className="font-semibold text-foreground bg-muted/30">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {currentEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={12} className="text-center py-16">
+                    <TableCell colSpan={14} className="text-center py-16">
                       <div className="space-y-6">
                         <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
                           <AlertCircle className="h-10 w-10 text-muted-foreground" />
@@ -1602,13 +1604,30 @@ export default function EventsPage({ params }: EventsPageProps) {
                   currentEvents.map((event) => (
                     <TableRow 
                       key={event._id} 
-                      className={isEventDisabled(event) ? "bg-red-50 hover:bg-red-50 border-l-4 border-l-red-600" : ""}
+                      className={isEventDisabled(event) ? "bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/40 border-l-4 border-l-red-600 dark:border-l-red-500" : ""}
                     >
                       <TableCell className="font-medium">
-                        <div>
-                          <div className="font-semibold text-sm">{event.eventName}</div>
-                          <div className="text-xs text-muted-foreground">{event.eventType}</div>
+                        <div className="flex items-center gap-2">
+                          <div>
+                            <div className="font-semibold text-sm">{event.eventName}</div>
+                            <div className="text-xs text-muted-foreground">{event.eventType}</div>
+                          </div>
+                          {isEventDisabled(event) && (
+                            <Badge variant="destructive" className="text-xs font-bold">DISABLED</Badge>
+                          )}
                         </div>
+                      </TableCell>
+                      <TableCell className="min-w-[200px]">
+                        <TruncatedText 
+                          text={event.eventDescription || "No description"} 
+                          maxLines={2}
+                        />
+                      </TableCell>
+                      <TableCell className="min-w-[200px]">
+                        <TruncatedText 
+                          text={event.eventTermsCondition || event.eventTermsandConditions || "No terms and conditions"} 
+                          maxLines={2}
+                        />
                       </TableCell>
                       <TableCell>
                         <div>
@@ -1651,8 +1670,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant={getStatusBadgeVariant(event.eventStatus)}>
-                          {normalizeEventStatus(event.eventStatus)}
+                        <Badge variant={getStatusBadgeVariant((event as any).eventStatus)}>
+                          {normalizeEventStatus((event as any).eventStatus)}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -1675,8 +1694,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                               <DropdownMenuItem 
                                 onClick={() => {
                                   const isViewOnly = (role as UserRole) === "organizer" && 
-                                    (event.eventStatus === "Published" || event.eventStatus === "To Be Reviewed" || 
-                                     normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "To Be Reviewed");
+                                    ((event as any).eventStatus === "Published" || (event as any).eventStatus === "To Be Reviewed" || 
+                                     normalizeEventStatus((event as any).eventStatus) === "Published" || normalizeEventStatus((event as any).eventStatus) === "To Be Reviewed");
                                   
                                   if (isViewOnly) {
                                     // Navigate to edit route but with viewOnly query parameter
@@ -1688,7 +1707,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 className="hover:bg-accent cursor-pointer"
                               >
                                 <Eye className="mr-2 h-4 w-4" />
-                                {((role as UserRole) === "organizer" && (event.eventStatus === "Published" || event.eventStatus === "To Be Reviewed" || normalizeEventStatus(event.eventStatus) === "Published" || normalizeEventStatus(event.eventStatus) === "To Be Reviewed")) ? "View Only" : "View & Edit"}
+                                {((role as UserRole) === "organizer" && ((event as any).eventStatus === "Published" || (event as any).eventStatus === "To Be Reviewed" || normalizeEventStatus((event as any).eventStatus) === "Published" || normalizeEventStatus((event as any).eventStatus) === "To Be Reviewed")) ? "View Only" : "View & Edit"}
                               </DropdownMenuItem>
                               <DropdownMenuItem 
                                 onClick={() => {

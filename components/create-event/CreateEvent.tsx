@@ -3106,14 +3106,42 @@ export default function CreateEvent({
                 Address: Yup.string().required("Address is required"),
                 City: Yup.string().required("City is required"),
                 State: Yup.string().required("State is required"),
-                PinCode: Yup.string().required("Pin code is required"),
-                Capacity: Yup.number().min(1, "Capacity must be at least 1").required("Capacity is required"),
-                ContactNumber: Yup.string().matches(/^[0-9]{10}$/, "Must be 10 digits").required("Contact number is required")
+                // Make these fields optional
+                PinCode: Yup.string(),
+                Capacity: Yup.number().min(1, "Capacity must be at least 1"),
+                ContactNumber: Yup.string().matches(/^[0-9]{10}$/, "Must be 10 digits"),
+                Description: Yup.string()
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
-                  if (!authToken) return
+                  if (!authToken) {
+                    toast({
+                      title: "Error",
+                      description: "Authentication required",
+                      variant: "destructive"
+                    })
+                    return
+                  }
+
+                  // Prepare payload matching the API requirements
+                  const payload = {
+                    AdminRole: user?.AdminRole || role === "superadmin" ? 1 : 2,
+                    user_id: user?.user_id || "",
+                    Name: values.Name,
+                    Description: values.Description || "",
+                    Address: values.Address,
+                    City: values.City,
+                    State: values.State,
+                    Country: "India",
+                    CountryIsoCode: "IN",
+                    StateIsoCode: "",
+                    CityIsoCode: "",
+                    Map_Location: "", // Optional field
+                    Priority: 1,
+                  }
+
+                  console.log("Creating venue with payload:", payload)
 
                   const response = await fetch(getApiEndpoint("/venue/create"), {
                     method: "POST",
@@ -3121,13 +3149,21 @@ export default function CreateEvent({
                       "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: JSON.stringify(payload)
                   })
 
+                  if (!response.ok) {
+                    const errorText = await response.text()
+                    console.error("Venue creation failed:", response.status, errorText)
+                    throw new Error(`Failed to create venue: ${response.status}`)
+                  }
+
                   const data = await handleApiResponse(response)
+                  console.log("Venue created:", data)
+                  
                   const newVenue = {
-                    value: data.data._id || data.data.id,
-                    label: data.data.Name || data.data.name
+                    value: data.data._id || data.data.id || data.data.venue_id,
+                    label: data.data.Name || data.data.name || values.Name
                   }
                     // Update venues list and select the new venue
                   setVenues(prev => [newVenue, ...prev.filter(v => v.value !== createVenueOption.value)])
@@ -3144,6 +3180,7 @@ export default function CreateEvent({
                   setShowCreateVenueModal(false)
                   resetForm()
                 } catch (error) {
+                  console.error("Venue creation error:", error)
                   toast({
                     title: "Error",
                     description: getApiErrorMessage(error, "Failed to create venue"),
@@ -3191,15 +3228,15 @@ export default function CreateEvent({
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Pin Code *</Label>
-                      <Field as={Input} name="PinCode" placeholder="Pin code" />
+                      <Label>Pin Code</Label>
+                      <Field as={Input} name="PinCode" placeholder="Pin code (optional)" />
                       {touched.PinCode && errors.PinCode && (
                         <p className="text-sm text-red-600">{errors.PinCode}</p>
                       )}
                     </div>
                     <div className="space-y-2">
-                      <Label>Capacity *</Label>
-                      <Field as={Input} name="Capacity" type="number" placeholder="Max capacity" />
+                      <Label>Capacity</Label>
+                      <Field as={Input} name="Capacity" type="number" placeholder="Max capacity (optional)" />
                       {touched.Capacity && errors.Capacity && (
                         <p className="text-sm text-red-600">{errors.Capacity}</p>
                       )}
@@ -3207,8 +3244,8 @@ export default function CreateEvent({
                   </div>
                   
                   <div className="space-y-2">
-                    <Label>Contact Number *</Label>
-                    <Field as={Input} name="ContactNumber" placeholder="10-digit contact number" />
+                    <Label>Contact Number</Label>
+                    <Field as={Input} name="ContactNumber" placeholder="10-digit contact number (optional)" />
                     {touched.ContactNumber && errors.ContactNumber && (
                       <p className="text-sm text-red-600">{errors.ContactNumber}</p>
                     )}

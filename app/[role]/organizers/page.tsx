@@ -263,6 +263,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         errors.Email = "Please enter a valid email address"
       }
     }
+    // Note: Email is optional - no error if empty
     
     // Phone validation (optional but if provided, must be valid 10-digit number)
     if (formData.Phone1 && formData.Phone1.trim() !== "") {
@@ -271,6 +272,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         errors.Phone1 = "Please enter a valid 10-digit phone number"
       }
     }
+    // Note: Phone is optional - no error if empty
     
     // Password validation (required for new organizers)
     if (!editingOrganizer) {

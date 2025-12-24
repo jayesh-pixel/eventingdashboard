@@ -481,38 +481,7 @@ export default function GenresPage({ params }: GenresPageProps) {
     }
   }
 
-  const handleToggleStatus = async (genreId: string) => {
-    setLoading(true)
-    try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      
-      const updatedGenres = genres.map((genre) =>
-        genre._id === genreId
-          ? {
-              ...genre,
-              status: genre.status === 1 ? 0 : 1,
-              FilterationDateTime: new Date().toISOString(),
-            }
-          : genre,
-      )
-
-      setGenres(updatedGenres)
-
-      toast({
-        title: "Success",
-        description: "Genre status updated successfully",
-      })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update genre status",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Note: Toggle status functionality removed - backend API doesn't support genre status updates
 
   const openEditDialog = (genre: Genre) => {
     setSelectedGenre(genre)
@@ -896,9 +865,6 @@ Actions
                           <DropdownMenuItem onClick={() => openEditDialog(genre)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleToggleStatus(genre._id)}>
-                            {genre.status === 1 ? "Deactivate" : "Activate"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleDeleteGenre(genre._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />

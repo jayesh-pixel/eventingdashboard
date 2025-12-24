@@ -1069,12 +1069,16 @@ export default function TicketsPage() {
           ...payload,
           Name: normalFormData.TicketName,
           EventTicketType: normalFormData.TicketType.toString(),
-          Description: normalFormData.TicketDescription,
           EventDateTimeIds: eventDateTimeIds,
           Price: normalFormData.TicketPrice,
           Quantity: normalFormData.MaxQuantity,
           BookingMaxLimit: normalFormData.BookingMaxLimit,
           EventTicketVisibility: normalFormData.VisibilityLevel.toString()
+        }
+        
+        // Only include description if provided
+        if (normalFormData.TicketDescription && normalFormData.TicketDescription.trim()) {
+          payload.Description = normalFormData.TicketDescription
         }
         
         // Include selected promoters if visibility is set to "Promoters"
@@ -1402,7 +1406,7 @@ export default function TicketsPage() {
         setBulkTickets(prevTickets => 
           prevTickets.map(ticket => 
             (ticket.BatchId === batchId || ticket._id === batchId)
-              ? { ...ticket, Status: 2, TicketStatus: 2, IsCancelled: true }  // Status 2 typically means cancelled
+              ? { ...ticket, Status: 2, BulkTicketStatus: 2, IsCancelled: true }  // Status 2 typically means cancelled
               : ticket
           )
         )
@@ -1862,10 +1866,8 @@ export default function TicketsPage() {
                         // Check if ticket is disabled
                         const statusValue = extendedTicket.EventTicketStatus ?? 
                                            extendedTicket.Status ?? 
-                                           extendedTicket.TicketStatus ?? 
                                            ticket.EventTicketStatus ?? 
                                            ticket.Status ?? 
-                                           ticket.TicketStatus ??
                                            1
                         const isDisabled = statusValue === 0
                         
@@ -1950,11 +1952,10 @@ export default function TicketsPage() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       // Check multiple possible field names for ticket status
-                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Priority: EventTicketStatus (from API) > Status
                                       // Status field: 1 = Active, 0 = Disabled
                                       const statusValue = extendedTicket.EventTicketStatus ?? 
                                                          extendedTicket.Status ?? 
-                                                         extendedTicket.TicketStatus ?? 
                                                          ticket.EventTicketStatus ?? 
                                                          ticket.Status ?? 
                                                          1 // Default to active if not found
@@ -1965,11 +1966,10 @@ export default function TicketsPage() {
                                     }}
                                     className={(() => {
                                       // Check multiple possible field names for ticket status
-                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Priority: EventTicketStatus (from API) > Status
                                       // Status field: 1 = Active, 0 = Disabled
                                       const statusValue = extendedTicket.EventTicketStatus ?? 
                                                          extendedTicket.Status ?? 
-                                                         extendedTicket.TicketStatus ?? 
                                                          ticket.EventTicketStatus ?? 
                                                          ticket.Status ?? 
                                                          1 // Default to active if not found
@@ -1979,11 +1979,10 @@ export default function TicketsPage() {
                                   >
                                     {(() => {
                                       // Check multiple possible field names for ticket status
-                                      // Priority: EventTicketStatus (from API) > Status > TicketStatus
+                                      // Priority: EventTicketStatus (from API) > Status
                                       // Status field: 1 = Active, 0 = Disabled
                                       const statusValue = extendedTicket.EventTicketStatus ?? 
                                                          extendedTicket.Status ?? 
-                                                         extendedTicket.TicketStatus ?? 
                                                          ticket.EventTicketStatus ?? 
                                                          ticket.Status ?? 
                                                          1 // Default to active if not found
@@ -2059,12 +2058,8 @@ export default function TicketsPage() {
                         // Check if bulk ticket is disabled
                         const statusValue = extendedTicket.Status ?? 
                                            extendedTicket.BulkTicketStatus ?? 
-                                           extendedTicket.EventTicketStatus ?? 
-                                           extendedTicket.TicketStatus ?? 
                                            ticket.Status ?? 
                                            ticket.BulkTicketStatus ??
-                                           ticket.EventTicketStatus ??
-                                           ticket.TicketStatus ??
                                            1
                         const isDisabled = statusValue === 0
                         

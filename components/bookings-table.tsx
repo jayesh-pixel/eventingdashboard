@@ -28,6 +28,7 @@ interface BookingsTableProps {
   statusFilter: string
   channelFilter: string
   formatDate: (date: Date | string | number) => string
+  formatDateTime: (date: Date | string | number) => string
   formatCurrency: (amount: number) => string
   getStatusBadgeVariant: (status: string) => "default" | "secondary" | "destructive" | "outline"
   onCancelBooking?: (booking: Booking) => void
@@ -41,6 +42,7 @@ export function BookingsTable({
   statusFilter, 
   channelFilter,
   formatDate,
+  formatDateTime,
   formatCurrency,
   getStatusBadgeVariant,
   onCancelBooking,
@@ -93,9 +95,6 @@ export function BookingsTable({
             <th scope="col" className="w-20 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Quantity
             </th>
-            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Check In
-            </th>
             <th scope="col" className="w-32 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
               Ticket Name
             </th>
@@ -124,7 +123,7 @@ export function BookingsTable({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {bookings.length === 0 ? (
             <tr>
-              <td colSpan={role === "organizer" ? 18 : 19} className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <td colSpan={role === "organizer" ? 17 : 18} className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-lg font-medium">
                     {searchTerm || statusFilter !== "all" || channelFilter !== "all"
@@ -167,7 +166,7 @@ export function BookingsTable({
                 {/* Booking Date & Time */}
                 <td className="w-32 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
-                    {formatDate(booking.BookingDateTime || booking.bookingDate)}
+                    {formatDateTime(booking.BookingDateTime || booking.bookingDate)}
                   </span>
                 </td>
                 {/* Event Name */}
@@ -204,12 +203,6 @@ export function BookingsTable({
                 <td className="w-20 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white">
                     {booking.TicketQuantity || booking.quantity || "N/A"}
-                  </span>
-                </td>
-                {/* Check In Status */}
-                <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white">
-                    Pending
                   </span>
                 </td>
                 {/* Ticket Name */}
@@ -331,14 +324,14 @@ export function BookingsTable({
                 </tr>                <tr className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Email</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{selectedBooking.Email || selectedBooking.customerEmail}</td>
-                </tr><tr className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
+                </tr>                <tr className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Booking Date & Time</td>
-                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDate(selectedBooking.BookingDateTime || selectedBooking.bookingDate)}</td>
+                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDateTime(selectedBooking.BookingDateTime || selectedBooking.bookingDate)}</td>
                 </tr>                <tr className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Event</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{selectedBooking.EventName || selectedBooking.eventName || "-"}</td>
                 </tr>                <tr className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
-                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Ticket Date</td>
+                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Event Date</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">
                     {(selectedBooking.TicketDate || selectedBooking.ticketDate) ? formatDate(selectedBooking.TicketDate || selectedBooking.ticketDate || "") : "-"}
                   </td>
@@ -456,10 +449,10 @@ export function BookingsTable({
                   <p className="font-medium text-gray-900 dark:text-white truncate" title={booking.EventName || booking.eventName}>
                     {booking.EventName || booking.eventName || "-"}
                   </p>
-                </div><div>
+                </div>                <div>
                   <span className="text-gray-500 dark:text-gray-400">Date:</span>
                   <p className="font-medium text-gray-900 dark:text-white">
-                    {formatDate(booking.BookingDateTime || booking.bookingDate)}
+                    {formatDateTime(booking.BookingDateTime || booking.bookingDate)}
                   </p>
                 </div>                <div>
                   <span className="text-gray-500 dark:text-gray-400">Quantity:</span>

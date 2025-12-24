@@ -36,6 +36,7 @@
  */
 
 import { useState, useEffect } from "react"
+import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -48,7 +49,7 @@ import { Loader2, Eye, EyeOff, Upload } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 
 interface SettingsPageProps {
-  params: { role: UserRole }
+  params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
 interface UserProfile {
@@ -67,7 +68,14 @@ interface ApiUserData {
 }
 
 export default function SettingsPage({ params }: SettingsPageProps) {
-  const { role } = params
+  // Handle params which might be a Promise
+  let resolvedParams: { role: UserRole }
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params)
+  } else {
+    resolvedParams = params
+  }
+  const { role } = resolvedParams
   const { user } = useAuth()
   const { toast } = useToast()
 

@@ -5,7 +5,7 @@ import { apiClient } from "@/lib/api-client"
 import { getMockData } from "@/lib/mock-data"
 
 // Set this to true to use mock data instead of real API calls
-const USE_MOCK_DATA = true
+const USE_MOCK_DATA = false
 
 interface UseApiOptions {
   immediate?: boolean

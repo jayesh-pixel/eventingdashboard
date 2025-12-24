@@ -466,6 +466,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const quantity = booking.TicketQuantity || booking.quantity || booking.ticket_quantity || 1
       const bookingDate = booking.BookingDateTime || booking.bookingDate || booking.booking_date || booking.FilterationBookingDateTime || booking.createdAt || booking.created_at || ""
       const totalAmount = booking.TotalAmount || booking.totalAmount || booking.total_amount || booking.Price || booking.price || 0
+      
+      // BookingSource is the correct API field for the booking channel/source
+      const bookingSource = booking.BookingSource || booking.bookingChannel || booking.booking_channel || booking.Channel || "Online"
 
       let status: "Confirmed" | "Pending" | "Cancelled" | "Booked" = "Confirmed"
       if (booking.status !== undefined) {
@@ -507,7 +510,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         promoterName: promoterName,
         organizerId: booking.organizerId || booking.organizer_id || booking.OrganizerId || "",
         organizerName: organizerName,
-        bookingChannel: booking.BookingSource || booking.bookingChannel || booking.booking_channel || booking.Channel || "Promoter",
+        bookingChannel: bookingSource,
         bookingStatus: status,
         totalAmount: totalAmount,
         ticketPrice: ticketPrice,
@@ -692,9 +695,19 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         const normalizedBookings = normalizeBookingData(bookingsArray)
         console.log("✅ Normalized", normalizedBookings.length, "bookings")
         console.log("📋 Sample normalized booking:", normalizedBookings[0] ? JSON.stringify(normalizedBookings[0], null, 2) : "No normalized bookings")
+        
+        // Sort bookings by booking date (latest first)
+        const sortedBookings = normalizedBookings.sort((a, b) => {
+          const dateA = parseDate(a.bookingDate || a.BookingDateTime || a.createdAt)
+          const dateB = parseDate(b.bookingDate || b.BookingDateTime || b.createdAt)
+          if (!dateA) return 1
+          if (!dateB) return -1
+          return dateB.getTime() - dateA.getTime() // Descending order (latest first)
+        })
+        console.log("🔃 Sorted", sortedBookings.length, "bookings by date (latest first)")
           
-        setBookingsData(normalizedBookings)
-        setOriginalData(normalizedBookings)
+        setBookingsData(sortedBookings)
+        setOriginalData(sortedBookings)
         
         console.log("📊 FINAL STATE UPDATE:")
         console.log("- bookingsData will be set to", normalizedBookings.length, "items")
@@ -978,16 +991,37 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     if (!dateObj) return "N/A"
     
     try {
-      return dateObj.toLocaleDateString("en-US", {
+      return dateObj.toLocaleDateString("en-GB", {
+        day: "2-digit",
         month: "short",
-        day: "numeric",
         year: "numeric",
+      })
+    } catch (error) {
+      console.warn('Error formatting date:', date, error)
+      return "N/A"
+    }
+  }
+  
+  const formatDateTime = (date: Date | string | number | null | undefined) => {
+    if (!date || date === '' || date === 'Invalid Date') return "N/A"
+    
+    const dateObj = parseDate(date)
+    if (!dateObj) return "N/A"
+    
+    try {
+      const dateStr = dateObj.toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      })
+      const timeStr = dateObj.toLocaleTimeString("en-US", {
         hour: "2-digit",
         minute: "2-digit",
         hour12: true,
       })
+      return `${dateStr} ${timeStr}`
     } catch (error) {
-      console.warn('Error formatting date:', date, error)
+      console.warn('Error formatting datetime:', date, error)
       return "N/A"
     }
   }
@@ -1294,6 +1328,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         statusFilter={statusFilter}
                         channelFilter={channelFilter}
                         formatDate={formatDate}
+                        formatDateTime={formatDateTime}
                         formatCurrency={formatCurrency}
                         getStatusBadgeVariant={getStatusBadgeVariant}
                         onCancelBooking={handleCancelBooking}
