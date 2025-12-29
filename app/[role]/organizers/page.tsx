@@ -256,23 +256,25 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       errors.Username = "Username must not exceed 50 characters"
     }
     
-    // Email validation (optional but if provided, must be valid)
-    if (formData.Email && formData.Email.trim() !== "") {
+    // Email validation (required)
+    if (!formData.Email || formData.Email.trim() === "") {
+      errors.Email = "Email is required"
+    } else {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
       if (!emailRegex.test(formData.Email)) {
         errors.Email = "Please enter a valid email address"
       }
     }
-    // Note: Email is optional - no error if empty
     
-    // Phone validation (optional but if provided, must be valid 10-digit number)
-    if (formData.Phone1 && formData.Phone1.trim() !== "") {
+    // Phone validation (required)
+    if (!formData.Phone1 || formData.Phone1.trim() === "") {
+      errors.Phone1 = "Phone number is required"
+    } else {
       const phoneRegex = /^[1-9][0-9]{9}$/
       if (!phoneRegex.test(formData.Phone1.replace(/\D/g, ''))) {
         errors.Phone1 = "Please enter a valid 10-digit phone number"
       }
     }
-    // Note: Phone is optional - no error if empty
     
     // Password validation (required for new organizers)
     if (!editingOrganizer) {
@@ -1292,9 +1294,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Email - OPTIONAL, no asterisk */}
+              {/* Email - REQUIRED */}
               <div className="space-y-2">
-                <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id</Label>
+                <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id <span className="text-red-500">*</span></Label>
                 <Input
                   id="organizerEmail"
                   type="email"
@@ -1307,9 +1309,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 )}
               </div>
 
-              {/* Phone Number - OPTIONAL, no asterisk */}
+              {/* Phone Number - REQUIRED */}
               <div className="space-y-2">
-                <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No.</Label>
+                <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No. <span className="text-red-500">*</span></Label>
                 <Input
                   id="organizerPhoneNo"
                   value={formData.Phone1}
