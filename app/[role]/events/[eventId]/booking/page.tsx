@@ -281,6 +281,12 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           page: "1",
           limit: "10", // Get more bookings for this specific event
         }
+        
+        // For organizer role, add organizer_id to filter only their events' bookings
+        if ((role as UserRole) === "organizer" && user.user_id) {
+          requestPayload.organizer_id = user.user_id
+          console.log("🔒 Organizer filter applied - organizer_id:", user.user_id)
+        }
       }
 
       console.log("Fetching event bookings:", { eventId, apiEndpoint, requestPayload })

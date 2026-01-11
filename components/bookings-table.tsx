@@ -74,14 +74,14 @@ export function BookingsTable({
             <th scope="col" className="w-48 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
               Email
             </th>
-            <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Booking Date
+            <th scope="col" className="w-36 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+              Booking Date & Time
             </th>
             <th scope="col" className="w-40 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Event
+              Event Name
             </th>
             <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Event Date
+              Ticket Date
             </th>
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Source
@@ -98,17 +98,11 @@ export function BookingsTable({
             <th scope="col" className="w-32 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
               Ticket Name
             </th>
-            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Type
-            </th>
             <th scope="col" className="w-24 px-3 py-3 text-right text-xs font-medium text-gray-900 dark:text-white uppercase">
               Price
             </th>
             <th scope="col" className="w-28 px-3 py-3 text-right text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Total
-            </th>
-            <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Remark
+              Total Amount
             </th>
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Status
@@ -123,7 +117,7 @@ export function BookingsTable({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {bookings.length === 0 ? (
             <tr>
-              <td colSpan={role === "organizer" ? 17 : 18} className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <td colSpan={role === "organizer" ? 15 : 16} className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-lg font-medium">
                     {searchTerm || statusFilter !== "all" || channelFilter !== "all"
@@ -164,7 +158,7 @@ export function BookingsTable({
                   </span>
                 </td>
                 {/* Booking Date & Time */}
-                <td className="w-32 px-3 py-3 text-center">
+                <td className="w-36 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {formatDateTime(booking.BookingDateTime || booking.bookingDate)}
                   </span>
@@ -175,15 +169,15 @@ export function BookingsTable({
                     {booking.EventName || booking.eventName || "N/A"}
                   </span>
                 </td>
-                {/* Event Date */}
+                {/* Ticket Date */}
                 <td className="w-28 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {(booking.TicketDate || booking.ticketDate) ? formatDate(booking.TicketDate || booking.ticketDate || "") : "N/A"}
                   </span>
                 </td>
-                {/* Source (Booking Channel) */}
+                {/* Source (Booking Channel) - Using BookingSource field from API */}
                 <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
+                  <span className="text-sm font-medium text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {booking.bookingChannel || "Online"}
                   </span>
                 </td>
@@ -211,12 +205,6 @@ export function BookingsTable({
                     {booking.TicketName || booking.ticketName || "N/A"}
                   </span>
                 </td>
-                {/* Ticket Type */}
-                <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventTicketType || booking.ticketType || "N/A"}>
-                    {booking.EventTicketType || booking.ticketType || "N/A"}
-                  </span>
-                </td>
                 {/* Ticket Price */}
                 <td className="w-24 px-3 py-3 text-right">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
@@ -227,12 +215,6 @@ export function BookingsTable({
                 <td className="w-28 px-3 py-3 text-right">
                   <span className="text-sm font-medium text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
                     {formatCurrency(booking.TotalAmount || booking.totalAmount)}
-                  </span>
-                </td>
-                {/* Remark */}
-                <td className="w-28 px-3 py-3 text-center">
-                  <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.Remark || booking.remark || "N/A"}>
-                    {booking.Remark || booking.remark || "N/A"}
                   </span>
                 </td>
                 {/* Status */}

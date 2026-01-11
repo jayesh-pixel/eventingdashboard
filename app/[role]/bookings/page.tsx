@@ -467,8 +467,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const bookingDate = booking.BookingDateTime || booking.bookingDate || booking.booking_date || booking.FilterationBookingDateTime || booking.createdAt || booking.created_at || ""
       const totalAmount = booking.TotalAmount || booking.totalAmount || booking.total_amount || booking.Price || booking.price || 0
       
-      // BookingSource is the correct API field for the booking channel/source
-      const bookingSource = booking.BookingSource || booking.bookingChannel || booking.booking_channel || booking.Channel || "Online"
+      // BookingSource is the CORRECT API field - it returns "Promoter" or "Online"
+      // Do NOT use other fields as they may have different values
+      const bookingSource = booking.BookingSource || "Online"
 
       let status: "Confirmed" | "Pending" | "Cancelled" | "Booked" = "Confirmed"
       if (booking.status !== undefined) {
@@ -609,6 +610,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           limit: "10", // Increased limit to get more data
         }
         
+        // For organizer role, add organizer_id to filter only their events' bookings
+        if ((role as UserRole) === "organizer" && user.user_id) {
+          requestPayload.organizer_id = user.user_id
+          console.log("🔒 Organizer filter applied - organizer_id:", user.user_id)
+        }
+        
         // Add filter parameters to the payload
         // Only sending search and status - other filters are applied client-side
         if (filters?.searchTerm) {
@@ -696,15 +703,20 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         console.log("✅ Normalized", normalizedBookings.length, "bookings")
         console.log("📋 Sample normalized booking:", normalizedBookings[0] ? JSON.stringify(normalizedBookings[0], null, 2) : "No normalized bookings")
         
-        // Sort bookings by booking date (latest first)
+        // Sort bookings by booking date (latest first) - using multiple date fields as fallback
         const sortedBookings = normalizedBookings.sort((a, b) => {
-          const dateA = parseDate(a.bookingDate || a.BookingDateTime || a.createdAt)
-          const dateB = parseDate(b.bookingDate || b.BookingDateTime || b.createdAt)
+          const dateA = parseDate(a.BookingDateTime || a.bookingDate || a.FilterationBookingDateTime || a.createdAt)
+          const dateB = parseDate(b.BookingDateTime || b.bookingDate || b.FilterationBookingDateTime || b.createdAt)
+          if (!dateA && !dateB) return 0
           if (!dateA) return 1
           if (!dateB) return -1
           return dateB.getTime() - dateA.getTime() // Descending order (latest first)
         })
         console.log("🔃 Sorted", sortedBookings.length, "bookings by date (latest first)")
+        if (sortedBookings.length > 0) {
+          console.log("📅 First booking date:", sortedBookings[0].BookingDateTime || sortedBookings[0].bookingDate)
+          console.log("📅 Last booking date:", sortedBookings[sortedBookings.length - 1].BookingDateTime || sortedBookings[sortedBookings.length - 1].bookingDate)
+        }
           
         setBookingsData(sortedBookings)
         setOriginalData(sortedBookings)
@@ -851,6 +863,30 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const filteredBookings = React.useMemo(() => {
     let filtered = bookingsData
 
+    // Apply search term filter (client-side fallback for phone/email search)
+    if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
+      const searchLower = debouncedSearchTerm.toLowerCase().trim()
+      filtered = filtered.filter((booking) => {
+        // Search in multiple fields including phone and email
+        const searchableFields = [
+          booking.customerName,
+          booking.customerEmail,
+          booking.phoneNumber || booking.PhoneNumber,
+          booking.eventName,
+          booking.city,
+          booking.venue,
+          booking._id,
+          booking.Booking_id,
+          booking.promoterName,
+          booking.PromoterName,
+        ]
+        
+        return searchableFields.some(field => 
+          field && String(field).toLowerCase().includes(searchLower)
+        )
+      })
+    }
+
     // Apply city filter
     if (cityFilter !== "all") {
       filtered = filtered.filter((booking) => booking.city === cityFilter)
@@ -879,7 +915,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }
 
     return filtered
-  }, [bookingsData, cityFilter, venueFilter, eventNameFilter, organizerFilter, promoterFilter])
+  }, [bookingsData, debouncedSearchTerm, cityFilter, venueFilter, eventNameFilter, organizerFilter, promoterFilter])
 
   // Paginated bookings for current page
   const currentBookings = React.useMemo(() => {
@@ -984,6 +1020,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }).format(amount)
   }
 
+  // Format date only (without time) - DD-MMM-YYYY
   const formatDate = (date: Date | string | number | null | undefined) => {
     if (!date || date === '' || date === 'Invalid Date') return "N/A"
     
@@ -1002,6 +1039,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }
   }
   
+  // Format date and time - DD-MMM-YYYY HH:MM AM/PM
   const formatDateTime = (date: Date | string | number | null | undefined) => {
     if (!date || date === '' || date === 'Invalid Date') return "N/A"
     

@@ -696,8 +696,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           }
         })
         
-        console.log("📈 Processed summary data:", summaryData)
-        setReportData(summaryData)
+        // Sort summary data by quantitySold (highest first)
+        const sortedSummaryData = summaryData.sort((a, b) => b.quantitySold - a.quantitySold)
+        
+        console.log("📈 Processed and sorted summary data:", sortedSummaryData)
+        setReportData(sortedSummaryData)
           // Show appropriate message based on data availability
         if (summaryData.length === 0) {
           showSuccessToast(
@@ -740,7 +743,18 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
           status: item.status === 1 ? "Confirmed" : item.status === 2 ? "Cancelled" : item.status || "Unknown",
         }))
-          setReportData(transactionData)
+        
+        // Sort transaction data by bookingDate (latest first)
+        const sortedTransactionData = transactionData.sort((a, b) => {
+          const dateA = new Date(a.bookingDate).getTime()
+          const dateB = new Date(b.bookingDate).getTime()
+          if (isNaN(dateA) && isNaN(dateB)) return 0
+          if (isNaN(dateA)) return 1
+          if (isNaN(dateB)) return -1
+          return dateB - dateA // Descending order (latest first)
+        })
+          
+          setReportData(sortedTransactionData)
         
         if (transactionData.length === 0) {
           showSuccessToast(

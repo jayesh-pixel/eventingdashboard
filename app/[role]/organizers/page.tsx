@@ -256,22 +256,18 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       errors.Username = "Username must not exceed 50 characters"
     }
     
-    // Email validation (required)
-    if (!formData.Email || formData.Email.trim() === "") {
-      errors.Email = "Email is required"
-    } else {
+    // Email validation (optional)
+    if (formData.Email && formData.Email.trim() !== "") {
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.Email)) {
+      if (!emailRegex.test(formData.Email.trim())) {
         errors.Email = "Please enter a valid email address"
       }
     }
-    
-    // Phone validation (required)
-    if (!formData.Phone1 || formData.Phone1.trim() === "") {
-      errors.Phone1 = "Phone number is required"
-    } else {
+
+    // Phone validation (optional)
+    if (formData.Phone1 && formData.Phone1.trim() !== "") {
       const phoneRegex = /^[1-9][0-9]{9}$/
-      if (!phoneRegex.test(formData.Phone1.replace(/\D/g, ''))) {
+      if (!phoneRegex.test(formData.Phone1.replace(/\D/g, ""))) {
         errors.Phone1 = "Please enter a valid 10-digit phone number"
       }
     }
@@ -591,8 +587,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         CompanyName: formData.CompanyName,
         FullName: formData.FullName,
         Username: formData.Username,
-        Email: formData.Email || "",
-        Phone1: formData.Phone1 || "",
+        Email: formData.Email?.trim() ? formData.Email.trim() : undefined,
+        Phone1: formData.Phone1?.trim() ? formData.Phone1.trim() : undefined,
         Password: editingOrganizer ? undefined : formData.password,
         Country: formData.Country,
         CountryIsoCode: formData.CountryIsoCode,
@@ -1378,7 +1374,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               </div>
             )}
 
-            {/* Send Email Notification - Only show for create mode, OPTIONAL, no asterisk */}
+            {/* Send Email Notification 3- Only show for create mode, OPTIONAL, no asterisk */}
             {!editingOrganizer && (
               <div className="flex items-center space-x-2">
                 <Checkbox

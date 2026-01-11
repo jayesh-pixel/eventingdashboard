@@ -224,6 +224,7 @@ export interface Booking {
   PhoneNumber?: string
   Email?: string
   BookingDateTime?: string
+  FilterationBookingDateTime?: string
   EventName?: string
   TicketDate?: string
   EventCityName?: string
