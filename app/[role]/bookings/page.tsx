@@ -1388,6 +1388,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                                 if (currentPage > 1) handlePageChange(currentPage - 1)
                               }}
                               className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+                              size="default"
                             />
                           </PaginationItem>
                           {[...Array(Math.min(totalPages, 5))].map((_, i) => {
@@ -1401,6 +1402,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                                     e.preventDefault()
                                     handlePageChange(pageNum)
                                   }}
+                                  size="default"
                                 >
                                   {pageNum}
                                 </PaginationLink>
@@ -1420,6 +1422,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                                 if (currentPage < totalPages) handlePageChange(currentPage + 1)
                               }}
                               className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+                              size="default"
                             />
                           </PaginationItem>
                         </PaginationContent>
@@ -1596,7 +1599,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                     <div className="flex flex-wrap gap-2">
                       {statusFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Status: {statusFilter}
+                          <>Status: {statusFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setStatusFilter("all")}
@@ -1605,7 +1608,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {channelFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Channel: {channelFilter}
+                          <>Channel: {channelFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setChannelFilter("all")}
@@ -1614,7 +1617,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {cityFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          City: {cityFilter}
+                          <>City: {cityFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setCityFilter("all")}
@@ -1623,7 +1626,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {venueFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Venue: {venueFilter}
+                          <>Venue: {venueFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setVenueFilter("all")}
@@ -1632,7 +1635,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {eventNameFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Event: {eventNameFilter}
+                          <>Event: {eventNameFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setEventNameFilter("all")}
@@ -1641,7 +1644,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {organizerFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Organizer: {organizerFilter}
+                          <>Organizer: {organizerFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setOrganizerFilter("all")}
@@ -1650,7 +1653,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {promoterFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          Promoter: {promoterFilter}
+                          <>Promoter: {promoterFilter}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setPromoterFilter("all")}

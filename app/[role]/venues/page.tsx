@@ -321,6 +321,15 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    if (selectedImages.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please upload at least one venue image",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()
@@ -331,42 +340,41 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       const selectedState = stateData.find(s => s.name === formData.state)
       const selectedCity = cityData.find(c => c.name === formData.city)
 
-      const payload = {
-        AdminRole: getNumericAdminRole(user.AdminRole || role),
-        user_id: user.user_id,
-        Name: formData.venueName,
-        Description: formData.venueDescription,
-        Address: formData.fullAddress,
-        City: formData.city,
-        State: formData.state,
-        Country: "India",
-        CountryIsoCode: "IN",
-        StateIsoCode: selectedState?.iso2 || "",
-        CityIsoCode: selectedCity?.id?.toString() || "",
-        Map_Location: formData.mapLocation,
-        Priority: formData.priority,
-      }
+      // Use FormData for venue creation with images
+      const formDataPayload = new FormData()
+      formDataPayload.append('AdminRole', getNumericAdminRole(user.AdminRole || role).toString())
+      formDataPayload.append('user_id', user.user_id)
+      formDataPayload.append('Name', formData.venueName)
+      formDataPayload.append('Description', formData.venueDescription)
+      formDataPayload.append('Address', formData.fullAddress)
+      formDataPayload.append('City', formData.city)
+      formDataPayload.append('State', formData.state)
+      formDataPayload.append('Country', 'India')
+      formDataPayload.append('CountryIsoCode', 'IN')
+      formDataPayload.append('StateIsoCode', selectedState?.iso2 || '')
+      formDataPayload.append('CityIsoCode', selectedCity?.id?.toString() || '')
+      formDataPayload.append('Map_Location', formData.mapLocation)
+      formDataPayload.append('Priority', formData.priority.toString())
 
-      console.log("Creating venue with payload:", payload)
+      // Append images
+      selectedImages.forEach((image) => {
+        formDataPayload.append('images', image)
+      })
+
+      console.log("Creating venue with FormData")
 
       const response = await fetch(venueEndPoint.VENUE_CREATION_URL, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify(payload),
+        body: formDataPayload,
       })
 
       console.log("Create venue response status:", response.status)
 
       const result = await handleApiResponse(response)
       console.log("Create venue response:", result)
-
-      // Upload images if any selected
-      if (selectedImages.length > 0 && result.data?.venue_id) {
-        await uploadImages(result.data.venue_id)
-      }
 
       await fetchVenues(currentPage, ITEMS_PER_PAGE, debouncedSearchTerm)
       setIsCreateDialogOpen(false)

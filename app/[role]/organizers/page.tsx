@@ -1290,29 +1290,29 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Email - REQUIRED */}
+              {/* Email - Optional */}
               <div className="space-y-2">
-                <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id <span className="text-red-500">*</span></Label>
+                <Label htmlFor="organizerEmail" className="text-sm font-medium">Email Id</Label>
                 <Input
                   id="organizerEmail"
                   type="email"
                   value={formData.Email}
                   onChange={(e) => setFormData({ ...formData, Email: e.target.value })}
-                  placeholder="Enter organizer emailId"
+                  placeholder="Enter organizer emailId (optional)"
                 />
                 {formErrors.Email && (
                   <div className="text-red-600 text-sm">{formErrors.Email}</div>
                 )}
               </div>
 
-              {/* Phone Number - REQUIRED */}
+              {/* Phone Number - Optional */}
               <div className="space-y-2">
-                <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No. <span className="text-red-500">*</span></Label>
+                <Label htmlFor="organizerPhoneNo" className="text-sm font-medium">Phone No.</Label>
                 <Input
                   id="organizerPhoneNo"
                   value={formData.Phone1}
                   onChange={(e) => setFormData({ ...formData, Phone1: e.target.value })}
-                  placeholder="Enter organizer phone number"
+                  placeholder="Enter organizer phone number (optional)"
                 />
                 {formErrors.Phone1 && (
                   <div className="text-red-600 text-sm">{formErrors.Phone1}</div>

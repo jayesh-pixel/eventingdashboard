@@ -1074,7 +1074,11 @@ export default function TicketsPage() {
           Quantity: normalFormData.MaxQuantity,
           BookingMaxLimit: normalFormData.BookingMaxLimit,
           EventTicketVisibility: normalFormData.VisibilityLevel.toString(),
-          Description: normalFormData.TicketDescription?.trim() || "" // Always send Description field, empty string if not provided
+        }
+        
+        // Only send Description if it has a value
+        if (normalFormData.TicketDescription?.trim()) {
+          payload.Description = normalFormData.TicketDescription.trim()
         }
         
         // Include selected promoters if visibility is set to "Promoters"

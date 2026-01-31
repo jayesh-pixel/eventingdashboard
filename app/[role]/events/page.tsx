@@ -799,18 +799,12 @@ export default function EventsPage({ params }: EventsPageProps) {
             })
           }
           
-          // Sort events by start date (latest first)
-          const sortedEvents = normalizedEvents.sort((a, b) => {
-            const dateA = new Date(a.eventStartDate || a.createdAt).getTime()
-            const dateB = new Date(b.eventStartDate || b.createdAt).getTime()
-            return dateB - dateA // Descending order (latest first)
-          })
-          
-          setAllEventsData(sortedEvents)
-          setOriginalData(sortedEvents)
+          // Don't sort on frontend - backend handles sorting
+          setAllEventsData(normalizedEvents)
+          setOriginalData(normalizedEvents)
           setUseMockData(false)
           setApiError(null)
-          console.log("✅ Successfully loaded and sorted", sortedEvents.length, "events from API")
+          console.log("✅ Successfully loaded", normalizedEvents.length, "events from API")
         } else {
           console.log("Unexpected response structure:", data)
           throw new Error("Unexpected response format from server - no events array found")
