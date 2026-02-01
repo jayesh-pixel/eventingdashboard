@@ -45,6 +45,7 @@ import type { UserRole } from "@/lib/navigation"
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -96,7 +97,7 @@ interface EventsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
-const ITEMS_PER_PAGE = 10 // Changed to 9 for better card grid layout
+const ITEMS_PER_PAGE = 10
 
 // Mock promoter-specific events with additional data
 
@@ -170,6 +171,9 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [showRejectModal, setShowRejectModal] = React.useState(false)
   const [EventRejectRemark, setEventRejectRemark] = React.useState("")
   const [eventToReject, setEventToReject] = React.useState<string>("")
+
+  // Prevent duplicate page-1 fetch on initial mount (we already fetch in the initial fetch effect)
+  const didRunPageNavEffectOnce = React.useRef(false)
 
   const isPromoterRole = role === "promoter" || (role as string) === "promoter"
   const useClientPaging = isPromoterRole || (!!startDate && !!endDate)
@@ -863,17 +867,21 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   React.useEffect(() => {
     // Server-side search/pagination: always fetch page 1 when search term changes
-    setCurrentPage(1)
-
     // Promoter endpoint isn't paginated; keep existing data and client paging
     if (isPromoterRole) return
 
-    if (!debouncedSearchTerm || !debouncedSearchTerm.trim()) {
-      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
+    // If we're already on page 1, fetch immediately; otherwise reset to page 1 and let the page nav effect fetch.
+    if (currentPage === 1) {
+      if (!debouncedSearchTerm || !debouncedSearchTerm.trim()) {
+        getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
+        return
+      }
+
+      searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
       return
     }
 
-    searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
+    setCurrentPage(1)
   }, [debouncedSearchTerm])
   // Search events with API call for all roles
   const searchEventsWithKeyword = async (keyword: string, page: number = 1, limit: number = ITEMS_PER_PAGE) => {
@@ -1100,21 +1108,31 @@ export default function EventsPage({ params }: EventsPageProps) {
   // Refetch data when filters change
   React.useEffect(() => {
     // When filters change, always reset to page 1 and refetch from API (non-promoter)
-    setCurrentPage(1)
     if (isPromoterRole) return
 
-    if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
-      searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
-    } else {
-      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
+    // If we're already on page 1, fetch immediately; otherwise set page to 1 and let the page nav effect fetch.
+    if (currentPage === 1) {
+      if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+        searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
+      } else {
+        getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
+      }
+      return
     }
+
+    setCurrentPage(1)
   }, [selectedCity, selectedVenue, selectedOrganizer, selectedPromoter])
 
   React.useEffect(() => {
     // Page navigation for API-paginated views
     if (!didInitialFetch.current) return
     if (useClientPaging) return
-    if (currentPage === 1) return
+
+    // Skip the very first run on mount to avoid duplicating the initial fetch.
+    if (!didRunPageNavEffectOnce.current) {
+      didRunPageNavEffectOnce.current = true
+      return
+    }
 
     if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
       searchEventsWithKeyword(debouncedSearchTerm, currentPage, ITEMS_PER_PAGE)
@@ -1180,15 +1198,55 @@ export default function EventsPage({ params }: EventsPageProps) {
     : filteredEvents
 
   const handlePageChange = (page: number) => {
-    setCurrentPage(page)
+    const nextPage = Math.min(Math.max(1, page), Math.max(totalPages, 1))
+    setCurrentPage(nextPage)
   }
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab)
-    setCurrentPage(1)
-    // Fetch data for the specific tab
-    getAllEventData(tab, true, 1, ITEMS_PER_PAGE)
+    // Reset to page 1 on tab change. If we're already on page 1, fetch immediately.
+    if (currentPage === 1) {
+      getAllEventData(tab, true, 1, ITEMS_PER_PAGE)
+    } else {
+      setCurrentPage(1)
+    }
   }
+
+  const paginationItems = React.useMemo(() => {
+    if (totalPages <= 1) return [] as Array<number | "ellipsis">
+
+    // Show a compact, reachable range: 1 ... (window) ... totalPages
+    const items: Array<number | "ellipsis"> = []
+
+    const windowSize = 5
+    if (totalPages <= windowSize + 2) {
+      for (let i = 1; i <= totalPages; i++) items.push(i)
+      return items
+    }
+
+    items.push(1)
+
+    const nearStart = currentPage <= 3
+    const nearEnd = currentPage >= totalPages - 2
+
+    let start = Math.max(2, currentPage - 1)
+    let end = Math.min(totalPages - 1, currentPage + 1)
+
+    if (nearStart) {
+      start = 2
+      end = 4
+    } else if (nearEnd) {
+      start = totalPages - 3
+      end = totalPages - 1
+    }
+
+    if (start > 2) items.push("ellipsis")
+    for (let i = start; i <= end; i++) items.push(i)
+    if (end < totalPages - 1) items.push("ellipsis")
+
+    items.push(totalPages)
+    return items
+  }, [currentPage, totalPages])
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
   const handleCreateEvent = () => {
     // Navigate directly to standard event creation (regular event type)
@@ -1831,19 +1889,26 @@ export default function EventsPage({ params }: EventsPageProps) {
                       className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
                     />
                   </PaginationItem>
-                  {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                    const pageNum = i + 1
+                  {paginationItems.map((item, idx) => {
+                    if (item === "ellipsis") {
+                      return (
+                        <PaginationItem key={`ellipsis-${idx}`}>
+                          <PaginationEllipsis />
+                        </PaginationItem>
+                      )
+                    }
+
                     return (
-                      <PaginationItem key={pageNum}>
+                      <PaginationItem key={item}>
                         <PaginationLink
                           href="#"
-                          isActive={currentPage === pageNum}
+                          isActive={currentPage === item}
                           onClick={(e) => {
                             e.preventDefault()
-                            handlePageChange(pageNum)
+                            handlePageChange(item)
                           }}
                         >
-                          {pageNum}
+                          {item}
                         </PaginationLink>
                       </PaginationItem>
                     )

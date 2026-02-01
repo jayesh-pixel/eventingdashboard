@@ -73,6 +73,7 @@ import {
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
@@ -228,6 +229,7 @@ export default function TicketsPage() {
   const [showEditModal, setShowEditModal] = React.useState(false)
   const [showPromoterModal, setShowPromoterModal] = React.useState(false)
   const [showStatusConfirmModal, setShowStatusConfirmModal] = React.useState(false)
+  const [createTicketError, setCreateTicketError] = React.useState<string | null>(null)
   const [pendingStatusChange, setPendingStatusChange] = React.useState<{
     ticketId: string
     currentStatus: number
@@ -973,6 +975,7 @@ export default function TicketsPage() {
 
   const handleCreateTicket = async () => {
     try {
+      setCreateTicketError(null)
       // Set appropriate loading state
       if (activeTab === "bulk") {
         setBulkTicketCreating(true)
@@ -1222,6 +1225,7 @@ export default function TicketsPage() {
         description: errorMessage,
         variant: "destructive",
       })
+      setCreateTicketError(errorMessage)
       } finally {
       if (activeTab === "bulk") {
         setBulkTicketCreating(false)
@@ -1555,6 +1559,7 @@ export default function TicketsPage() {
 
   // Handle tab changes - load data only when switching to a new tab
   const handleTabChange = (newTab: string) => {
+    setCreateTicketError(null)
     setActiveTab(newTab)
     
     // Load data only if this tab hasn't been loaded before
@@ -1570,6 +1575,7 @@ export default function TicketsPage() {
   }
 
   const handleOpenCreateModal = () => {
+    setCreateTicketError(null)
     // Auto-populate form with event data when opening modal
     if (eventDateTimes.length > 0) {
       const firstDateTime = eventDateTimes[0]
@@ -2198,7 +2204,13 @@ export default function TicketsPage() {
       </Tabs>
 
       {/* Create Modal */}
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+      <Dialog
+        open={showCreateModal}
+        onOpenChange={(open) => {
+          setShowCreateModal(open)
+          if (!open) setCreateTicketError(null)
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
@@ -2208,6 +2220,13 @@ export default function TicketsPage() {
               Add a new {activeTab === "normal" ? "normal" : "bulk"} ticket to this event
             </DialogDescription>
           </DialogHeader>
+
+          {createTicketError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{createTicketError}</AlertDescription>
+            </Alert>
+          )}
 
           <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
             <TabsList className={`grid w-full ${getNumericRole(role) === 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
