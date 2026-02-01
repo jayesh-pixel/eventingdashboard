@@ -358,7 +358,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       // Append images
       selectedImages.forEach((image) => {
-        formDataPayload.append('images', image)
+        formDataPayload.append('Images', image)
       })
 
       console.log("Creating venue with FormData")
@@ -592,7 +592,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       for (const image of selectedImages) {
         const formData = new FormData()
-        formData.append('image', image)
+        // API expects the file field name to be `VenueImage`
+        formData.append('VenueImage', image)
         formData.append('venue_id', venueId)
         formData.append('AdminRole', getNumericAdminRole(user?.AdminRole || role).toString())
         formData.append('user_id', user?.user_id || '')
@@ -641,8 +642,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
-          AdminRole: getNumericAdminRole(user?.AdminRole || role),
-          user_id: user?.user_id || '',
+          // AdminRole: getNumericAdminRole(user?.AdminRole || role),
+          // user_id: user?.user_id || '',
           venue_id: venueId,
           image_id: imageId,
         }),
