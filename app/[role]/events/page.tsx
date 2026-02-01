@@ -119,6 +119,8 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [allEventsData, setAllEventsData] = React.useState<any[]>([])
   const [originalData, setOriginalData] = React.useState<any[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [serverTotalPages, setServerTotalPages] = React.useState(1)
+  const [serverTotalEvents, setServerTotalEvents] = React.useState(0)
   const [activeTab, setActiveTab] = React.useState("all")
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
@@ -168,6 +170,9 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [showRejectModal, setShowRejectModal] = React.useState(false)
   const [EventRejectRemark, setEventRejectRemark] = React.useState("")
   const [eventToReject, setEventToReject] = React.useState<string>("")
+
+  const isPromoterRole = role === "promoter" || (role as string) === "promoter"
+  const useClientPaging = isPromoterRole || (!!startDate && !!endDate)
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -562,7 +567,12 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
 
   // Fetch all events data with improved error handling
-  const getAllEventData = async (tab: string = "all", applyFilters: boolean = false) => {
+  const getAllEventData = async (
+    tab: string = "all",
+    applyFilters: boolean = false,
+    page: number = 1,
+    limit: number = ITEMS_PER_PAGE,
+  ) => {
     try {
       setLoading(true)
       setApiError(null)
@@ -605,11 +615,9 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log("🎯 USER_ID BEING USED:", user.user_id)
       console.log("=====================================")
 
-      // Check if role is actually "promoter"
-      const isPromoter = role === "promoter" || (role as string) === "promoter"
-      console.log("- isPromoter calculation:", isPromoter)
+      console.log("- isPromoter calculation:", isPromoterRole)
 
-      if (isPromoter) {
+      if (isPromoterRole) {
         console.log("🎯 DEFINITELY Using PROMOTER endpoint")
         apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
         requestPayload = {
@@ -648,8 +656,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         requestPayload = {
           AdminRole: numericRole,
           user_id: user.user_id,
-          page: "1",
-          limit: "10", // Get more events for better UX
+          page: page.toString(),
+          limit: limit.toString(),
           ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm }),
           // Include filter parameters if applyFilters is true
           ...(applyFilters && selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
@@ -767,6 +775,20 @@ export default function EventsPage({ params }: EventsPageProps) {
           totalPages: data.data ? data.data.totalPages : 'unknown'
         })
 
+        // Capture pagination metadata if present (admin paginated endpoints)
+        if (data?.data?.totalPages !== undefined) {
+          const nextTotalPages = Number(data.data.totalPages) || 1
+          setServerTotalPages(nextTotalPages)
+        }
+        if (data?.data?.totalEvents !== undefined) {
+          const nextTotalEvents = Number(data.data.totalEvents) || 0
+          setServerTotalEvents(nextTotalEvents)
+        }
+        if (data?.data?.currentPage !== undefined) {
+          const nextCurrentPage = Number(data.data.currentPage) || page
+          if (nextCurrentPage !== currentPage) setCurrentPage(nextCurrentPage)
+        }
+
         if (eventsArray) {
           console.log("🔍 EVENTS ARRAY ANALYSIS:")
           console.log("- Events found:", eventsArray.length)
@@ -840,24 +862,21 @@ export default function EventsPage({ params }: EventsPageProps) {
   }, [searchTerm])
 
   React.useEffect(() => {
-    if (debouncedSearchTerm === "") {
-      setAllEventsData(originalData)
+    // Server-side search/pagination: always fetch page 1 when search term changes
+    setCurrentPage(1)
+
+    // Promoter endpoint isn't paginated; keep existing data and client paging
+    if (isPromoterRole) return
+
+    if (!debouncedSearchTerm || !debouncedSearchTerm.trim()) {
+      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
       return
     }
 
-    // Make API call with search keyword for all roles when search term is at least 3 characters
-    if (debouncedSearchTerm.length >= 3) {
-      searchEventsWithKeyword(debouncedSearchTerm)
-    } else {
-      // For shorter search terms, filter locally to avoid too many API calls
-      const filtered = originalData.filter((event) =>
-        event.eventName.toLowerCase().includes(debouncedSearchTerm.toLowerCase()),
-      )
-      setAllEventsData(filtered)
-    }
-  }, [debouncedSearchTerm, originalData, role])
+    searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
+  }, [debouncedSearchTerm])
   // Search events with API call for all roles
-  const searchEventsWithKeyword = async (keyword: string) => {
+  const searchEventsWithKeyword = async (keyword: string, page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
       setSearchLoading(true)
       const authToken = getValidToken()
@@ -875,8 +894,8 @@ export default function EventsPage({ params }: EventsPageProps) {
       const payload = {
         AdminRole: getSearchRoleId(),
         user_id: user.user_id,
-        page: "1",
-        limit: "10",
+        page: page.toString(),
+        limit: limit.toString(),
         eventNameSearchKeyword: keyword,
         // Include filter parameters
         ...(selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
@@ -899,6 +918,18 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
 
       const data = await handleApiResponse(response)
+
+      // Capture pagination metadata from search response
+      if (data?.data?.totalPages !== undefined) {
+        setServerTotalPages(Number(data.data.totalPages) || 1)
+      }
+      if (data?.data?.totalEvents !== undefined) {
+        setServerTotalEvents(Number(data.data.totalEvents) || 0)
+      }
+      if (data?.data?.currentPage !== undefined) {
+        const nextCurrentPage = Number(data.data.currentPage) || page
+        if (nextCurrentPage !== currentPage) setCurrentPage(nextCurrentPage)
+      }
       
       // Handle the paginated response structure
       let eventsArray = []
@@ -1058,61 +1089,75 @@ export default function EventsPage({ params }: EventsPageProps) {
   }
 
   // Initial data fetch
+  const didInitialFetch = React.useRef(false)
   React.useEffect(() => {
-    getAllEventData(activeTab)
+    if (didInitialFetch.current) return
+    didInitialFetch.current = true
+    getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
     fetchAllFilterOptions()
   }, [])
 
   // Refetch data when filters change
   React.useEffect(() => {
-    // Only trigger if we have initial data loaded
-    if (originalData.length > 0 || allEventsData.length > 0) {
-      if (debouncedSearchTerm && debouncedSearchTerm.length >= 3) {
-        // If search is active, use search function
-        searchEventsWithKeyword(debouncedSearchTerm)
-      } else {
-        // Otherwise use getAllEventData with filters
-        getAllEventData(activeTab, true)
-      }
+    // When filters change, always reset to page 1 and refetch from API (non-promoter)
+    setCurrentPage(1)
+    if (isPromoterRole) return
+
+    if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+      searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
+    } else {
+      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
     }
   }, [selectedCity, selectedVenue, selectedOrganizer, selectedPromoter])
+
+  React.useEffect(() => {
+    // Page navigation for API-paginated views
+    if (!didInitialFetch.current) return
+    if (useClientPaging) return
+    if (currentPage === 1) return
+
+    if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+      searchEventsWithKeyword(debouncedSearchTerm, currentPage, ITEMS_PER_PAGE)
+    } else {
+      getAllEventData(activeTab, true, currentPage, ITEMS_PER_PAGE)
+    }
+  }, [currentPage])
   // Filter events based on filters (no tab filtering since we fetch specific data per tab)
   const filteredEvents = React.useMemo(() => {
     let events = allEventsData
 
-    // Apply city filter
-    if (selectedCity && selectedCity !== "__all__") {
-      events = events.filter(event => event.city === selectedCity)
+    // When using API pagination, backend already applied most filters.
+    // Keep client-side filters only when forced into client paging (promoter/date-range).
+    if (useClientPaging) {
+      if (selectedCity && selectedCity !== "__all__") {
+        events = events.filter(event => event.city === selectedCity)
+      }
+
+      if (selectedVenue && selectedVenue !== "__all__") {
+        const selectedVenueData = filterVenues.find(venue => venue.id === selectedVenue)
+        events = events.filter(event =>
+          event.venueName === selectedVenueData?.name ||
+          event.venueId === selectedVenue
+        )
+      }
+
+      if ((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__") {
+        const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === selectedOrganizer)
+        events = events.filter(event =>
+          event.organizerName === selectedOrganizerData?.name ||
+          event.organizerId === selectedOrganizer
+        )
+      }
+
+      if (selectedPromoter && selectedPromoter !== "__all__") {
+        const selectedPromoterData = filterPromoters.find(promoter => promoter.id === selectedPromoter)
+        events = events.filter(event =>
+          event.promoterName === selectedPromoterData?.name ||
+          event.promoterId === selectedPromoter
+        )
+      }
     }
 
-    // Apply venue filter
-    if (selectedVenue && selectedVenue !== "__all__") {
-      const selectedVenueData = filterVenues.find(venue => venue.id === selectedVenue)
-      events = events.filter(event => 
-        event.venueName === selectedVenueData?.name || 
-        event.venueId === selectedVenue
-      )
-    }
-
-    // Apply organizer filter (only for non-organizer roles)
-    if ((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__") {
-      const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === selectedOrganizer)
-      events = events.filter(event => 
-        event.organizerName === selectedOrganizerData?.name ||
-        event.organizerId === selectedOrganizer
-      )
-    }
-
-    // Apply promoter filter
-    if (selectedPromoter && selectedPromoter !== "__all__") {
-      const selectedPromoterData = filterPromoters.find(promoter => promoter.id === selectedPromoter)
-      events = events.filter(event => 
-        event.promoterName === selectedPromoterData?.name ||
-        event.promoterId === selectedPromoter
-      )
-    }
-
-    // Apply date range filter (for table view)
     if (startDate && endDate) {
       const start = new Date(startDate)
       const end = new Date(endDate)
@@ -1122,18 +1167,17 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
     }
 
-    // Sort events to show latest events first (by creation date or updated date)
-    events = events.sort((a, b) => {
+    return [...events].sort((a, b) => {
       const dateA = new Date(a.updatedAt || a.createdAt || 0)
       const dateB = new Date(b.updatedAt || b.createdAt || 0)
-      return dateB.getTime() - dateA.getTime() // Descending order (latest first)
+      return dateB.getTime() - dateA.getTime()
     })
+  }, [allEventsData, useClientPaging, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
 
-    return events
-  }, [allEventsData, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate])
-
-  const totalPages = Math.ceil(filteredEvents.length / ITEMS_PER_PAGE)
-  const currentEvents = filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  const totalPages = useClientPaging ? Math.ceil(filteredEvents.length / ITEMS_PER_PAGE) : serverTotalPages
+  const currentEvents = useClientPaging
+    ? filteredEvents.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+    : filteredEvents
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -1143,7 +1187,7 @@ export default function EventsPage({ params }: EventsPageProps) {
     setActiveTab(tab)
     setCurrentPage(1)
     // Fetch data for the specific tab
-    getAllEventData(tab)
+    getAllEventData(tab, true, 1, ITEMS_PER_PAGE)
   }
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
   const handleCreateEvent = () => {

@@ -34,10 +34,10 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Search, AlertCircle, Loader2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
-import { promocodeEndPoint, eventEndPoint, websiteCustomer } from "@/lib/api-endpoints"
+import { promocodeEndPoint, eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
-import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest, Customer } from "@/lib/types"
+import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest } from "@/lib/types"
 import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 
@@ -77,17 +77,12 @@ export default function PromocodesPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedPromocode, setSelectedPromocode] = useState<Promocode | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  
-  // Events state for selection
+
+  // Events state for selection (Specific Events)
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
   const [eventSearchTerm, setEventSearchTerm] = useState("")
-  
-  // Customers state for selection
-  const [customers, setCustomers] = useState<Customer[]>([])
-  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([])
-  const [loadingCustomers, setLoadingCustomers] = useState(false)
   
   // Form state for create/edit
   const [formData, setFormData] = useState({
@@ -99,7 +94,7 @@ export default function PromocodesPage() {
     ExpiryDate: "",
     OneTimeUseFlag: false,
     PromocodeValidFor: "1", // 1 = All events, 2 = Specific events
-    CanBeUsed: "1" // 1 = All customers, 2 = Specific customers
+    CanBeUsed: "1" // 1 = Public, 2 = Private
   })
   
   const itemsPerPage = 10
@@ -107,7 +102,7 @@ export default function PromocodesPage() {
   // Fetch events for selection
   const fetchEvents = useCallback(async () => {
     if (!user) return
-    
+
     setLoadingEvents(true)
     try {
       const token = getValidToken()
@@ -121,7 +116,7 @@ export default function PromocodesPage() {
         AdminRole: numericRole,
         user_id: user.user_id,
         page: "1",
-        limit: "50", // Get more events for selection
+        limit: "50",
       }
 
       const response = await fetch(eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS, {
@@ -134,11 +129,9 @@ export default function PromocodesPage() {
       })
 
       const data = await handleApiResponse(response)
-      
-      console.log("Events API Response:", data) // Debug log
 
       // Extract events from the paginated response - handle different response structures
-      let eventsArray = []
+      let eventsArray: any[] = []
       if (data.data?.EventsData && Array.isArray(data.data.EventsData)) {
         eventsArray = data.data.EventsData
       } else if (data.data?.events && Array.isArray(data.data.events)) {
@@ -148,13 +141,10 @@ export default function PromocodesPage() {
       } else if (Array.isArray(data)) {
         eventsArray = data
       } else {
-        console.warn("Unexpected events API response structure:", data)
         eventsArray = []
       }
-      
-      console.log("Extracted events array:", eventsArray) // Debug log
+
       setEvents(eventsArray)
-      
     } catch (error) {
       console.error("Error fetching events:", error)
       toast({
@@ -162,73 +152,18 @@ export default function PromocodesPage() {
         description: getApiErrorMessage(error, "Failed to fetch events for selection"),
         variant: "destructive",
       })
+      setEvents([])
     } finally {
       setLoadingEvents(false)
     }
   }, [user, toast])
 
-  // Fetch customers for selection
-  const fetchCustomers = useCallback(async () => {
-    if (!user) return
-    
-    setLoadingCustomers(true)
-    try {
-      const token = getValidToken()
-      if (!token) {
-        throw new Error("No valid authentication token found")
-      }
-
-      const response = await fetch(websiteCustomer.GET_ALL_CUSTOMER_DATA, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      const data = await handleApiResponse(response)
-      
-      console.log("Customers API Response:", data) // Debug log
-
-      // Extract customers from the response - handle different response structures
-      let customersArray = []
-      if (data.data && Array.isArray(data.data)) {
-        customersArray = data.data
-      } else if (Array.isArray(data)) {
-        customersArray = data
-      } else {
-        console.warn("Unexpected customers API response structure:", data)
-        customersArray = []
-      }
-      
-      console.log("Extracted customers array:", customersArray) // Debug log
-      setCustomers(customersArray)
-      
-    } catch (error) {
-      console.error("Error fetching customers:", error)
-      toast({
-        title: "Error",
-        description: getApiErrorMessage(error, "Failed to fetch customers for selection"),
-        variant: "destructive",
-      })
-    } finally {
-      setLoadingCustomers(false)
-    }
-  }, [user, toast])
-
-  // Load events when dialog opens and Specific is selected
+  // Load events when dialog opens and Specific Events is selected
   useEffect(() => {
     if ((isCreateDialogOpen || isEditDialogOpen) && formData.PromocodeValidFor === "2") {
       fetchEvents()
     }
   }, [isCreateDialogOpen, isEditDialogOpen, formData.PromocodeValidFor, fetchEvents])
-
-  // Load customers when dialog opens and Specific is selected
-  useEffect(() => {
-    if ((isCreateDialogOpen || isEditDialogOpen) && formData.CanBeUsed === "2") {
-      fetchCustomers()
-    }
-  }, [isCreateDialogOpen, isEditDialogOpen, formData.CanBeUsed, fetchCustomers])
 
   // Debounce search term
   useEffect(() => {
@@ -367,16 +302,7 @@ export default function PromocodesPage() {
     if (formData.PromocodeValidFor === "2" && selectedEvents.length === 0) {
       toast({
         title: "Validation Error",
-        description: "Please select at least one event for specific promocode",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (formData.CanBeUsed === "2" && selectedCustomers.length === 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please select at least one customer for specific promocode",
+        description: "Please select at least one event",
         variant: "destructive",
       })
       return
@@ -397,29 +323,17 @@ export default function PromocodesPage() {
         Value: parseFloat(formData.Value),
         MinCheckoutAmount: parseFloat(formData.MinCheckoutAmount),
         ExpiryDate: formData.ExpiryDate,
-        OneTimeUseFlag: formData.OneTimeUseFlag ? 1 : 0, // Convert boolean to numeric
+        OneTimeUseFlag: formData.OneTimeUseFlag ? 1 : 0,
         PromocodeValidFor: formData.PromocodeValidFor,
         CanBeUsed: formData.CanBeUsed,
       }
 
-      // Only include Events if PromocodeValidFor is "2" (Specific events)
+      // Only include Events if PromocodeValidFor is "2" (Specific Events)
       if (formData.PromocodeValidFor === "2") {
-        requestData.Events = selectedEvents.map(id => ({ event_id: id }))
-        console.log("Added Events to request:", requestData.Events)
-      } else {
-        console.log("NOT adding Events - PromocodeValidFor is:", formData.PromocodeValidFor)
-      }
-
-      // Only include CustomerIds if CanBeUsed is "2" (Specific customers)  
-      if (formData.CanBeUsed === "2") {
-        requestData.CustomerIds = selectedCustomers.map(id => ({ customer_id: id }))
-        console.log("Added CustomerIds to request:", requestData.CustomerIds)
-      } else {
-        console.log("NOT adding CustomerIds - CanBeUsed is:", formData.CanBeUsed)
+        requestData.Events = selectedEvents.map((id) => ({ event_id: id }))
       }
 
       console.log("Final request data keys:", Object.keys(requestData))
-      console.log("Has CustomerIds field?", 'CustomerIds' in requestData)
 
       console.log("Sending promocode request data:", JSON.stringify(requestData, null, 2)) // Debug log
 
@@ -466,7 +380,6 @@ export default function PromocodesPage() {
     })
     setSelectedPromocode(null)
     setSelectedEvents([])
-    setSelectedCustomers([])
     setEventSearchTerm("")
   }
 
@@ -483,10 +396,7 @@ export default function PromocodesPage() {
       PromocodeValidFor: promocode.PromocodeValidFor || "1",
       CanBeUsed: promocode.CanBeUsed || "1"
     })
-    // Set selected events if available
-    setSelectedEvents(promocode.Events ? promocode.Events.map((e: any) => e.event_id || e._id) : [])
-    // Set selected customers if available
-    setSelectedCustomers(promocode.CustomerIds ? promocode.CustomerIds.map((c: any) => c.customer_id || c._id) : [])
+    setSelectedEvents(promocode.Events ? promocode.Events.map((e: any) => e.event_id || e._id).filter(Boolean) : [])
     setIsEditDialogOpen(true)
   }
 
@@ -693,6 +603,7 @@ export default function PromocodesPage() {
                       setFormData({...formData, PromocodeValidFor: value})
                       if (value === "1") {
                         setSelectedEvents([])
+                        setEventSearchTerm("")
                       }
                     }}
                   >
@@ -707,31 +618,11 @@ export default function PromocodesPage() {
                 </div>
               </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="canBeUsed">Visibility</Label>
-                  <Select 
-                    value={formData.CanBeUsed} 
-                    onValueChange={(value) => {
-                      setFormData({...formData, CanBeUsed: value})
-                      if (value === "1") {
-                        setSelectedCustomers([])
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">All Customers</SelectItem>
-                      <SelectItem value="2">Specific Customers</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>              {/* Event Selection - Show only when Specific is selected */}
+              {/* Event Selection - Show only when Specific Events is selected */}
               {formData.PromocodeValidFor === "2" && (
                 <div className="space-y-2">
                   <Label>Select Events *</Label>
-                  
-                  {/* Event Search Input */}
+
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                     <Input
@@ -739,9 +630,10 @@ export default function PromocodesPage() {
                       value={eventSearchTerm}
                       onChange={(e) => setEventSearchTerm(e.target.value)}
                       className="pl-10"
+                      disabled={loadingEvents}
                     />
                   </div>
-                  
+
                   {loadingEvents ? (
                     <div className="flex items-center justify-center py-4 border rounded-md">
                       <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -751,43 +643,46 @@ export default function PromocodesPage() {
                     <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                       {!Array.isArray(events) || events.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
-                      ) : events.filter((event) => 
-                          !eventSearchTerm || 
+                      ) : events.filter((event) =>
+                          !eventSearchTerm ||
                           (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
                         ).length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
                       ) : (
                         <div className="space-y-1">
                           {events
-                            .filter((event) => 
-                              !eventSearchTerm || 
+                            .filter((event) =>
+                              !eventSearchTerm ||
                               (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
                             )
-                            .map((event) => (
-                            <div key={event._id || event.id} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id={`event-${event._id || event.id}`}
-                                checked={selectedEvents.includes(event._id || event.id)}
-                                onChange={(e) => {
-                                  const eventId = event._id || event.id
-                                  if (e.target.checked) {
-                                    setSelectedEvents([...selectedEvents, eventId])
-                                  } else {
-                                    setSelectedEvents(selectedEvents.filter(id => id !== eventId))
-                                  }
-                                }}
-                                className="rounded"
-                              />
-                              <Label htmlFor={`event-${event._id || event.id}`} className="text-sm font-normal cursor-pointer">
-                                {event.eventName || event.EventName || 'Untitled Event'}
-                              </Label>
-                            </div>
-                          ))}
+                            .map((event) => {
+                              const eventId = event._id || event.id
+                              return (
+                                <div key={eventId} className="flex items-center space-x-2">
+                                  <input
+                                    type="checkbox"
+                                    id={`event-${eventId}`}
+                                    checked={selectedEvents.includes(eventId)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedEvents([...selectedEvents, eventId])
+                                      } else {
+                                        setSelectedEvents(selectedEvents.filter((id) => id !== eventId))
+                                      }
+                                    }}
+                                    className="rounded"
+                                  />
+                                  <Label htmlFor={`event-${eventId}`} className="text-sm font-normal cursor-pointer">
+                                    {event.eventName || event.EventName || 'Untitled Event'}
+                                  </Label>
+                                </div>
+                              )
+                            })}
                         </div>
                       )}
                     </div>
                   )}
+
                   {selectedEvents.length > 0 && (
                     <p className="text-xs text-muted-foreground">
                       {selectedEvents.length} event(s) selected
@@ -796,53 +691,21 @@ export default function PromocodesPage() {
                 </div>
               )}
 
-              {/* Customer Selection - Show only when Specific is selected */}
-              {formData.CanBeUsed === "2" && (
                 <div className="space-y-2">
-                  <Label>Select Customers *</Label>
-                  {loadingCustomers ? (
-                    <div className="flex items-center justify-center py-4 border rounded-md">
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      <span className="text-sm">Loading customers...</span>
-                    </div>
-                  ) : (
-                    <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                      {!Array.isArray(customers) || customers.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-2">No customers available</p>
-                      ) : (
-                        <div className="space-y-1">
-                          {customers.map((customer) => (
-                            <div key={customer._id} className="flex items-center space-x-2">
-                              <input
-                                type="checkbox"
-                                id={`customer-${customer._id}`}
-                                checked={selectedCustomers.includes(customer._id)}
-                                onChange={(e) => {
-                                  const customerId = customer._id
-                                  if (e.target.checked) {
-                                    setSelectedCustomers([...selectedCustomers, customerId])
-                                  } else {
-                                    setSelectedCustomers(selectedCustomers.filter(id => id !== customerId))
-                                  }
-                                }}
-                                className="rounded"
-                              />
-                              <Label htmlFor={`customer-${customer._id}`} className="text-sm font-normal cursor-pointer">
-                                {customer.CustomerName || customer.Email || 'Unknown Customer'}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {selectedCustomers.length > 0 && (
-                    <p className="text-xs text-muted-foreground">
-                      {selectedCustomers.length} customer(s) selected
-                    </p>
-                  )}
+                  <Label htmlFor="canBeUsed">Visibility</Label>
+                  <Select 
+                    value={formData.CanBeUsed} 
+                    onValueChange={(value) => setFormData({...formData, CanBeUsed: value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Public</SelectItem>
+                      <SelectItem value="2">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
 
               <div className="space-y-2">
                 <Label htmlFor="terms">Terms & Conditions</Label>
@@ -1161,6 +1024,7 @@ export default function PromocodesPage() {
                     setFormData({...formData, PromocodeValidFor: value})
                     if (value === "1") {
                       setSelectedEvents([])
+                      setEventSearchTerm("")
                     }
                   }}
                 >
@@ -1175,33 +1039,11 @@ export default function PromocodesPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="editCanBeUsed">Visibility</Label>
-              <Select 
-                value={formData.CanBeUsed} 
-                onValueChange={(value) => {
-                  setFormData({...formData, CanBeUsed: value})
-                  if (value === "1") {
-                    setSelectedCustomers([])
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">All Customers</SelectItem>
-                  <SelectItem value="2">Specific Customers</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Event Selection - Show only when Specific is selected */}
+            {/* Event Selection - Show only when Specific Events is selected */}
             {formData.PromocodeValidFor === "2" && (
               <div className="space-y-2">
                 <Label>Select Events *</Label>
-                
-                {/* Event Search Input */}
+
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                   <Input
@@ -1209,9 +1051,10 @@ export default function PromocodesPage() {
                     value={eventSearchTerm}
                     onChange={(e) => setEventSearchTerm(e.target.value)}
                     className="pl-10"
+                    disabled={loadingEvents}
                   />
                 </div>
-                
+
                 {loadingEvents ? (
                   <div className="flex items-center justify-center py-4 border rounded-md">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -1219,44 +1062,48 @@ export default function PromocodesPage() {
                   </div>
                 ) : (
                   <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                    {events.length === 0 ? (
+                    {!Array.isArray(events) || events.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
-                    ) : events.filter((event) => 
-                        !eventSearchTerm || 
+                    ) : events.filter((event) =>
+                        !eventSearchTerm ||
                         (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
                       ).length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
                     ) : (
                       <div className="space-y-1">
                         {events
-                          .filter((event) => 
-                            !eventSearchTerm || 
+                          .filter((event) =>
+                            !eventSearchTerm ||
                             (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
                           )
-                          .map((event) => (
-                          <div key={event._id} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={`edit-event-${event._id}`}
-                              checked={selectedEvents.includes(event._id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedEvents([...selectedEvents, event._id])
-                                } else {
-                                  setSelectedEvents(selectedEvents.filter(id => id !== event._id))
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <Label htmlFor={`edit-event-${event._id}`} className="text-sm font-normal cursor-pointer">
-                              {event.eventName || event.EventName}
-                            </Label>
-                          </div>
-                        ))}
+                          .map((event) => {
+                            const eventId = event._id || event.id
+                            return (
+                              <div key={eventId} className="flex items-center space-x-2">
+                                <input
+                                  type="checkbox"
+                                  id={`edit-event-${eventId}`}
+                                  checked={selectedEvents.includes(eventId)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedEvents([...selectedEvents, eventId])
+                                    } else {
+                                      setSelectedEvents(selectedEvents.filter((id) => id !== eventId))
+                                    }
+                                  }}
+                                  className="rounded"
+                                />
+                                <Label htmlFor={`edit-event-${eventId}`} className="text-sm font-normal cursor-pointer">
+                                  {event.eventName || event.EventName || 'Untitled Event'}
+                                </Label>
+                              </div>
+                            )
+                          })}
                       </div>
                     )}
                   </div>
                 )}
+
                 {selectedEvents.length > 0 && (
                   <p className="text-xs text-muted-foreground">
                     {selectedEvents.length} event(s) selected
@@ -1265,52 +1112,21 @@ export default function PromocodesPage() {
               </div>
             )}
 
-            {/* Customer Selection - Show only when Specific is selected */}
-            {formData.CanBeUsed === "2" && (
-              <div className="space-y-2">
-                <Label>Select Customers *</Label>
-                {loadingCustomers ? (
-                  <div className="flex items-center justify-center py-4 border rounded-md">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    <span className="text-sm">Loading customers...</span>
-                  </div>
-                ) : (
-                  <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                    {customers.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-2">No customers available</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {customers.map((customer) => (
-                          <div key={customer._id} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              id={`edit-customer-${customer._id}`}
-                              checked={selectedCustomers.includes(customer._id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedCustomers([...selectedCustomers, customer._id])
-                                } else {
-                                  setSelectedCustomers(selectedCustomers.filter(id => id !== customer._id))
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <Label htmlFor={`edit-customer-${customer._id}`} className="text-sm font-normal cursor-pointer">
-                              {customer.CustomerName || customer.Email || 'Unknown Customer'}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-                {selectedCustomers.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedCustomers.length} customer(s) selected
-                  </p>
-                )}
-              </div>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="editCanBeUsed">Visibility</Label>
+              <Select 
+                value={formData.CanBeUsed} 
+                onValueChange={(value) => setFormData({...formData, CanBeUsed: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">Public</SelectItem>
+                  <SelectItem value="2">Private</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="editTerms">Terms & Conditions</Label>

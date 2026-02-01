@@ -1118,7 +1118,12 @@ export default function TicketsPage() {
 
       if (response.ok) {
         const data = await response.json()
-        
+
+        // Backend may return 200 with { error: true, message: "..." }
+        if (data?.error) {
+          throw new Error(data?.message || "Failed to create ticket")
+        }
+
         if (activeTab === "bulk") {
           // Special handling for bulk tickets with email confirmation
           toast({
@@ -1128,9 +1133,10 @@ export default function TicketsPage() {
         } else {
           toast({
             title: "Success",
-            description: "Ticket created successfully",
+            description: data.message || "Ticket created successfully",
           })
         }
+
         setShowCreateModal(false)
         setSelectedPromoters([]) // Reset selected promoters
         setSelectedEventDateTimes([]) // Reset selected dates
@@ -1182,6 +1188,20 @@ export default function TicketsPage() {
         } else {
           fetchBulkTickets()
         }
+      } else {
+        // Try to surface backend message on non-2xx responses
+        let errorText = ""
+        try {
+          const maybeJson = await response.json()
+          errorText = maybeJson?.message || ""
+        } catch {
+          try {
+            errorText = await response.text()
+          } catch {
+            errorText = ""
+          }
+        }
+        throw new Error(errorText || `Failed to create ticket (HTTP ${response.status})`)
       }
     } catch (error) {
       console.error("Error creating ticket:", error)
