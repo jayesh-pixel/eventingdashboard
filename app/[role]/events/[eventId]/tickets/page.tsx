@@ -1853,24 +1853,22 @@ export default function TicketsPage() {
                       <TableHead>Ticket Name</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Price</TableHead>
-                      <TableHead>Type</TableHead>
                       <TableHead>Ticket Date</TableHead>
                       <TableHead>Pending Quantity</TableHead>
                       <TableHead>Availability</TableHead>
-                      <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredNormalTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           No tickets found
                         </TableCell>
                       </TableRow>
@@ -1885,9 +1883,14 @@ export default function TicketsPage() {
                         // Calculate pending quantity (remaining tickets)
                         const totalQuantity = extendedTicket.Quantity || ticket.TicketQuantity || 0
                         const soldTickets = ticket.SoldTickets || 0
-                        const pendingQuantity = ticket.RemainingTickets !== undefined 
-                          ? ticket.RemainingTickets 
-                          : (totalQuantity - soldTickets)
+                        const pendingQuantity =
+                          (extendedTicket as any).PendingQuantity ??
+                          (ticket as any).PendingQuantity ??
+                          (ticket as any).pendingQuantity ??
+                          (ticket as any).Pending_Quantity ??
+                          (ticket as any).RemainingTickets ??
+                          (ticket as any).remainingTickets ??
+                          (totalQuantity - soldTickets)
                         
                         // Check if ticket is disabled
                         const statusValue = extendedTicket.EventTicketStatus ?? 
@@ -1907,9 +1910,6 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {formatCurrency(extendedTicket.Price || ticket.TicketPrice || 0)}
-                            </TableCell>
-                            <TableCell>
-                              {getTicketTypeName(extendedTicket.EventTicketType || ticket.TicketType || 1)}
                             </TableCell>
                             <TableCell>
                               {ticketEventDate 
@@ -1958,9 +1958,6 @@ export default function TicketsPage() {
                                   })()}
                                 </span>
                               </div>
-                            </TableCell>
-                            <TableCell>
-                              {formatDate(extendedTicket.createdAt || extendedTicket.CreatedAt || ticket.createdAt || ticket.CreatedAt || '')}
                             </TableCell>
                             <TableCell className="text-right">
                               <DropdownMenu>
@@ -2053,7 +2050,6 @@ export default function TicketsPage() {
                       <TableHead>Customer Name</TableHead>
                       <TableHead>Email</TableHead>
                       <TableHead>Phone No.</TableHead>
-                      <TableHead>Ticket Created</TableHead>
                       <TableHead>Quantity</TableHead>
                       <TableHead>Check In</TableHead>
                       <TableHead>Ticket Price</TableHead>
@@ -2064,13 +2060,13 @@ export default function TicketsPage() {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={13} className="text-center py-8">
+                        <TableCell colSpan={12} className="text-center py-8">
                           <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
                     ) : filteredBulkTickets.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={13} className="text-center py-8">
+                        <TableCell colSpan={12} className="text-center py-8">
                           No bulk tickets found
                         </TableCell>
                       </TableRow>
@@ -2113,9 +2109,6 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {extendedTicket.PhoneNo || ticket.PhoneNo || 'N/A'}
-                            </TableCell>
-                            <TableCell>
-                              {formatDate(extendedTicket.createdAt || extendedTicket.CreatedAt || ticket.createdAt || ticket.CreatedAt || '')}
                             </TableCell>
                             <TableCell>
                               {quantity}

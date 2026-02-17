@@ -28,7 +28,7 @@ interface BookingsTableProps {
   statusFilter: string
   channelFilter: string
   formatDate: (date: Date | string | number) => string
-  formatDateTime: (date: Date | string | number) => string
+  formatDateTime?: (date: Date | string | number) => string
   formatCurrency: (amount: number) => string
   getStatusBadgeVariant: (status: string) => "default" | "secondary" | "destructive" | "outline"
   onCancelBooking?: (booking: Booking) => void
@@ -50,6 +50,25 @@ export function BookingsTable({
 }: BookingsTableProps) {
   const [selectedBooking, setSelectedBooking] = React.useState<Booking | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = React.useState(false)
+
+  const formatDateTimeSafe = React.useCallback(
+    (date: Date | string | number) => {
+      if (typeof formatDateTime === "function") return formatDateTime(date)
+
+      if (!date) return "N/A"
+      const parsed = new Date(date)
+      if (Number.isNaN(parsed.getTime())) return "N/A"
+
+      return parsed.toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    },
+    [formatDateTime]
+  )
 
   const handleViewDetails = (booking: Booking) => {
     setSelectedBooking(booking)
@@ -160,7 +179,7 @@ export function BookingsTable({
                 {/* Booking Date & Time */}
                 <td className="w-36 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
-                    {formatDateTime(booking.BookingDateTime || booking.bookingDate)}
+                    {formatDateTimeSafe(booking.BookingDateTime || booking.bookingDate)}
                   </span>
                 </td>
                 {/* Event Name */}
@@ -308,7 +327,7 @@ export function BookingsTable({
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{selectedBooking.Email || selectedBooking.customerEmail}</td>
                 </tr>                <tr className="bg-white dark:bg-gray-800 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Booking Date & Time</td>
-                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDateTime(selectedBooking.BookingDateTime || selectedBooking.bookingDate)}</td>
+                  <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{formatDateTimeSafe(selectedBooking.BookingDateTime || selectedBooking.bookingDate)}</td>
                 </tr>                <tr className="bg-gray-50 dark:bg-gray-900 border-b dark:border-gray-700">
                   <td className="px-3 py-2 font-medium text-gray-900 dark:text-white">Event</td>
                   <td className="px-3 py-2 text-gray-700 dark:text-gray-300">{selectedBooking.EventName || selectedBooking.eventName || "-"}</td>
@@ -434,7 +453,7 @@ export function BookingsTable({
                 </div>                <div>
                   <span className="text-gray-500 dark:text-gray-400">Date:</span>
                   <p className="font-medium text-gray-900 dark:text-white">
-                    {formatDateTime(booking.BookingDateTime || booking.bookingDate)}
+                    {formatDateTimeSafe(booking.BookingDateTime || booking.bookingDate)}
                   </p>
                 </div>                <div>
                   <span className="text-gray-500 dark:text-gray-400">Quantity:</span>
