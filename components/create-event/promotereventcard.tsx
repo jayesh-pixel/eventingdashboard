@@ -83,15 +83,6 @@ export default function PromoterEventCard({
           {event.eventName}
         </h3>
 
-        {/* Event Description - Truncated */}
-        {event.eventDescription && (
-          <TruncatedText 
-            text={event.eventDescription} 
-            maxLines={2}
-            className="my-2"
-          />
-        )}
-
         {/* Date & Time */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Calendar className="h-4 w-4 text-primary" />

@@ -39,7 +39,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeType, PromocodeStatus, CreatePromocodeRequest } from "@/lib/types"
 import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
-import { getNumericAdminRole } from "@/lib/api-constants"
+import { AdminRoles, getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors: Record<number, string> = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -114,8 +114,8 @@ export default function PromocodesPage() {
   }
 
   // Fetch events for selection
-  const fetchEvents = useCallback(async () => {
-    if (!user) return
+  const fetchEvents = useCallback(async (): Promise<any[]> => {
+    if (!user) return []
 
     setLoadingEvents(true)
     try {
@@ -159,6 +159,7 @@ export default function PromocodesPage() {
       }
 
       setEvents(eventsArray)
+      return eventsArray
     } catch (error) {
       console.error("Error fetching events:", error)
       toast({
@@ -167,6 +168,7 @@ export default function PromocodesPage() {
         variant: "destructive",
       })
       setEvents([])
+      return []
     } finally {
       setLoadingEvents(false)
     }
@@ -331,11 +333,32 @@ export default function PromocodesPage() {
       return
     }
 
+    const numericAdminRole = user ? getNumericAdminRole(user.AdminRole) : AdminRoles.SuperAdmin
+    const isSuperAdmin = numericAdminRole === AdminRoles.SuperAdmin
+
     setSubmitting(true)
     try {
       const token = getValidToken()
       if (!token) {
         throw new Error("Authentication required")
+      }
+
+      // Super admin can't rely on implicit scoping; backend expects explicit event ids.
+      let superAdminAllEventIds: string[] = []
+      if (isSuperAdmin && formData.PromocodeValidFor === "1") {
+        const availableEvents = Array.isArray(events) && events.length > 0 ? events : await fetchEvents()
+        superAdminAllEventIds = (availableEvents || [])
+          .map((event) => getEventId(event))
+          .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+
+        if (superAdminAllEventIds.length === 0) {
+          toast({
+            title: "Validation Error",
+            description: "No events found to attach this promocode to",
+            variant: "destructive",
+          })
+          return
+        }
       }
 
       // Build base request data
@@ -352,6 +375,10 @@ export default function PromocodesPage() {
         // Backend validation requires Events to be present and non-empty.
         // For "All Events" we send a placeholder item; for "Specific Events" we send explicit event_id values.
         Events: [{}],
+      }
+
+      if (isSuperAdmin && formData.PromocodeValidFor === "1") {
+        requestData.Events = superAdminAllEventIds.map((id) => ({ event_id: id }))
       }
 
       if (formData.PromocodeValidFor === "2") {
