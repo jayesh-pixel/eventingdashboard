@@ -281,7 +281,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       if (!user || !token || !selectedDateId) return;
       const selectedTicket = tickets.find((t) => counts[t._id] > 0);
       if (!selectedTicket) return;
-
+console.log
       const payload = {
         promoter_id: user.user_id,
         event_id: eventId,

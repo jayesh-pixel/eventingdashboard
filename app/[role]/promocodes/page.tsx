@@ -73,7 +73,6 @@ export default function PromocodesPage() {
   const [apiError, setApiError] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [selectedPromocode, setSelectedPromocode] = useState<Promocode | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -98,6 +97,21 @@ export default function PromocodesPage() {
   })
   
   const itemsPerPage = 10
+
+  const getEventId = (event: any): string | null => {
+    const id = event?._id ?? event?.id ?? event?.event_id ?? event?.Event_id
+    return typeof id === "string" && id.trim() ? id : null
+  }
+
+  const getEventName = (event: any): string => {
+    return (
+      event?.eventName ||
+      event?.EventName ||
+      event?.Name ||
+      event?.title ||
+      "Untitled Event"
+    )
+  }
 
   // Fetch events for selection
   const fetchEvents = useCallback(async () => {
@@ -158,12 +172,14 @@ export default function PromocodesPage() {
     }
   }, [user, toast])
 
+
   // Load events when dialog opens and Specific Events is selected
   useEffect(() => {
-    if ((isCreateDialogOpen || isEditDialogOpen) && formData.PromocodeValidFor === "2") {
+    if (isCreateDialogOpen && formData.PromocodeValidFor === "2") {
       fetchEvents()
     }
-  }, [isCreateDialogOpen, isEditDialogOpen, formData.PromocodeValidFor, fetchEvents])
+  }, [isCreateDialogOpen, formData.PromocodeValidFor, fetchEvents])
+
 
   // Debounce search term
   useEffect(() => {
@@ -262,6 +278,11 @@ export default function PromocodesPage() {
     }).format(amount)
   }
 
+  const parseDecimal = (value: string): number => {
+    const normalized = String(value ?? "").trim().replace(/,/g, ".")
+    return Number(normalized)
+  }
+
   const handleCreatePromocode = async () => {
     if (!formData.PromoCodeName.trim()) {
       toast({
@@ -272,7 +293,8 @@ export default function PromocodesPage() {
       return
     }
 
-    if (!formData.Value || parseFloat(formData.Value) <= 0) {
+    const valueNumber = parseDecimal(formData.Value)
+    if (!formData.Value || !Number.isFinite(valueNumber) || valueNumber <= 0) {
       toast({
         title: "Validation Error", 
         description: "Value must be greater than 0",
@@ -281,7 +303,8 @@ export default function PromocodesPage() {
       return
     }
 
-    if (!formData.MinCheckoutAmount || parseFloat(formData.MinCheckoutAmount) < 0) {
+    const minCheckoutNumber = parseDecimal(formData.MinCheckoutAmount)
+    if (!formData.MinCheckoutAmount || !Number.isFinite(minCheckoutNumber) || minCheckoutNumber < 0) {
       toast({
         title: "Validation Error",
         description: "Minimum checkout amount must be 0 or greater",
@@ -320,24 +343,30 @@ export default function PromocodesPage() {
         PromoCodeName: formData.PromoCodeName.trim(),
         TermsCondition: formData.TermsCondition.trim(),
         PromocodeType: formData.PromocodeType,
-        Value: parseFloat(formData.Value),
-        MinCheckoutAmount: parseFloat(formData.MinCheckoutAmount),
+        Value: valueNumber,
+        MinCheckoutAmount: minCheckoutNumber,
         ExpiryDate: formData.ExpiryDate,
         OneTimeUseFlag: formData.OneTimeUseFlag ? 1 : 0,
         PromocodeValidFor: formData.PromocodeValidFor,
         CanBeUsed: formData.CanBeUsed,
+        // Backend validation requires Events to be present and non-empty.
+        // For "All Events" we send a placeholder item; for "Specific Events" we send explicit event_id values.
+        Events: [{}],
       }
 
-      // Only include Events if PromocodeValidFor is "2" (Specific Events)
       if (formData.PromocodeValidFor === "2") {
-        requestData.Events = selectedEvents.map((id) => ({ event_id: id }))
+        requestData.Events = selectedEvents.filter(Boolean).map((id) => ({ event_id: id }))
       }
 
       console.log("Final request data keys:", Object.keys(requestData))
 
       console.log("Sending promocode request data:", JSON.stringify(requestData, null, 2)) // Debug log
 
-      const response = await fetch(promocodeEndPoint.CREATE_PROMOCODE, {
+      const url = "/api/promocode/create"
+      console.log("Creating promocode via proxy:", url)
+
+      // Use the same-origin proxy to avoid intermittent cross-origin 404s.
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -381,53 +410,6 @@ export default function PromocodesPage() {
     setSelectedPromocode(null)
     setSelectedEvents([])
     setEventSearchTerm("")
-  }
-
-  const handleEdit = (promocode: Promocode) => {
-    setSelectedPromocode(promocode)
-    setFormData({
-      PromoCodeName: promocode.PromoCodeName,
-      TermsCondition: promocode.TermsCondition || "",
-      PromocodeType: promocode.PromocodeType.toString(),
-      Value: promocode.Value.toString(),
-      MinCheckoutAmount: promocode.MinCheckoutAmount.toString(),
-      ExpiryDate: promocode.ExpiryDate.split('T')[0], // Format date for input
-      OneTimeUseFlag: promocode.OneTimeUseFlag === 1,
-      PromocodeValidFor: promocode.PromocodeValidFor || "1",
-      CanBeUsed: promocode.CanBeUsed || "1"
-    })
-    setSelectedEvents(promocode.Events ? promocode.Events.map((e: any) => e.event_id || e._id).filter(Boolean) : [])
-    setIsEditDialogOpen(true)
-  }
-
-  const handleUpdatePromocode = async () => {
-    if (!selectedPromocode) return
-
-    setSubmitting(true)
-    try {
-      const token = getValidToken()
-      if (!token) {
-        throw new Error("Authentication required")
-      }
-
-      // Note: Update endpoint might need to be verified with backend team
-      // For now, we'll show a message that this functionality needs backend support
-      toast({
-        title: "Feature Not Available",
-        description: "Update promocode endpoint needs to be implemented in the backend",
-        variant: "destructive",
-      })
-      setIsEditDialogOpen(false)
-      resetForm()
-    } catch (error: any) {
-      toast({
-        title: "Error", 
-        description: error.message || "Failed to update promocode",
-        variant: "destructive",
-      })
-    } finally {
-      setSubmitting(false)
-    }
   }
 
   const handleDelete = (promocode: Promocode) => {
@@ -563,11 +545,10 @@ export default function PromocodesPage() {
                   </Label>
                   <Input
                     id="value"
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={formData.Value}
-                    onChange={(e) => setFormData({...formData, Value: e.target.value})}
+                    onChange={(e) => setFormData((prev) => ({...prev, Value: e.target.value}))}
                     placeholder="Enter value"
                   />
                 </div>
@@ -575,11 +556,10 @@ export default function PromocodesPage() {
                   <Label htmlFor="minAmount">Minimum Checkout Amount (₹) *</Label>
                   <Input
                     id="minAmount"
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={formData.MinCheckoutAmount}
-                    onChange={(e) => setFormData({...formData, MinCheckoutAmount: e.target.value})}
+                    onChange={(e) => setFormData((prev) => ({...prev, MinCheckoutAmount: e.target.value}))}
                     placeholder="Enter minimum amount"
                   />
                 </div>
@@ -643,20 +623,21 @@ export default function PromocodesPage() {
                     <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
                       {!Array.isArray(events) || events.length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
-                      ) : events.filter((event) =>
-                          !eventSearchTerm ||
-                          (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
-                        ).length === 0 ? (
+                      ) : events.filter((event) => {
+                          const name = getEventName(event).toLowerCase()
+                          return !eventSearchTerm || name.includes(eventSearchTerm.toLowerCase())
+                        }).length === 0 ? (
                         <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
                       ) : (
                         <div className="space-y-1">
                           {events
-                            .filter((event) =>
-                              !eventSearchTerm ||
-                              (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
-                            )
+                            .filter((event) => {
+                              const name = getEventName(event).toLowerCase()
+                              return !eventSearchTerm || name.includes(eventSearchTerm.toLowerCase())
+                            })
                             .map((event) => {
-                              const eventId = event._id || event.id
+                              const eventId = getEventId(event)
+                              if (!eventId) return null
                               return (
                                 <div key={eventId} className="flex items-center space-x-2">
                                   <input
@@ -665,15 +646,15 @@ export default function PromocodesPage() {
                                     checked={selectedEvents.includes(eventId)}
                                     onChange={(e) => {
                                       if (e.target.checked) {
-                                        setSelectedEvents([...selectedEvents, eventId])
+                                        setSelectedEvents((prev) => (prev.includes(eventId) ? prev : [...prev, eventId]))
                                       } else {
-                                        setSelectedEvents(selectedEvents.filter((id) => id !== eventId))
+                                        setSelectedEvents((prev) => prev.filter((id) => id !== eventId))
                                       }
                                     }}
                                     className="rounded"
                                   />
                                   <Label htmlFor={`event-${eventId}`} className="text-sm font-normal cursor-pointer">
-                                    {event.eventName || event.EventName || 'Untitled Event'}
+                                    {getEventName(event)}
                                   </Label>
                                 </div>
                               )
@@ -695,7 +676,9 @@ export default function PromocodesPage() {
                   <Label htmlFor="canBeUsed">Visibility</Label>
                   <Select 
                     value={formData.CanBeUsed} 
-                    onValueChange={(value) => setFormData({...formData, CanBeUsed: value})}
+                    onValueChange={(value) => {
+                      setFormData({ ...formData, CanBeUsed: value })
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -863,14 +846,6 @@ export default function PromocodesPage() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handleEdit(promocode)}
-                            disabled={submitting}
-                          >
-                            Edit
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
                             onClick={() => handleToggleStatus(promocode)}
                             disabled={submitting}
                             className={promocode.status === PromocodeStatus.Active ? "text-orange-600" : "text-green-600"}
@@ -936,234 +911,6 @@ export default function PromocodesPage() {
           <DialogFooter>
             <Button onClick={() => setShowErrorDialog(false)}>Close</Button>
             <Button onClick={handleRefresh} variant="outline">Retry</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Dialog */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Edit Promocode</DialogTitle>
-            <DialogDescription>
-              Update promocode details
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-y-auto grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editPromocodeName">Promocode Name *</Label>
-                <Input
-                  id="editPromocodeName"
-                  value={formData.PromoCodeName}
-                  onChange={(e) => setFormData({...formData, PromoCodeName: e.target.value})}
-                  placeholder="Enter promocode name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editPromocodeType">Type *</Label>
-                <Select 
-                  value={formData.PromocodeType} 
-                  onValueChange={(value) => setFormData({...formData, PromocodeType: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Fixed Amount</SelectItem>
-                    <SelectItem value="2">Percentage</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editValue">
-                  Value * {formData.PromocodeType === "2" && "(%)"} {formData.PromocodeType === "1" && "(₹)"}
-                </Label>
-                <Input
-                  id="editValue"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.Value}
-                  onChange={(e) => setFormData({...formData, Value: e.target.value})}
-                  placeholder="Enter value"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editMinAmount">Minimum Checkout Amount (₹) *</Label>
-                <Input
-                  id="editMinAmount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.MinCheckoutAmount}
-                  onChange={(e) => setFormData({...formData, MinCheckoutAmount: e.target.value})}
-                  placeholder="Enter minimum amount"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editExpiryDate">Expiry Date *</Label>
-                <Input
-                  id="editExpiryDate"
-                  type="date"
-                  value={formData.ExpiryDate}
-                  onChange={(e) => setFormData({...formData, ExpiryDate: e.target.value})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editValidFor">Valid For</Label>
-                <Select 
-                  value={formData.PromocodeValidFor} 
-                  onValueChange={(value) => {
-                    setFormData({...formData, PromocodeValidFor: value})
-                    if (value === "1") {
-                      setSelectedEvents([])
-                      setEventSearchTerm("")
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">All Events</SelectItem>
-                    <SelectItem value="2">Specific Events</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Event Selection - Show only when Specific Events is selected */}
-            {formData.PromocodeValidFor === "2" && (
-              <div className="space-y-2">
-                <Label>Select Events *</Label>
-
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <Input
-                    placeholder="Search events..."
-                    value={eventSearchTerm}
-                    onChange={(e) => setEventSearchTerm(e.target.value)}
-                    className="pl-10"
-                    disabled={loadingEvents}
-                  />
-                </div>
-
-                {loadingEvents ? (
-                  <div className="flex items-center justify-center py-4 border rounded-md">
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    <span className="text-sm">Loading events...</span>
-                  </div>
-                ) : (
-                  <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                    {!Array.isArray(events) || events.length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
-                    ) : events.filter((event) =>
-                        !eventSearchTerm ||
-                        (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
-                      ).length === 0 ? (
-                      <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
-                    ) : (
-                      <div className="space-y-1">
-                        {events
-                          .filter((event) =>
-                            !eventSearchTerm ||
-                            (event.eventName || event.EventName || '').toLowerCase().includes(eventSearchTerm.toLowerCase())
-                          )
-                          .map((event) => {
-                            const eventId = event._id || event.id
-                            return (
-                              <div key={eventId} className="flex items-center space-x-2">
-                                <input
-                                  type="checkbox"
-                                  id={`edit-event-${eventId}`}
-                                  checked={selectedEvents.includes(eventId)}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setSelectedEvents([...selectedEvents, eventId])
-                                    } else {
-                                      setSelectedEvents(selectedEvents.filter((id) => id !== eventId))
-                                    }
-                                  }}
-                                  className="rounded"
-                                />
-                                <Label htmlFor={`edit-event-${eventId}`} className="text-sm font-normal cursor-pointer">
-                                  {event.eventName || event.EventName || 'Untitled Event'}
-                                </Label>
-                              </div>
-                            )
-                          })}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {selectedEvents.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {selectedEvents.length} event(s) selected
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="editCanBeUsed">Visibility</Label>
-              <Select 
-                value={formData.CanBeUsed} 
-                onValueChange={(value) => setFormData({...formData, CanBeUsed: value})}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">Public</SelectItem>
-                  <SelectItem value="2">Private</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="editTerms">Terms & Conditions</Label>
-              <textarea
-                id="editTerms"
-                className="w-full min-h-[80px] px-3 py-2 border border-input bg-background rounded-md text-sm resize-none"
-                value={formData.TermsCondition}
-                onChange={(e) => setFormData({...formData, TermsCondition: e.target.value})}
-                placeholder="Enter terms and conditions"
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                id="editOneTimeUse"
-                checked={formData.OneTimeUseFlag}
-                onChange={(e) => setFormData({...formData, OneTimeUseFlag: e.target.checked})}
-                className="rounded"
-              />
-              <Label htmlFor="editOneTimeUse">One Time Use Only</Label>
-            </div>
-          </div>
-          <DialogFooter className="flex-shrink-0">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsEditDialogOpen(false)
-                resetForm()
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleUpdatePromocode} disabled={submitting}>
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update Promocode
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

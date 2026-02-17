@@ -38,8 +38,8 @@ export default function PromoterEventCard({
   return (
     <Card
       key={event._id}
-      className="group overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
-      style={{ maxWidth: 410, minWidth: 340, width: "100%" }}
+      className="group flex h-full flex-col overflow-visible hover:shadow-2xl hover:shadow-primary/5 transition-all duration-500 border-0 bg-gradient-to-br from-card/95 to-card/85 backdrop-blur-md hover:from-card/100 hover:to-card/95 cursor-pointer"
+      style={{ maxWidth: 410, minWidth: 340, width: "100%", height: "100%" }}
     >
       {/* Enhanced Image Section with Overlay Effects */}
       <div className="relative overflow-hidden">
@@ -105,14 +105,14 @@ export default function PromoterEventCard({
       </div>
 
       {/* Enhanced Content Section */}
-      <div className="p-5 space-y-4 overflow-visible">
+      <div className="p-5 flex flex-1 flex-col gap-4 overflow-visible">
         {/* Header with improved typography */}
         <div className="space-y-2">
-          <h3 className="font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
+          <h3 className="min-h-[3.25rem] font-bold text-lg leading-tight line-clamp-2 group-hover:text-primary transition-colors duration-300">
             {event.eventName}
           </h3>
           <div 
-            className="text-sm text-muted-foreground line-clamp-3 leading-relaxed"
+            className="min-h-[4.5rem] text-sm text-muted-foreground line-clamp-3 leading-relaxed"
             dangerouslySetInnerHTML={{ 
               __html: stripHtmlTags(event.eventDescription).length > 100 
                 ? stripHtmlTags(event.eventDescription).substring(0, 100) + '...' 
@@ -187,7 +187,7 @@ export default function PromoterEventCard({
         </div>
 
         {/* Desktop Action Buttons with improved styling */}
-        <div className="flex gap-3 pt-2 overflow-visible">
+        <div className="mt-auto flex gap-3 pt-2 overflow-visible">
           <Button 
             size="sm" 
             variant="outline"
