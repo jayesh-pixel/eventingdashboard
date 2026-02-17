@@ -467,12 +467,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     }
   }
 
-  // Reset all filters
-  const resetAllFilters = () => {
-    setSearchTerm("")
-    setChannelFilter("all")
-  }
-
   // Export filtered bookings to Excel
   const exportToExcel = () => {
     try {
@@ -600,93 +594,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
                 </div>
               </div>
 
-              {/* Date Selection */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Select Date:</span>
-                  <Select value="all" onValueChange={() => {}}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue placeholder="All" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* Event Filters */}
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-medium">Event Filter</h3>
-                  <Button variant="outline" size="sm" onClick={resetAllFilters}>
-                    Reset All
-                  </Button>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* City */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">City</label>
-                    <Select value="delhi" onValueChange={() => {}}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select City" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="delhi">Delhi</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Venue */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Venue</label>
-                    <Select value="odeum" onValueChange={() => {}}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Venue" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="odeum">Odeum By Prism: Hyderabad</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Organizers */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Organizers</label>
-                    <Select value="icenation" onValueChange={() => {}}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Organizer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="icenation">icenation</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Event Name */}
-                  <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Event Name</label>
-                    <Select value="goa-takeover" onValueChange={() => {}}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select Event" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="goa-takeover">Goa Takeover by DJ Chetas at HAMMERZ 21 Dec</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 mt-4">
-                  <Button variant="outline" size="sm">
-                    Close
-                  </Button>
-                  <Button size="sm">
-                    Search
-                  </Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </div>

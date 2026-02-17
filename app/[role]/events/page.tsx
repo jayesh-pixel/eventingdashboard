@@ -69,7 +69,6 @@ import PromoterIndicator from "@/components/promoter-indicator"
 import PromoterPopup from "@/components/promoter-popup"
 import OrganizerIndicator from "@/components/organizer-indicator"
 import OrganizerPopup from "@/components/organizer-popup"
-import { TruncatedText } from "@/components/truncated-text"
 import {
   Dialog,
   DialogContent,
@@ -1669,8 +1668,6 @@ export default function EventsPage({ params }: EventsPageProps) {
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="font-semibold text-foreground bg-muted/30">Event Name</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[200px]">Description</TableHead>
-                  <TableHead className="font-semibold text-foreground bg-muted/30 min-w-[200px]">Terms & Conditions</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Start Date & Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">End Time</TableHead>
                   <TableHead className="font-semibold text-foreground bg-muted/30">Category</TableHead>
@@ -1688,7 +1685,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               <TableBody>
                 {currentEvents.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={14} className="text-center py-16">
+                    <TableCell colSpan={(role as UserRole) !== "organizer" ? 11 : 10} className="text-center py-16">
                       <div className="space-y-6">
                         <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
                           <AlertCircle className="h-10 w-10 text-muted-foreground" />
@@ -1727,18 +1724,6 @@ export default function EventsPage({ params }: EventsPageProps) {
                             <Badge variant="destructive" className="text-xs font-bold">DISABLED</Badge>
                           )}
                         </div>
-                      </TableCell>
-                      <TableCell className="min-w-[200px]">
-                        <TruncatedText 
-                          text={event.eventDescription || "No description"} 
-                          maxLines={2}
-                        />
-                      </TableCell>
-                      <TableCell className="min-w-[200px]">
-                        <TruncatedText 
-                          text={event.eventTermsCondition || event.eventTermsandConditions || "No terms and conditions"} 
-                          maxLines={2}
-                        />
                       </TableCell>
                       <TableCell>
                         <div>
@@ -2480,7 +2465,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           {(role as UserRole) !== "promoter" && renderTabContent()}
           {(role as UserRole) === "promoter" && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6 overflow-visible">
-              {currentEvents.length === 0 ? (                
+              {currentEvents.filter((event) => !isEventDisabled(event)).length === 0 ? (
                 <div className="col-span-full text-center py-16">
                   <div className="space-y-6">
                     <div className="w-20 h-20 mx-auto bg-gradient-to-br from-muted/40 to-muted/20 rounded-full flex items-center justify-center">
@@ -2498,19 +2483,21 @@ export default function EventsPage({ params }: EventsPageProps) {
                     </Button>                  </div>
                 </div>
               ) : (
-                currentEvents.map((event) => (
-                  <PromoterEventCard
-                    key={event._id}
-                    event={event}
-                    onCheckReport={handleCheckReport}
-                    onBookTicket={handleBookTicket}
-                    formatDate={formatDate}
-                    formatTime={formatTime}
-                    stripHtmlTags={stripHtmlTags}
-                    getStatusBadgeVariant={getStatusBadgeVariant}
-                    normalizeEventStatus={normalizeEventStatus}
-                  />
-                ))
+                currentEvents
+                  .filter((event) => !isEventDisabled(event))
+                  .map((event) => (
+                    <PromoterEventCard
+                      key={event._id}
+                      event={event}
+                      onCheckReport={handleCheckReport}
+                      onBookTicket={handleBookTicket}
+                      formatDate={formatDate}
+                      formatTime={formatTime}
+                      stripHtmlTags={stripHtmlTags}
+                      getStatusBadgeVariant={getStatusBadgeVariant}
+                      normalizeEventStatus={normalizeEventStatus}
+                    />
+                  ))
               )}
             </div>
           )}

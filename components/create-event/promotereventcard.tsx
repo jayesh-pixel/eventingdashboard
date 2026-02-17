@@ -40,7 +40,7 @@ export default function PromoterEventCard({
   return (
     <Card
       key={event._id}
-      className={`group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border -mt-16 ${
+      className={`group w-full max-w-xs rounded-lg overflow-hidden hover:shadow-lg transition-shadow duration-300 bg-white dark:bg-card border ${
         isDisabled 
           ? 'border-red-500 dark:border-red-600 bg-red-50 dark:bg-red-950/20' 
           : 'border-border'

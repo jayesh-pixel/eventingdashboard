@@ -52,10 +52,15 @@ import { TicketType } from "@/lib/types";
 // Types & Interfaces
 // ──────────────────────────────────────────────────────────────────────────────
 interface BookingTicketsPageProps {
-  params: {
-    role: UserRole;
-    eventId: string;
-  };
+  params:
+    | {
+        role: UserRole;
+        eventId: string;
+      }
+    | Promise<{
+        role: UserRole;
+        eventId: string;
+      }>;
 }
 
 interface EventDateTime {
@@ -109,7 +114,15 @@ const formatDateBlock = (iso: string) => {
 // Component
 // -----------------------------------------------------------------------------
 export default function BookingTicketsPage({ params }: BookingTicketsPageProps) {
-  const { role, eventId } = params;
+  // Handle params which might be a Promise (consistent with other client pages in this repo)
+  let resolvedParams: { role: UserRole; eventId: string };
+  if (params instanceof Promise) {
+    resolvedParams = React.use(params);
+  } else {
+    resolvedParams = params;
+  }
+
+  const { role, eventId } = resolvedParams;
   const router = useRouter();
   const { user } = useAuth();
   const { toast } = useToast();
