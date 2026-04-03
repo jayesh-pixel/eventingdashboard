@@ -693,6 +693,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             ticketPrice: ticketPrice,
             ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
             totalRevenue: totalRevenue,
+            bookingType: item.EventTicketType === 1 || item.eventTicketType === 1 ? "Promoter" : item.EventTicketType === 2 || item.eventTicketType === 2 ? "Online" : item.BookingType || item.bookingType || "N/A",
           }
         })
         
@@ -742,6 +743,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           amount: Number(item.TotalAmount || item.amount || item.Amount || 0),
           remark: item.remark || item.Remark || item.remarks || item.note || "N/A",
           status: item.status === 1 ? "Confirmed" : item.status === 2 ? "Cancelled" : item.status || "Unknown",
+          bookingType: item.EventTicketType === 1 || item.eventTicketType === 1 ? "Promoter" : item.EventTicketType === 2 || item.eventTicketType === 2 ? "Online" : item.BookingType || item.bookingType || "N/A",
         }))
         
         // Sort transaction data by bookingDate (latest first)
@@ -920,6 +922,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                           <TableHead className="text-right">Ticket Price</TableHead>
                           <TableHead className="text-center">Ticket Date</TableHead>
                           <TableHead className="text-right">Total Amount</TableHead>
+                          <TableHead className="text-center">Booking Type</TableHead>
                         </>
                       )}                      {reportType === "Transaction" && (
                         <>
@@ -928,6 +931,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                           <TableHead>Booking Date & Time</TableHead>
                           <TableHead className="text-center">Quantity</TableHead>
                           <TableHead className="text-right">Total Amount</TableHead>
+                          <TableHead className="text-center">Booking Type</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead className="text-center">Action</TableHead>
                         </>
@@ -943,6 +947,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell className="text-right">₹{(item.ticketPrice || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-center">{item.ticketDate ? new Date(item.ticketDate).toLocaleDateString() : "N/A"}</TableCell>
                             <TableCell className="text-right">₹{(item.totalRevenue || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={item.bookingType === "Promoter" ? "default" : item.bookingType === "Online" ? "secondary" : "outline"}>
+                                {item.bookingType}
+                              </Badge>
+                            </TableCell>
                           </>
                         )}                        {reportType === "Transaction" && (
                           <>
@@ -951,6 +960,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell>{item.bookingDate ? new Date(item.bookingDate).toLocaleDateString() : "N/A"}</TableCell>
                             <TableCell className="text-center">{item.quantity || 0}</TableCell>
                             <TableCell className="text-right">₹{(item.amount || 0).toLocaleString()}</TableCell>
+                            <TableCell className="text-center">
+                              <Badge variant={item.bookingType === "Promoter" ? "default" : item.bookingType === "Online" ? "secondary" : "outline"}>
+                                {item.bookingType}
+                              </Badge>
+                            </TableCell>
                             <TableCell>
                               <Badge variant={item.status === "Confirmed" ? "default" : item.status === "Cancelled" ? "destructive" : "secondary"}>
                                 {item.status || "N/A"}

@@ -102,9 +102,11 @@ export function BookingsTable({
             <th scope="col" className="w-28 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Ticket Date
             </th>
-            <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
-              Source
-            </th>
+            {role !== "promoter" && (
+              <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
+                Source
+              </th>
+            )}
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               City
             </th>
@@ -126,7 +128,12 @@ export function BookingsTable({
             <th scope="col" className="w-24 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
               Status
             </th>
-            {role !== "organizer" && (
+            {(role === "superadmin" || role === "organizer") && (
+              <th scope="col" className="w-32 px-3 py-3 text-left text-xs font-medium text-gray-900 dark:text-white uppercase">
+                Promoter Name
+              </th>
+            )}
+            {(role === "superadmin") && (
               <th scope="col" className="w-32 px-3 py-3 text-center text-xs font-medium text-gray-900 dark:text-white uppercase">
                 Actions
               </th>
@@ -136,7 +143,7 @@ export function BookingsTable({
         <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
           {bookings.length === 0 ? (
             <tr>
-              <td colSpan={role === "organizer" ? 15 : 16} className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <td colSpan={20} className="text-center py-12 text-gray-500 dark:text-gray-400">
                 <div className="flex flex-col items-center space-y-3">
                   <div className="text-lg font-medium">
                     {searchTerm || statusFilter !== "all" || channelFilter !== "all"
@@ -194,12 +201,14 @@ export function BookingsTable({
                     {(booking.TicketDate || booking.ticketDate) ? formatDate(booking.TicketDate || booking.ticketDate || "") : "N/A"}
                   </span>
                 </td>
-                {/* Source (Booking Channel) - Using BookingSource field from API */}
-                <td className="w-24 px-3 py-3 text-center">
-                  <span className="text-sm font-medium text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
-                    {booking.bookingChannel || "Online"}
-                  </span>
-                </td>
+                {/* Source (Booking Channel) - Hidden for promoter role */}
+                {role !== "promoter" && (
+                  <td className="w-24 px-3 py-3 text-center">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap">
+                      {booking.bookingChannel || "Online"}
+                    </span>
+                  </td>
+                )}
                 {/* City */}
                 <td className="w-24 px-3 py-3 text-center">
                   <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.EventCityName || booking.city || "N/A"}>
@@ -248,8 +257,16 @@ export function BookingsTable({
                     {booking.bookingStatus || "N/A"}
                   </span>
                 </td>
-                {/* Actions - Hidden for Organizers */}
-                {role !== "organizer" && (
+                {/* Promoter Name - Visible for SuperAdmin and Organizer */}
+                {(role === "superadmin" || role === "organizer") && (
+                  <td className="w-32 px-3 py-3 text-left">
+                    <span className="text-sm text-gray-900 dark:text-white block truncate overflow-hidden text-ellipsis whitespace-nowrap" title={booking.promoterName || booking.PromoterName || "-"}>
+                      {booking.promoterName || booking.PromoterName || "-"}
+                    </span>
+                  </td>
+                )}
+                {/* Actions - Only for SuperAdmin */}
+                {(role === "superadmin") && (
                   <td className="w-32 px-3 py-3 text-center">
                     <div className="flex gap-1 justify-center">
                       {booking.bookingStatus === "Booked" || booking.bookingStatus === "Confirmed" ? (

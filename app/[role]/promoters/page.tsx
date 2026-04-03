@@ -646,6 +646,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify({
           promoter_id: selectedPromoter._id,
           new_password: newPassword,
+          CreatedBy: "1",
+          createduser_id: user?.user_id || "",
         }),
       })
 

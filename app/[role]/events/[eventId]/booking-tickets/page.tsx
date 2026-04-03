@@ -43,7 +43,7 @@ import {
 // ──────────────────────────────────────────────────────────────────────────────
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/hooks/use-toast";
-import { promoterEndPointPannel } from "@/lib/api-endpoints";
+import { promoterEndPointPannel, websiteCustomer } from "@/lib/api-endpoints";
 import { getValidToken } from "@/lib/token-utils";
 import type { UserRole } from "@/lib/navigation";
 import { TicketType } from "@/lib/types";
@@ -138,6 +138,8 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   const [showCount, setShowCount] = React.useState<Record<string, boolean>>({});
   const [customerFormPage, setCustomerFormPage] = React.useState(false);
   const [checkoutPage, setCheckoutPage] = React.useState(false);
+  const [bookingSuccessPage, setBookingSuccessPage] = React.useState(false);
+  const [bookingResult, setBookingResult] = React.useState<any>(null);
 
   // Customer details -----------------------------------------------------------
   const [customer, setCustomer] = React.useState({
@@ -332,15 +334,53 @@ console.log
         throw new Error(msg);
       }
 
+      let bookingData: any = null;
+      try {
+        bookingData = JSON.parse(text);
+      } catch (_) {
+        /* ignore non-JSON */
+      }
+
       toast({ title: "Success", description: `Booked ${totalTickets} ticket(s) for ₹${totalPrice}` });
 
-      // Reset UI
-      setCounts({});
-      setShowCount({});
+      // Create customer record (fire-and-forget, don't block booking success)
+      try {
+        await fetch(websiteCustomer.CREATE_CUSTOMER_WEBSITE, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            CustomerName: customer.FullName,
+            Email: customer.Email,
+            MobileNumber: customer.PhoneNo,
+            createduser_id: user.user_id,
+          }),
+        });
+      } catch {
+        // Customer creation is best-effort; don't fail the booking
+      }
+
+      // Store booking details for success page
+      const selectedDate = dates.find((d) => d._id === selectedDateId);
+      setBookingResult({
+        bookingId: bookingData?.data?.Booking_id || bookingData?.data?.booking_id || bookingData?.data?._id || "N/A",
+        customerName: customer.FullName,
+        phone: customer.PhoneNo,
+        email: customer.Email,
+        ticketName: selectedTicket?.Name || "N/A",
+        quantity: totalTickets,
+        totalPrice: totalPrice,
+        ticketPrice: selectedTicket?.Price || 0,
+        eventDate: selectedDate ? new Date(selectedDate.EventStartDateTime).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A",
+        eventTime: selectedDate ? formatTimeInIST(selectedDate.EventStartDateTime) + " - " + formatTimeInIST(selectedDate.EventEndDateTime) : "N/A",
+        bookingDate: new Date().toLocaleString("en-IN"),
+        status: "Confirmed",
+      });
       setCheckoutPage(false);
       setCustomerFormPage(false);
-      setCustomer({ FullName: "", PhoneNo: "", Email: "", Age: "", noteDescription: "", WhatsAppNo: "", isWhatsApp: 1 });
-      router.push(`/${role}/events`);
+      setBookingSuccessPage(true);
     } catch (err: unknown) {
       console.error(err);
       toast({
@@ -360,6 +400,121 @@ console.log
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background to-muted/20">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // BOOKING SUCCESS PAGE (shown after successful booking)
+  // ---------------------------------------------------------------------------
+  if (bookingSuccessPage && bookingResult) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 flex flex-col gap-6 max-w-2xl">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 mb-2">
+              <svg className="h-8 w-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-green-600 dark:text-green-400">Booking Confirmed!</h1>
+            <p className="text-muted-foreground">Your tickets have been booked successfully</p>
+          </div>
+
+          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-green-500/5 to-green-500/10 p-4">
+              <CardTitle className="text-xl">Booking Details</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Booking ID</p>
+                  <p className="font-semibold font-mono">{bookingResult.bookingId}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <Badge variant="default" className="bg-green-600">{bookingResult.status}</Badge>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Customer Name</p>
+                  <p className="font-semibold">{bookingResult.customerName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Phone</p>
+                  <p className="font-semibold">{bookingResult.phone}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Email</p>
+                  <p className="font-semibold">{bookingResult.email}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Booking Date</p>
+                  <p className="font-semibold">{bookingResult.bookingDate}</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Ticket Name</p>
+                  <p className="font-semibold">{bookingResult.ticketName}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Event Date</p>
+                  <p className="font-semibold">{bookingResult.eventDate}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Event Time</p>
+                  <p className="font-semibold">{bookingResult.eventTime}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Quantity</p>
+                  <p className="font-semibold">{bookingResult.quantity}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Ticket Price</p>
+                  <p className="font-semibold">₹{bookingResult.ticketPrice}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Total Amount</p>
+                  <p className="font-bold text-lg text-primary">₹{bookingResult.totalPrice}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => {
+                setCounts({});
+                setShowCount({});
+                setBookingSuccessPage(false);
+                setBookingResult(null);
+                setCustomer({ FullName: "", PhoneNo: "", Email: "", Age: "", noteDescription: "", WhatsAppNo: "", isWhatsApp: 1 });
+                router.push(`/${role}/events`);
+              }}
+            >
+              Back to Events
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={() => {
+                setCounts({});
+                setShowCount({});
+                setBookingSuccessPage(false);
+                setBookingResult(null);
+                setCustomer({ FullName: "", PhoneNo: "", Email: "", Age: "", noteDescription: "", WhatsAppNo: "", isWhatsApp: 1 });
+                setCustomerFormPage(false);
+                setCheckoutPage(false);
+              }}
+            >
+              Book Another Ticket
+            </Button>
+          </div>
+        </div>
       </div>
     );
   }

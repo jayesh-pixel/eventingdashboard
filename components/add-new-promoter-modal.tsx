@@ -183,6 +183,14 @@ const AddNewPromoterModal = ({
   const getSelectedPromotersCount = () => selectedPromoterIds.length
   const getInitialPromotersCount = () => (openModalPromoterData || []).length
 
+  // Check if the selected promoters have actually changed (compare IDs, not just count)
+  const hasPromoterSelectionChanged = () => {
+    const initialIds = (openModalPromoterData || []).map(p => p.promoter_id).sort()
+    const currentIds = [...selectedPromoterIds].sort()
+    if (initialIds.length !== currentIds.length) return true
+    return initialIds.some((id, index) => id !== currentIds[index])
+  }
+
   // Filter promoters based on search term
   const filteredPromoters = apiAllPromoterData.filter((promoter) => {
     if (!searchTerm) return true
@@ -410,7 +418,7 @@ const AddNewPromoterModal = ({
                       <UserPlus className="h-4 w-4 mr-2" />
                       {getSelectedPromotersCount() === 0 
                         ? "Remove All Promoters"
-                        : getSelectedPromotersCount() !== getInitialPromotersCount()
+                        : hasPromoterSelectionChanged()
                         ? "Update Promoters"
                         : "No Changes"}
                     </>

@@ -106,20 +106,20 @@ export const organizerEndpoint = {
   ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/organizer/getpasswordresetlink",
   ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/updatepassword",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
-    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getAllLatestBookingsForSuperAdminOrganizer",
   GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDataforSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getEventSummaryBookingsDataforSuperAdminOrganizer",
   GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
-    BASE_URL + "/eventticketsbooking/getAllLatestBookingsForSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getAllLatestBookingsForSuperAdminOrganizer",
   GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
-    BASE_URL + "/eventticketsbooking/getPromoterLatestBookingsForSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getPromoterLatestBookingsForSuperAdminOrganizer",
   GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
-    BASE_URL + "/eventticketsbooking/getOnlineLatestBookingsForSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getOnlineLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
-    BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
+    BASE_URL + "/eventticketbooking/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
+    BASE_URL + "/eventticketbooking/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
   ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",
   ORGANIZER_TOTAL_SALES_DATA_URL: BASE_URL + "/organizer/totalSalesData",
   GET_ALL_SALES_PAGINATED: BASE_URL + "/organizer/getSalesPaginated",
@@ -155,24 +155,24 @@ export const promoterEndPointPannel = {
 
   GET_ALL_EVENT_DATE_BY_EVENT_ID: BASE_URL + "/events/getbyId",
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
-  BOOKING_TICKET_BY_PROMOTER: BASE_URL + "/eventticketsbooking/BookEventTicketsByPromoter",
+  BOOKING_TICKET_BY_PROMOTER: BASE_URL + "/eventticketbooking/BookEventTicketsByPromoter",
   PROMOTER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/promoter/getpasswordresetlink",
-  PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/promoter/resetPassword/",
+  PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/promoter/updatepassword",
   PROMOTER_CHANGE_PASSWORD_IN_PROFILE: BASE_URL + "/promoter/changepassword",
   GET_PROMOTER_PROFILE_DATA_BY_ID: BASE_URL + "/promoter/getById",
   UPDATE_PROMOTER_DATA_PROFILE_DATA: BASE_URL + "/promoter/updateProfile",
-  GET_PROMOTER_LATEST_BOOKINGS: BASE_URL + "/eventticketsbooking/getPromoterLatestBookings",
+  GET_PROMOTER_LATEST_BOOKINGS: BASE_URL + "/eventticketbooking/getPromoterLatestBookings",
   GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID:
-    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDataByPromoterId",
+    BASE_URL + "/eventticketbooking/getEventSummaryBookingsDataByPromoterId",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
-    BASE_URL + "/eventticketsbooking/getEventSummaryBookingsDatabyFilter",
+    BASE_URL + "/eventticketbooking/getEventSummaryBookingsDatabyFilter",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID:
-    BASE_URL + "/eventticketsbooking/getEventTransactionBookingsDataByPromoterId",
-  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING: BASE_URL + "/eventticketsbooking/getEventSummaryExcelReportbyFilter",
+    BASE_URL + "/eventticketbooking/getEventTransactionBookingsDataByPromoterId",
+  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING: BASE_URL + "/eventticketbooking/getEventSummaryExcelReportbyFilter",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING:
-    BASE_URL + "/eventticketsbooking/getEventTransactionExcelReportByPromoterId",
-  CANCEL_EVENT_TICKET: BASE_URL + "/eventticketsbooking/cancelEventTicket",
-  RESEND_EVENT_TICKET: BASE_URL + "/eventticketsbooking/resendEventTicket",
+    BASE_URL + "/eventticketbooking/getEventTransactionExcelReportByPromoterId",
+  CANCEL_EVENT_TICKET: BASE_URL + "/eventticketbooking/cancelEventTicket",
+  RESEND_EVENT_TICKET: BASE_URL + "/eventticketbooking/resendEventTicket",
 }
 // Event API Endpoints
 export const eventEndPoint = {

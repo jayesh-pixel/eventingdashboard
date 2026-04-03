@@ -104,6 +104,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [promoterFilter, setPromoterFilter] = React.useState<string>("all")
 
   // Temporary filter state (for dialog - only applied on "Apply Filter" click)
+  const [tempStatusFilter, setTempStatusFilter] = React.useState<string>("all")
+  const [tempChannelFilter, setTempChannelFilter] = React.useState<string>("all")
   const [tempCityFilter, setTempCityFilter] = React.useState<string>("all")
   const [tempVenueFilter, setTempVenueFilter] = React.useState<string>("all")
   const [tempEventNameFilter, setTempEventNameFilter] = React.useState<string>("all")
@@ -299,6 +301,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           setIsFilterDialogOpen(open)
           if (open) {
             // Sync temporary filters with current filters when opening
+            setTempStatusFilter(statusFilter)
+            setTempChannelFilter(channelFilter)
             setTempCityFilter(cityFilter)
             setTempVenueFilter(venueFilter)
             setTempEventNameFilter(eventNameFilter)
@@ -315,10 +319,40 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             <DialogHeader>
               <DialogTitle>Event Filter</DialogTitle>
               <DialogDescription>
-                Filter bookings by city, venue, event name, organizers, and promoters
+                Filter bookings by status, channel, city, venue, event name, organizers, and promoters
               </DialogDescription>
             </DialogHeader>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Status</label>
+                <Select value={tempStatusFilter} onValueChange={setTempStatusFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="Confirmed">Confirmed</SelectItem>
+                    <SelectItem value="Pending">Pending</SelectItem>
+                    <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    <SelectItem value="Booked">Booked</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {(role as UserRole) !== "promoter" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Channel</label>
+                  <Select value={tempChannelFilter} onValueChange={setTempChannelFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by Channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Channels</SelectItem>
+                      <SelectItem value="Online">Online</SelectItem>
+                      <SelectItem value="Promoter">Promoter</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">City</label>
                 <Select value={tempCityFilter} onValueChange={setTempCityFilter}>
@@ -431,6 +465,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 Reset All
               </Button>
               <Button onClick={() => {
+                setStatusFilter(tempStatusFilter)
+                setChannelFilter(tempChannelFilter)
                 setCityFilter(tempCityFilter)
                 setVenueFilter(tempVenueFilter)
                 setEventNameFilter(tempEventNameFilter)
@@ -764,28 +800,24 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return () => clearTimeout(delay)
   }, [searchTerm])
 
-  // Filter bookings using API calls for search and status only
-  // City, venue, event name, organizer, and promoter filters are applied client-side
+  // Filter bookings using API calls for search only
+  // Status, channel, city, venue, event name, organizer, and promoter filters are applied client-side on Apply button
   React.useEffect(() => {
     if (!user) return
 
-    const hasActiveFilters = 
-      debouncedSearchTerm !== "" || 
-      statusFilter !== "all" || 
-      channelFilter !== "all"
+    const hasActiveFilters = debouncedSearchTerm !== ""
 
-    // If no filters are active, fetch data without filters
+    // If no search active, fetch data without filters
     if (!hasActiveFilters) {
       fetchBookingsData()
       return
     }
 
-    // Prepare filter object for API call (only search and status)
+    // Prepare filter object for API call (only search)
     const filters = {
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
-      statusFilter: statusFilter !== "all" ? statusFilter : undefined,
-      channelFilter: channelFilter !== "all" ? channelFilter : undefined,
-      // Note: city, venue, eventName, organizer, and promoter filters are applied client-side
+      statusFilter: undefined,
+      channelFilter: undefined,
       cityFilter: undefined,
       venueFilter: undefined,
       eventNameFilter: undefined,
@@ -797,7 +829,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     
     // Call API with filters
     fetchBookingsData(filters)
-  }, [debouncedSearchTerm, statusFilter, channelFilter, user])
+  }, [debouncedSearchTerm, user])
 
   // Initial data fetch - refetch when user or activeTab changes
   React.useEffect(() => {
@@ -887,6 +919,16 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       })
     }
 
+    // Apply status filter (client-side)
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((booking) => booking.bookingStatus === statusFilter)
+    }
+
+    // Apply channel filter (client-side)
+    if (channelFilter !== "all") {
+      filtered = filtered.filter((booking) => booking.bookingChannel === channelFilter)
+    }
+
     // Apply city filter
     if (cityFilter !== "all") {
       filtered = filtered.filter((booking) => booking.city === cityFilter)
@@ -915,7 +957,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     }
 
     return filtered
-  }, [bookingsData, debouncedSearchTerm, cityFilter, venueFilter, eventNameFilter, organizerFilter, promoterFilter])
+  }, [bookingsData, debouncedSearchTerm, statusFilter, channelFilter, cityFilter, venueFilter, eventNameFilter, organizerFilter, promoterFilter])
 
   // Paginated bookings for current page
   const currentBookings = React.useMemo(() => {
@@ -1303,18 +1345,6 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
 
-                    {(role as UserRole) !== "promoter" && (
-                      <Select value={channelFilter} onValueChange={setChannelFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Filter by Channel" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Channels</SelectItem>
-                          <SelectItem value="Online">Online</SelectItem>
-                          <SelectItem value="Promoter">Promoter</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
                     <Button variant="outline" onClick={resetAllFilters}>
                       Clear Filters
                     </Button>
@@ -1434,7 +1464,19 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             </TabsContent>
             </div>
           </Tabs>        </div>        {/* Mobile Filter Sheet */}
-        <Sheet open={isFilterSheetOpen} onOpenChange={setIsFilterSheetOpen}>
+        <Sheet open={isFilterSheetOpen} onOpenChange={(open) => {
+          setIsFilterSheetOpen(open)
+          if (open) {
+            // Sync temporary filters with current filters when opening
+            setTempStatusFilter(statusFilter)
+            setTempChannelFilter(channelFilter)
+            setTempCityFilter(cityFilter)
+            setTempVenueFilter(venueFilter)
+            setTempEventNameFilter(eventNameFilter)
+            setTempOrganizerFilter(organizerFilter)
+            setTempPromoterFilter(promoterFilter)
+          }
+        }}>
           <SheetContent side="bottom" className="h-[85vh] flex flex-col">
             <SheetHeader className="text-left">
               <SheetTitle className="flex items-center gap-2">
@@ -1459,13 +1501,28 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   />
                 </div>
 
-
+                {/* Status Filter */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Booking Status</label>
+                  <Select value={tempStatusFilter} onValueChange={setTempStatusFilter}>
+                    <SelectTrigger className="h-12">
+                      <SelectValue placeholder="Filter by Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Statuses</SelectItem>
+                      <SelectItem value="Confirmed">Confirmed</SelectItem>
+                      <SelectItem value="Pending">Pending</SelectItem>
+                      <SelectItem value="Cancelled">Cancelled</SelectItem>
+                      <SelectItem value="Booked">Booked</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {/* Channel Filter */}
                 {(role as UserRole) !== "promoter" && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Booking Channel</label>
-                    <Select value={channelFilter} onValueChange={setChannelFilter}>
+                    <Select value={tempChannelFilter} onValueChange={setTempChannelFilter}>
                       <SelectTrigger className="h-12">
                         <SelectValue placeholder="Filter by Channel" />
                       </SelectTrigger>
@@ -1481,7 +1538,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 {/* City Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">City</label>
-                  <Select value={cityFilter} onValueChange={setCityFilter}>
+                  <Select value={tempCityFilter} onValueChange={setTempCityFilter}>
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select City" />
                     </SelectTrigger>
@@ -1499,7 +1556,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 {/* Venue Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Venue</label>
-                  <Select value={venueFilter} onValueChange={setVenueFilter}>
+                  <Select value={tempVenueFilter} onValueChange={setTempVenueFilter}>
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select Venue" />
                     </SelectTrigger>
@@ -1517,7 +1574,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 {/* Event Name Filter */}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Event Name</label>
-                  <Select value={eventNameFilter} onValueChange={setEventNameFilter}>
+                  <Select value={tempEventNameFilter} onValueChange={setTempEventNameFilter}>
                     <SelectTrigger className="h-12">
                       <SelectValue placeholder="Select Event" />
                     </SelectTrigger>
@@ -1536,7 +1593,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 {(role as UserRole) === "organizer" && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Promoters</label>
-                    <Select value={promoterFilter} onValueChange={setPromoterFilter}>
+                    <Select value={tempPromoterFilter} onValueChange={setTempPromoterFilter}>
                       <SelectTrigger className="h-12">
                         <SelectValue placeholder="Select Promoter" />
                       </SelectTrigger>
@@ -1557,7 +1614,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   <>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Organizers</label>
-                      <Select value={organizerFilter} onValueChange={setOrganizerFilter}>
+                      <Select value={tempOrganizerFilter} onValueChange={setTempOrganizerFilter}>
                         <SelectTrigger className="h-12">
                           <SelectValue placeholder="Select Organizer" />
                         </SelectTrigger>
@@ -1574,7 +1631,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Promoters</label>
-                      <Select value={promoterFilter} onValueChange={setPromoterFilter}>
+                      <Select value={tempPromoterFilter} onValueChange={setTempPromoterFilter}>
                         <SelectTrigger className="h-12">
                           <SelectValue placeholder="Select Promoter" />
                         </SelectTrigger>
@@ -1670,14 +1727,32 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             <div className="flex gap-3 pt-4 border-t bg-background">
               <Button
                 variant="outline"
-                onClick={resetAllFilters}
+                onClick={() => {
+                  resetAllFilters()
+                  setTempStatusFilter("all")
+                  setTempChannelFilter("all")
+                  setTempCityFilter("all")
+                  setTempVenueFilter("all")
+                  setTempEventNameFilter("all")
+                  setTempOrganizerFilter("all")
+                  setTempPromoterFilter("all")
+                }}
                 className="flex-1 h-12"
               >
                 <X className="mr-2 h-4 w-4" />
                 Reset All
               </Button>
               <Button
-                onClick={() => setIsFilterSheetOpen(false)}
+                onClick={() => {
+                  setStatusFilter(tempStatusFilter)
+                  setChannelFilter(tempChannelFilter)
+                  setCityFilter(tempCityFilter)
+                  setVenueFilter(tempVenueFilter)
+                  setEventNameFilter(tempEventNameFilter)
+                  setOrganizerFilter(tempOrganizerFilter)
+                  setPromoterFilter(tempPromoterFilter)
+                  setIsFilterSheetOpen(false)
+                }}
                 className="flex-1 h-12"
               >
                 Apply Filters

@@ -131,7 +131,7 @@ interface EventFormValues {
 const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string) => Yup.object().shape({
   eventname: Yup.string()
     .required("Event name is required")
-    .min(3, "Event name must be at least 3 characters"),
+    .min(1, "Event name must be at least 1 character"),
   
   eventDescription: Yup.string()
     .required("Event description is required")
@@ -685,7 +685,7 @@ export default function CreateEvent({
         value: category._id || category.id,
         label: category.Name || "Unnamed Category"
       }))
-      setCategories([...categoryOptions, createCategoryOption])
+      setCategories(isOrganizer ? categoryOptions : [...categoryOptions, createCategoryOption])
     } catch (error) {
       console.error("Error fetching categories:", error)
       toast({
@@ -713,7 +713,7 @@ export default function CreateEvent({
         value: artist._id || artist.id,
         label: artist.Name || "Unnamed Artist"
       }))
-      setArtists([...artistOptions, createArtistOption])
+      setArtists(isOrganizer ? artistOptions : [...artistOptions, createArtistOption])
     } catch (error) {
       console.error("Error fetching artists:", error)
       toast({
@@ -741,7 +741,7 @@ export default function CreateEvent({
         value: genre._id || genre.id,
         label: genre.Name || "Unnamed Genre"
       }))
-      setGenres([...genreOptions, createGenreOption])
+      setGenres(isOrganizer ? genreOptions : [...genreOptions, createGenreOption])
     } catch (error) {
       console.error("Error fetching genres:", error)
       toast({
@@ -3382,7 +3382,7 @@ export default function CreateEvent({
             </Formik>
           </DialogContent>
         </Dialog>
-      )}      {showCreateCategoryModal && (
+      )}      {!isOrganizer && showCreateCategoryModal && (
         <Dialog open={showCreateCategoryModal} onOpenChange={setShowCreateCategoryModal}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -3465,7 +3465,7 @@ export default function CreateEvent({
             </Formik>
           </DialogContent>
         </Dialog>
-      )}      {showCreateArtistModal && (
+      )}      {!isOrganizer && showCreateArtistModal && (
         <Dialog open={showCreateArtistModal} onOpenChange={setShowCreateArtistModal}>
           <DialogContent className="max-w-md">
             <DialogHeader>
@@ -3568,7 +3568,7 @@ export default function CreateEvent({
             </Formik>
           </DialogContent>
         </Dialog>
-      )}      {showCreateGenreModal && (
+      )}      {!isOrganizer && showCreateGenreModal && (
         <Dialog open={showCreateGenreModal} onOpenChange={setShowCreateGenreModal}>
           <DialogContent className="max-w-md">
             <DialogHeader>

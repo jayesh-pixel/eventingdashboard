@@ -130,6 +130,7 @@ export const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
     if (e.key === 'Enter') {
       const start = textarea.selectionStart
       const beforeCursor = value.substring(0, start)
+      const afterCursor = value.substring(start)
       const lines = beforeCursor.split('\n')
       const currentLine = lines[lines.length - 1]
 
@@ -139,16 +140,15 @@ export const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
 
       if (bulletMatch) {
         const [, indent, bullet, content] = bulletMatch
+        e.preventDefault()
         if (content.trim() === '') {
           // Empty bullet point, remove it
-          e.preventDefault()
           const newValue = value.substring(0, start - currentLine.length) + 
-                          indent + value.substring(start)
+                          indent + afterCursor
           onChange(newValue)
         } else {
           // Continue bullet list
-          e.preventDefault()
-          const newValue = value.substring(0, start) + `\n${indent}• ` + value.substring(start)
+          const newValue = beforeCursor + `\n${indent}• ` + afterCursor
           onChange(newValue)
           // Set cursor position after the bullet
           setTimeout(() => {
@@ -157,17 +157,16 @@ export const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
         }
       } else if (numberMatch) {
         const [, indent, number, content] = numberMatch
+        e.preventDefault()
         if (content.trim() === '') {
           // Empty numbered point, remove it
-          e.preventDefault()
           const newValue = value.substring(0, start - currentLine.length) + 
-                          indent + value.substring(start)
+                          indent + afterCursor
           onChange(newValue)
         } else {
           // Continue numbered list
-          e.preventDefault()
           const nextNumber = parseInt(number) + 1
-          const newValue = value.substring(0, start) + `\n${indent}${nextNumber}. ` + value.substring(start)
+          const newValue = beforeCursor + `\n${indent}${nextNumber}. ` + afterCursor
           onChange(newValue)
           // Set cursor position after the number
           setTimeout(() => {
@@ -176,6 +175,7 @@ export const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
           }, 0)
         }
       }
+      // For non-list lines, let the default Enter behavior work naturally
     }
   }
 
@@ -235,7 +235,7 @@ export const ReactQuillWrapper: React.FC<ReactQuillWrapperProps> = ({
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        className="border-0 resize-none focus-visible:ring-0 min-h-[150px]"
+        className="border-0 resize-y focus-visible:ring-0 min-h-[150px]"
         rows={6}
       />
     </div>

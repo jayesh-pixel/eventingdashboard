@@ -468,8 +468,8 @@ export const mockDataByEndpoint: Record<string, any> = {
   "/promoter/getallpaginatedData": mockPromoters,
 
   // Bookings endpoints
-  "/eventticketsbooking/getPromoterLatestBookings": mockBookings,
-  "/eventticketsbooking/getEventSummaryBookingsDataforSuperAdminOrganizer": mockBookings,
+  "/eventticketbooking/getPromoterLatestBookings": mockBookings,
+  "/eventticketbooking/getEventSummaryBookingsDataforSuperAdminOrganizer": mockBookings,
 }
 
 // Helper function to get mock data for an endpoint

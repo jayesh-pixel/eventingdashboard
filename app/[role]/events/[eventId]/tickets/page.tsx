@@ -986,6 +986,22 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
+      // Validate ticket name minimum length
+      const ticketName = activeTab === "normal" ? normalFormData.TicketName : bulkFormData.TicketName
+      if (!ticketName || ticketName.trim().length < 1) {
+        toast({
+          title: "Validation Error",
+          description: "Ticket name must be at least 1 character.",
+          variant: "destructive",
+        })
+        if (activeTab === "bulk") {
+          setBulkTicketCreating(false)
+        } else {
+          setLoading(false)
+        }
+        return
+      }
+
       // Validate promoter selection if visibility is set to "Promoters"
       if (activeTab === "normal" && normalFormData.VisibilityLevel === 3 && selectedPromoters.length === 0) {
         toast({
@@ -1480,7 +1496,7 @@ export default function TicketsPage() {
         const a = document.createElement('a')
         a.style.display = 'none'
         a.href = url
-        a.download = `bulk-ticket-report-${ticketName || 'report'}-${batchId}-${new Date().toISOString().split('T')[0]}.xlsx`
+        a.download = `${batchId}-${ticketName || 'bulk-ticket'}-report.xlsx`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -2114,9 +2130,7 @@ export default function TicketsPage() {
                               {quantity}
                             </TableCell>
                             <TableCell>
-                              <Badge variant={extendedTicket.CheckedIn || ticket.CheckedIn ? "default" : "secondary"}>
-                                {extendedTicket.CheckedIn || ticket.CheckedIn ? "Checked In" : "Pending"}
-                              </Badge>
+                              {extendedTicket.CheckIn ?? ticket.CheckIn ?? 0} / {quantity}
                             </TableCell>
                             <TableCell>
                               {formatCurrency(ticketPrice)}
