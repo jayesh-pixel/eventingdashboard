@@ -43,7 +43,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { BookingsTable } from "@/components/bookings-table"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
-import { getNumericAdminRole } from "@/lib/api-constants"
+import { getNumericRole } from "@/lib/role-mapping"
 import { getValidToken } from "@/lib/token-utils"
 
 interface EventBookingPageProps {
@@ -275,7 +275,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       } else {
         apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
         requestPayload = {
-          AdminRole: getNumericAdminRole(user.AdminRole || (role as UserRole)),
+          AdminRole: getNumericRole(role as UserRole),
           user_id: user.user_id,
           event_id: eventId, // Filter by specific event
           page: "1",

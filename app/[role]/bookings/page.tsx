@@ -49,7 +49,7 @@ import type { UserRole } from "@/lib/navigation"
 import type { Booking } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
-import { getNumericAdminRole } from "@/lib/api-constants"
+import { getNumericRole } from "@/lib/role-mapping"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { BookingsTable } from "@/components/bookings-table"
@@ -621,7 +621,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         }
       } else {
         // For superadmin/organizer, use different endpoints based on active tab
-        const adminRole = getNumericAdminRole(user.AdminRole || (role as UserRole))
+        const adminRole = getNumericRole(role as UserRole)
         
         switch (activeTab) {
           case "promoter":
