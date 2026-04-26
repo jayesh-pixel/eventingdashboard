@@ -216,7 +216,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log('Extracted cities:', cities)
       setFilterCities([...new Set(cities)].sort())
     } catch (error) {
-      console.error('Error fetching cities:', error)
+      console.warn('Error fetching cities (handled):', error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch cities filter",
@@ -253,7 +253,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log('Mapped organizers:', organizers)
       setFilterOrganizers(organizers)
     } catch (error) {
-      console.error('Error fetching organizers:', error)
+      console.warn('Error fetching organizers (handled):', error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch organizers filter",
@@ -293,7 +293,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log('Mapped venues:', venues)
       setFilterVenues(venues)
     } catch (error) {
-      console.error('Error fetching venues:', error)
+      console.warn('Error fetching venues (handled):', error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch venues filter",
@@ -333,7 +333,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log('Mapped promoters:', promoters)
       setFilterPromoters(promoters)
     } catch (error) {
-      console.error('Error fetching promoters:', error)
+      console.warn('Error fetching promoters (handled):', error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch promoters filter",
@@ -359,7 +359,7 @@ export default function EventsPage({ params }: EventsPageProps) {
     try {
       const authToken = getValidToken()
       if (!user || !authToken) {
-        console.error('No user or auth token for filter data fetch')
+        console.warn('No user or auth token for filter data fetch')
         return
       }
 
@@ -383,7 +383,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('Filter data API error response:', errorText)
+        console.warn('Filter data API error response:', errorText)
         throw new Error(`Failed to fetch filter data: ${response.status} ${response.statusText}`)
       }
 
@@ -421,7 +421,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         }
       }
     } catch (error) {
-      console.error('Error fetching filter data for organizer:', error)
+      console.warn('Error fetching filter data for organizer (handled):', error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to fetch filter data",
@@ -460,7 +460,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         ])
       }
     } catch (error) {
-      console.error('Error fetching filter options:', error)
+      console.warn('Error fetching filter options (handled):', error)
     } finally {
       setFilterOptionsLoading(false)
     }
@@ -592,7 +592,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log("- typeof user.user_id:", typeof user?.user_id)
 
       if (!user || !authToken) {
-        console.error("No user or valid auth token available")
+        console.warn("No user or valid auth token available")
         setApiError("Authentication required. Please log in to view events.")
         setLoading(false)
         return
@@ -704,7 +704,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           let errorData = null
           try {
             errorText = await response.text()
-            console.error("Error response:", errorText)
+            console.warn("Error response:", errorText)
             
             // Try to parse as JSON to get structured error
             try {
@@ -713,7 +713,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               // Not JSON, use as plain text
             }
           } catch (e) {
-            console.error("Could not read error response")
+            console.warn("Could not read error response")
           }
 
           // Handle 404 "not found" responses as empty data rather than errors
@@ -835,7 +835,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           throw new Error("Unexpected response format from server - no events array found")
         }
       } catch (apiError) {
-        console.error("API request failed:", apiError)
+        console.warn("API request failed (handled):", apiError)
         
         // Treat all API errors as no data available
         setAllEventsData([])
@@ -844,7 +844,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         setApiError(null)
       }
     } catch (error) {
-      console.error("Error in getAllEventData:", error)
+      console.warn("Error in getAllEventData (handled):", error)
       
       // Treat all errors as no data available
       setAllEventsData([])
@@ -963,7 +963,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         payload
       })
     } catch (error) {
-      console.error("Search error:", error)
+      console.warn("Search error (handled):", error)
       setAllEventsData([])
       toast({
         title: "Error",
@@ -1085,7 +1085,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         })
       }
     } catch (error) {
-      console.error("Date filter error:", error)
+      console.warn("Date filter error (handled):", error)
       setAllEventsData([])
       toast({
         title: "Error",

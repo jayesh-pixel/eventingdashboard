@@ -80,13 +80,21 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const { user } = useAuth()
   const { toast } = useToast()
   const isMobile = useIsMobile()
+  const skipNextSearchFetchRef = React.useRef(false)
   
   // State management
   const [loading, setLoading] = React.useState(true)
+  const [hasLoadedBookings, setHasLoadedBookings] = React.useState(false)
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
+  const [filterOptionsData, setFilterOptionsData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [paginationMeta, setPaginationMeta] = React.useState({
+    totalPages: 0,
+    totalBookings: 0,
+  })
   const [activeTab, setActiveTab] = React.useState(role === "promoter" ? "my-bookings" : "all")
+  const [bookingDataType, setBookingDataType] = React.useState<"transaction" | "summary">("transaction")
 
   // Error popup state
   const [isErrorDialogOpen, setIsErrorDialogOpen] = React.useState(false)
@@ -111,6 +119,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [tempEventNameFilter, setTempEventNameFilter] = React.useState<string>("all")
   const [tempOrganizerFilter, setTempOrganizerFilter] = React.useState<string>("all")
   const [tempPromoterFilter, setTempPromoterFilter] = React.useState<string>("all")
+  const [tempSearchTerm, setTempSearchTerm] = React.useState("")
 
   // Mobile UI state
   const [isFilterSheetOpen, setIsFilterSheetOpen] = React.useState(false)
@@ -124,6 +133,18 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // Filter popup state
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
 
+  const getAppliedEventLabel = (eventId: string) => {
+    const eventOption = filterOptionsData.find((booking) => booking.eventId === eventId || booking.eventName === eventId)
+    return eventOption?.eventName || eventId
+  }
+
+  const getAppliedOrganizerLabel = (organizerId: string) => {
+    const organizerOption = filterOptionsData.find(
+      (booking) => booking.organizerId === organizerId || booking.organizerName === organizerId
+    )
+    return organizerOption?.organizerName || organizerId
+  }
+
   // Helper function to get available tabs based on role
   const getAvailableTabs = () => {
     const tabs = []
@@ -132,7 +153,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       tabs.push({
         value: "all",
         label: "All Bookings",
-        count: filteredBookings.length
+        count: totalBookingsCount
       })
     }
 
@@ -140,7 +161,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       tabs.push({
         value: "my-bookings",
         label: "My Bookings",
-        count: filteredBookings.length
+        count: totalBookingsCount
       })
     }
 
@@ -263,12 +284,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           )}
           {eventNameFilter !== "all" && (
             <Badge variant="secondary" className="flex-shrink-0 text-xs">
-              Event: {eventNameFilter.length > 15 ? `${eventNameFilter.substring(0, 15)}...` : eventNameFilter}
+              Event: {getAppliedEventLabel(eventNameFilter).length > 15 ? `${getAppliedEventLabel(eventNameFilter).substring(0, 15)}...` : getAppliedEventLabel(eventNameFilter)}
             </Badge>
           )}
           {organizerFilter !== "all" && (
             <Badge variant="secondary" className="flex-shrink-0 text-xs">
-              Organizer: {organizerFilter.length > 15 ? `${organizerFilter.substring(0, 15)}...` : organizerFilter}
+              Organizer: {getAppliedOrganizerLabel(organizerFilter).length > 15 ? `${getAppliedOrganizerLabel(organizerFilter).substring(0, 15)}...` : getAppliedOrganizerLabel(organizerFilter)}
             </Badge>
           )}
           {promoterFilter !== "all" && (
@@ -308,6 +329,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             setTempEventNameFilter(eventNameFilter)
             setTempOrganizerFilter(organizerFilter)
             setTempPromoterFilter(promoterFilter)
+            setTempSearchTerm(searchTerm)
           }
         }}>
           <DialogTrigger asChild>
@@ -393,9 +415,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Events</SelectItem>
-                    {getUniqueEventNames.map((eventName) => (
-                      <SelectItem key={eventName} value={eventName}>
-                        {eventName}
+                    {getUniqueEventNames.map((event) => (
+                      <SelectItem key={event.id} value={event.id}>
+                        {event.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -430,8 +452,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       <SelectContent>
                         <SelectItem value="all">All Organizers</SelectItem>
                         {getUniqueOrganizers.map((organizer) => (
-                          <SelectItem key={organizer} value={organizer}>
-                            {organizer}
+                          <SelectItem key={organizer.id} value={organizer.id}>
+                            {organizer.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -465,13 +487,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                 Reset All
               </Button>
               <Button onClick={() => {
-                setStatusFilter(tempStatusFilter)
-                setChannelFilter(tempChannelFilter)
-                setCityFilter(tempCityFilter)
-                setVenueFilter(tempVenueFilter)
-                setEventNameFilter(tempEventNameFilter)
-                setOrganizerFilter(tempOrganizerFilter)
-                setPromoterFilter(tempPromoterFilter)
+                applyBookingFilters()
                 setIsFilterDialogOpen(false)
               }}>
                 Apply Filters
@@ -499,7 +515,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const ticketName = booking.TicketName || booking.ticketName || booking.ticket_name || ""
       const ticketType = booking.EventTicketType || booking.ticketType || booking.ticket_type || ""
       const ticketPrice = booking.TicketPrice || booking.ticketPrice || booking.ticket_price || 0
-      const quantity = booking.TicketQuantity || booking.quantity || booking.ticket_quantity || 1
+      const quantity = booking.TicketQuantity || booking.Quantity || booking.quantity || booking.ticket_quantity || booking.TotalQuantity || 0
       const bookingDate = booking.BookingDateTime || booking.bookingDate || booking.booking_date || booking.FilterationBookingDateTime || booking.createdAt || booking.created_at || ""
       const totalAmount = booking.TotalAmount || booking.totalAmount || booking.total_amount || booking.Price || booking.price || 0
       
@@ -511,7 +527,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       if (booking.status !== undefined) {
         if (booking.status === 1 || booking.status === "1") {
           status = "Confirmed"
-        } else if (booking.status === 0 || booking.status === "0") {
+        } else if (booking.status === 0 || booking.status === "0" || booking.status === 2 || booking.status === "2") {
           status = "Cancelled"
         } else if (typeof booking.status === "string") {
           if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.status)) {
@@ -521,7 +537,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       } else if (booking.Status !== undefined) {
         if (booking.Status === 1 || booking.Status === "1") {
           status = "Confirmed"
-        } else if (booking.Status === 0 || booking.Status === "0") {
+        } else if (booking.Status === 0 || booking.Status === "0" || booking.Status === 2 || booking.Status === "2") {
           status = "Cancelled"
         } else if (typeof booking.Status === "string") {
           if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.Status)) {
@@ -537,7 +553,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
       return {
         _id: bookingId,
-        eventId: booking.eventId || booking.event_id || booking.EventId || "",
+        eventId: booking.eventId || booking.event_id || booking.EventId || booking.Event_id || booking.eventID || booking.EventID || "",
         eventName: booking.EventName || booking.eventName || booking.event_name || "N/A",
         customerId: booking.customerId || booking.customer_id || booking.CustomerId || "",
         customerName: booking.CustomerName || booking.customerName || booking.customer_name || "N/A",
@@ -572,7 +588,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         PromoterName: booking.PromoterName || booking.promoterName,
         OrganizerName: booking.OrganizerName || booking.organizerName,
         OrganizerId: booking.OrganizerId || booking.organizerId,
-        TicketQuantity: booking.TicketQuantity || booking.quantity,
+        TicketQuantity: booking.TicketQuantity || booking.Quantity || booking.quantity || booking.TotalQuantity,
         TicketName: booking.TicketName || booking.ticketName,
         EventTicketType: booking.EventTicketType || booking.ticketType,
         TicketPrice: booking.TicketPrice || booking.ticketPrice,
@@ -581,6 +597,30 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         Remark: booking.Remark || booking.remark,
       }
     })
+  }
+
+  const hasAppliedServerFilters = (filters?: {
+    searchTerm?: string
+    statusFilter?: string
+    channelFilter?: string
+    cityFilter?: string
+    venueFilter?: string
+    eventNameFilter?: string
+    organizerFilter?: string
+    promoterFilter?: string
+  }) => {
+    if (!filters) return false
+
+    return Boolean(
+      filters.searchTerm ||
+      (filters.statusFilter && filters.statusFilter !== "all") ||
+      (filters.channelFilter && filters.channelFilter !== "all") ||
+      (filters.cityFilter && filters.cityFilter !== "all") ||
+      (filters.venueFilter && filters.venueFilter !== "all") ||
+      (filters.eventNameFilter && filters.eventNameFilter !== "all") ||
+      (filters.organizerFilter && filters.organizerFilter !== "all") ||
+      (filters.promoterFilter && filters.promoterFilter !== "all")
+    )
   }
 
   // Fetch bookings data
@@ -593,6 +633,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     eventNameFilter?: string
     organizerFilter?: string
     promoterFilter?: string
+    page?: number
   }) => {
     try {
       setLoading(true)
@@ -619,30 +660,47 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         if (filters?.searchTerm) {
           requestPayload.searchkeyword = filters.searchTerm
         }
+        if (filters?.statusFilter && filters.statusFilter !== "all") {
+          requestPayload.status = filters.statusFilter
+        }
+        if (filters?.cityFilter && filters.cityFilter !== "all") {
+          requestPayload.cityname = filters.cityFilter
+        }
+        if (filters?.venueFilter && filters.venueFilter !== "all") {
+          requestPayload.EventVenueName = filters.venueFilter
+        }
+        if (filters?.eventNameFilter && filters.eventNameFilter !== "all") {
+          requestPayload.event_id = filters.eventNameFilter
+        }
       } else {
         // For superadmin/organizer, use different endpoints based on active tab
         const adminRole = getNumericRole(role as UserRole)
         
-        switch (activeTab) {
-          case "promoter":
-            apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
-            console.log("🎤 Using promoter booking endpoint for tab:", activeTab)
-            break
-          case "online":
-            apiEndpoint = organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
-            console.log("💻 Using online booking endpoint for tab:", activeTab)
-            break
-          case "all":
-          default:
-            apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
-            console.log("📊 Using all bookings endpoint for tab:", activeTab)
-            break
+        if (bookingDataType === "summary") {
+          apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+          console.log("📋 Using summary booking endpoint")
+        } else {
+          switch (activeTab) {
+            case "promoter":
+              apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+              console.log("🎤 Using promoter booking endpoint for tab:", activeTab)
+              break
+            case "online":
+              apiEndpoint = organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+              console.log("💻 Using online booking endpoint for tab:", activeTab)
+              break
+            case "all":
+            default:
+              apiEndpoint = organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+              console.log("📊 Using transaction booking endpoint for tab:", activeTab)
+              break
+          }
         }
         
         requestPayload = {
           AdminRole: adminRole,
           user_id: user.user_id,
-          page: currentPage.toString(),
+          page: (filters?.page ?? currentPage).toString(),
           limit: "10", // Increased limit to get more data
         }
         
@@ -652,16 +710,35 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           console.log("🔒 Organizer filter applied - organizer_id:", user.user_id)
         }
         
-        // Add filter parameters to the payload
-        // Only sending search and status - other filters are applied client-side
+        // Add applied filter parameters to the payload when Apply Filters is clicked
         if (filters?.searchTerm) {
           requestPayload.searchkeyword = filters.searchTerm
         }
         if (filters?.statusFilter && filters.statusFilter !== "all") {
           requestPayload.status = filters.statusFilter
         }
-        // City, Venue, Event Name, Organizer, and Promoter filters are applied client-side
-        // after fetching data from the API
+        if (filters?.channelFilter && filters.channelFilter !== "all") {
+          requestPayload.BookingSource = filters.channelFilter
+        } else if (bookingDataType === "summary" && activeTab === "promoter") {
+          requestPayload.BookingSource = "Promoter"
+        } else if (bookingDataType === "summary" && activeTab === "online") {
+          requestPayload.BookingSource = "Online"
+        }
+        if (filters?.cityFilter && filters.cityFilter !== "all") {
+          requestPayload.cityname = filters.cityFilter
+        }
+        if (filters?.venueFilter && filters.venueFilter !== "all") {
+          requestPayload.EventVenueName = filters.venueFilter
+        }
+        if (filters?.eventNameFilter && filters.eventNameFilter !== "all") {
+          requestPayload.event_id = filters.eventNameFilter
+        }
+        if (filters?.organizerFilter && filters.organizerFilter !== "all") {
+          requestPayload.organizer_id = filters.organizerFilter
+        }
+        if (filters?.promoterFilter && filters.promoterFilter !== "all") {
+          requestPayload.PromoterName = filters.promoterFilter
+        }
       }
 
       console.log("🚀 BOOKING API CALL:")
@@ -685,6 +762,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         console.warn("Received 404 from bookings API – showing empty state")
         setBookingsData([])
         setOriginalData([])
+        setPaginationMeta({ totalPages: 0, totalBookings: 0 })
+        setHasLoadedBookings(true)
         return
       }
 
@@ -695,6 +774,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       console.log("- Response keys:", Object.keys(data || {}))
 
       let bookingsArray = null
+      const responseData = data?.data && typeof data.data === "object" ? data.data : data
+      const apiTotalPages = Number(responseData?.totalPages) || 0
+      const apiTotalBookings = Number(responseData?.totalBookings) || 0
+      const apiCurrentPage = Number(responseData?.currentPage) || filters?.page || currentPage
       
       // Log the response structure for debugging
       console.log("🔍 API Response Structure:", JSON.stringify(data, null, 2))
@@ -702,12 +785,24 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       if (data && data.data && data.data.latestBookingData && Array.isArray(data.data.latestBookingData)) {
         bookingsArray = data.data.latestBookingData
         console.log("✅ Found latestBookingData array with", bookingsArray.length, "items")
+      } else if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
+        bookingsArray = data.data.TicketsData
+        console.log("✅ Found TicketsData array with", bookingsArray.length, "items")
+      } else if (data && data.data && data.data.SummaryBookingData && Array.isArray(data.data.SummaryBookingData)) {
+        bookingsArray = data.data.SummaryBookingData
+        console.log("✅ Found SummaryBookingData array with", bookingsArray.length, "items")
       } else if (data && data.data && data.data.BookingData && Array.isArray(data.data.BookingData)) {
         bookingsArray = data.data.BookingData
         console.log("✅ Found BookingData array with", bookingsArray.length, "items")
       } else if (data && data.data && Array.isArray(data.data)) {
         bookingsArray = data.data
         console.log("✅ Found data.data array with", bookingsArray.length, "items")
+      } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
+        bookingsArray = data.TicketsData
+        console.log("✅ Found TicketsData array with", bookingsArray.length, "items")
+      } else if (data && data.SummaryBookingData && Array.isArray(data.SummaryBookingData)) {
+        bookingsArray = data.SummaryBookingData
+        console.log("✅ Found SummaryBookingData array with", bookingsArray.length, "items")
       } else if (data && data.BookingData && Array.isArray(data.BookingData)) {
         bookingsArray = data.BookingData
         console.log("✅ Found BookingData array with", bookingsArray.length, "items")
@@ -756,10 +851,20 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           
         setBookingsData(sortedBookings)
         setOriginalData(sortedBookings)
+        if (!hasAppliedServerFilters(filters) || filterOptionsData.length === 0) {
+          setFilterOptionsData(sortedBookings)
+        }
+        setCurrentPage(apiCurrentPage)
+        setPaginationMeta({
+          totalPages: apiTotalPages,
+          totalBookings: apiTotalBookings,
+        })
         
         console.log("📊 FINAL STATE UPDATE:")
         console.log("- bookingsData will be set to", normalizedBookings.length, "items")
         console.log("- originalData will be set to", normalizedBookings.length, "items")
+        console.log("- totalPages from API:", apiTotalPages)
+        console.log("- totalBookings from API:", apiTotalBookings)
         
         if (normalizedBookings.length > 0) {
           toast({
@@ -786,7 +891,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       })
       setBookingsData([])
       setOriginalData([])
+      setPaginationMeta({ totalPages: 0, totalBookings: 0 })
     } finally {
+      setHasLoadedBookings(true)
       setLoading(false)
     }
   }
@@ -800,88 +907,115 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return () => clearTimeout(delay)
   }, [searchTerm])
 
-  // Filter bookings using API calls for search only
-  // Status, channel, city, venue, event name, organizer, and promoter filters are applied client-side on Apply button
+  // Search uses the currently applied filters. Modal/sheet filter changes still wait for Apply.
   React.useEffect(() => {
     if (!user) return
-
-    const hasActiveFilters = debouncedSearchTerm !== ""
-
-    // If no search active, fetch data without filters
-    if (!hasActiveFilters) {
-      fetchBookingsData()
+    if (skipNextSearchFetchRef.current) {
+      skipNextSearchFetchRef.current = false
       return
     }
 
-    // Prepare filter object for API call (only search)
     const filters = {
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
-      statusFilter: undefined,
-      channelFilter: undefined,
-      cityFilter: undefined,
-      venueFilter: undefined,
-      eventNameFilter: undefined,
-      organizerFilter: undefined,
-      promoterFilter: undefined
+      statusFilter,
+      channelFilter,
+      cityFilter,
+      venueFilter,
+      eventNameFilter,
+      organizerFilter,
+      promoterFilter,
+      page: 1,
     }
 
+    setCurrentPage(1)
     console.log("🔍 Applying filters via API:", filters)
-    
-    // Call API with filters
     fetchBookingsData(filters)
-  }, [debouncedSearchTerm, user])
+  }, [debouncedSearchTerm, user, bookingDataType])
 
   // Initial data fetch - refetch when user or activeTab changes
   React.useEffect(() => {
     if (user) {
       // Fetch data without filters initially
-      fetchBookingsData()
+      setCurrentPage(1)
+      fetchBookingsData({ page: 1 })
     }
-  }, [user, activeTab])
+  }, [user, activeTab, bookingDataType])
   
   const handlePageChange = (page: number) => {
+    if (page < 1 || (totalPages > 0 && page > totalPages)) return
     setCurrentPage(page)
+    fetchBookingsData({
+      searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
+      statusFilter,
+      channelFilter,
+      cityFilter,
+      venueFilter,
+      eventNameFilter,
+      organizerFilter,
+      promoterFilter,
+      page,
+    })
   }
   
   // Helper functions to get unique filter options
   const getUniqueCities = React.useMemo(() => {
-    const cities = originalData
+    const cities = filterOptionsData
       .map((booking) => booking.city)
       .filter((city): city is string => Boolean(city && city.trim() !== "" && city !== "N/A"))
     return [...new Set(cities)].sort()
-  }, [originalData])
+  }, [filterOptionsData])
 
   const getUniqueVenues = React.useMemo(() => {
-    const venues = originalData
+    const venues = filterOptionsData
       .map((booking) => booking.venue)
       .filter((venue): venue is string => Boolean(venue && venue.trim() !== "" && venue !== "N/A"))
     return [...new Set(venues)].sort()
-  }, [originalData])
+  }, [filterOptionsData])
 
   const getUniqueEventNames = React.useMemo(() => {
-    const events = originalData
-      .map((booking) => booking.eventName)
-      .filter((event): event is string => Boolean(event && event.trim() !== "" && event !== "N/A"))
-    return [...new Set(events)].sort()
-  }, [originalData])
+    const eventMap = new Map<string, string>()
+
+    filterOptionsData.forEach((booking) => {
+      const eventLabel = booking.eventName
+      const eventValue = booking.eventId || booking.eventName
+
+      if (eventValue && eventLabel && eventLabel.trim() !== "" && eventLabel !== "N/A") {
+        eventMap.set(eventValue, eventLabel)
+      }
+    })
+
+    return Array.from(eventMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [filterOptionsData])
 
   const getUniqueOrganizers = React.useMemo(() => {
-    const organizers = originalData
-      .map((booking) => booking.organizerName)
-      .filter((organizer): organizer is string => Boolean(organizer && organizer.trim() !== "" && organizer !== "N/A"))
-    return [...new Set(organizers)].sort()
-  }, [originalData])
+    const organizerMap = new Map<string, string>()
+
+    filterOptionsData.forEach((booking) => {
+      const organizerLabel = booking.organizerName
+      const organizerValue = booking.organizerId || booking.organizerName
+
+      if (organizerValue && organizerLabel && organizerLabel.trim() !== "" && organizerLabel !== "N/A") {
+        organizerMap.set(organizerValue, organizerLabel)
+      }
+    })
+
+    return Array.from(organizerMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name))
+  }, [filterOptionsData])
 
   const getUniquePromoters = React.useMemo(() => {
-    const promoters = originalData
+    const promoters = filterOptionsData
       .map((booking) => booking.promoterName || booking.PromoterName)
       .filter((promoter): promoter is string => Boolean(promoter && promoter.trim() !== "" && promoter !== "N/A"))
     return [...new Set(promoters)].sort()
-  }, [originalData])
+  }, [filterOptionsData])
 
   // Reset all filters
   const resetAllFilters = () => {
+    if (debouncedSearchTerm !== "") {
+      skipNextSearchFetchRef.current = true
+    }
     setSearchTerm("")
+    setDebouncedSearchTerm("")
     setStatusFilter("all")
     setChannelFilter("all")
     setCityFilter("all")
@@ -889,6 +1023,48 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     setEventNameFilter("all")
     setOrganizerFilter("all")
     setPromoterFilter("all")
+    setTempSearchTerm("")
+    setTempStatusFilter("all")
+    setTempChannelFilter("all")
+    setTempCityFilter("all")
+    setTempVenueFilter("all")
+    setTempEventNameFilter("all")
+    setTempOrganizerFilter("all")
+    setTempPromoterFilter("all")
+    setCurrentPage(1)
+    fetchBookingsData({ page: 1 })
+  }
+
+  const applyBookingFilters = () => {
+    const nextSearchTerm = tempSearchTerm.trim()
+    const nextFilters = {
+      searchTerm: nextSearchTerm || undefined,
+      statusFilter: tempStatusFilter,
+      channelFilter: tempChannelFilter,
+      cityFilter: tempCityFilter,
+      venueFilter: tempVenueFilter,
+      eventNameFilter: tempEventNameFilter,
+      organizerFilter: tempOrganizerFilter,
+      promoterFilter: tempPromoterFilter,
+      page: 1,
+    }
+
+    if (nextSearchTerm !== debouncedSearchTerm) {
+      skipNextSearchFetchRef.current = true
+    }
+    setSearchTerm(nextSearchTerm)
+    setDebouncedSearchTerm(nextSearchTerm)
+    setStatusFilter(tempStatusFilter)
+    setChannelFilter(tempChannelFilter)
+    setCityFilter(tempCityFilter)
+    setVenueFilter(tempVenueFilter)
+    setEventNameFilter(tempEventNameFilter)
+    setOrganizerFilter(tempOrganizerFilter)
+    setPromoterFilter(tempPromoterFilter)
+    setCurrentPage(1)
+
+    console.log("🔍 Applying booking filters from Apply button:", nextFilters)
+    fetchBookingsData(nextFilters)
   }
 
   // Client-side filtering of bookings
@@ -941,12 +1117,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
     // Apply event name filter
     if (eventNameFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.eventName === eventNameFilter)
+      filtered = filtered.filter((booking) => booking.eventId === eventNameFilter || booking.eventName === eventNameFilter)
     }
 
     // Apply organizer filter
     if (organizerFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.organizerName === organizerFilter)
+      filtered = filtered.filter((booking) => booking.organizerId === organizerFilter || booking.organizerName === organizerFilter)
     }
 
     // Apply promoter filter
@@ -961,13 +1137,25 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
   // Paginated bookings for current page
   const currentBookings = React.useMemo(() => {
+    if (paginationMeta.totalPages > 0) {
+      return filteredBookings
+    }
+
     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
     const endIndex = startIndex + ITEMS_PER_PAGE
     return filteredBookings.slice(startIndex, endIndex)
-  }, [filteredBookings, currentPage])
+  }, [filteredBookings, currentPage, paginationMeta.totalPages])
 
   // Calculate total pages
-  const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
+  const totalPages = paginationMeta.totalPages || Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
+  const totalBookingsCount = paginationMeta.totalBookings || filteredBookings.length
+  const visiblePageNumbers = React.useMemo(() => {
+    const maxVisiblePages = 5
+    const startPage = Math.max(1, Math.min(currentPage - 2, totalPages - maxVisiblePages + 1))
+    const pageCount = Math.min(totalPages, maxVisiblePages)
+
+    return Array.from({ length: pageCount }, (_, index) => startPage + index)
+  }, [currentPage, totalPages])
 
   // Export filtered bookings to Excel
   const exportToExcel = () => {
@@ -1304,7 +1492,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return null
   }
 
-  if (loading) {
+  if (loading && !hasLoadedBookings) {
     return (
       <div className="w-full min-h-screen overflow-x-hidden">
         <div className="flex flex-col gap-6 px-4 sm:px-6">
@@ -1330,7 +1518,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
             <div className="px-4 sm:px-6">
               {/* Mobile layout */}
-              {isMobile ? <MobileTabs /> : <DesktopTabs />}
+              {isMobile ? MobileTabs() : DesktopTabs()}
             </div>            {/* Filters Section - Desktop Only */}
             {!isMobile && (
               <div className="px-4 sm:px-6">
@@ -1339,6 +1527,23 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                     <CardTitle className="text-base">Filter Bookings</CardTitle>
                   </CardHeader>
                   <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {(role as UserRole) !== "promoter" && (
+                      <Select
+                        value={bookingDataType}
+                        onValueChange={(value) => {
+                          setCurrentPage(1)
+                          setBookingDataType(value as "transaction" | "summary")
+                        }}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Booking Type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="transaction">Transaction Bookings</SelectItem>
+                          <SelectItem value="summary">Summary Bookings</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    )}
                     <Input
                       placeholder="Search by Customer Name, Booking ID, Phone, Email..."
                       value={searchTerm}
@@ -1355,7 +1560,24 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
             {/* Mobile Search Bar */}
             {isMobile && (
-              <div className="px-4 sm:px-6 mt-4">
+              <div className="px-4 sm:px-6 mt-4 grid gap-3">
+                {(role as UserRole) !== "promoter" && (
+                  <Select
+                    value={bookingDataType}
+                    onValueChange={(value) => {
+                      setCurrentPage(1)
+                      setBookingDataType(value as "transaction" | "summary")
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Booking Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="transaction">Transaction Bookings</SelectItem>
+                      <SelectItem value="summary">Summary Bookings</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <Input
                   placeholder="Search bookings..."
                   value={searchTerm}
@@ -1371,12 +1593,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   <CardHeader>
                     <CardTitle>
                       {activeTab === "all"
-                        ? `All Bookings (${filteredBookings.length})`
+                        ? `All Bookings (${totalBookingsCount})`
                         : activeTab === "my-bookings"
-                          ? `My Bookings (${filteredBookings.length})`
+                          ? `My Bookings (${totalBookingsCount})`
                           : activeTab === "promoter"
-                            ? `Promoter (${filteredBookings.length})`
-                            : `Online (${filteredBookings.length})`}
+                            ? `Promoter (${totalBookingsCount})`
+                            : `Online (${totalBookingsCount})`}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0 overflow-x-hidden">
@@ -1421,25 +1643,27 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                               size="default"
                             />
                           </PaginationItem>
-                          {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                            const pageNum = i + 1
-                            return (
-                              <PaginationItem key={pageNum}>
-                                <PaginationLink
-                                  href="#"
-                                  isActive={currentPage === pageNum}
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    handlePageChange(pageNum)
-                                  }}
-                                  size="default"
-                                >
-                                  {pageNum}
-                                </PaginationLink>
-                              </PaginationItem>
-                            )
-                          })}
-                          {totalPages > 5 && (
+                          {visiblePageNumbers[0] > 1 && (
+                            <PaginationItem>
+                              <PaginationEllipsis />
+                            </PaginationItem>
+                          )}
+                          {visiblePageNumbers.map((pageNum) => (
+                            <PaginationItem key={pageNum}>
+                              <PaginationLink
+                                href="#"
+                                isActive={currentPage === pageNum}
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  handlePageChange(pageNum)
+                                }}
+                                size="default"
+                              >
+                                {pageNum}
+                              </PaginationLink>
+                            </PaginationItem>
+                          ))}
+                          {visiblePageNumbers[visiblePageNumbers.length - 1] < totalPages && (
                             <PaginationItem>
                               <PaginationEllipsis />
                             </PaginationItem>
@@ -1475,6 +1699,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
             setTempEventNameFilter(eventNameFilter)
             setTempOrganizerFilter(organizerFilter)
             setTempPromoterFilter(promoterFilter)
+            setTempSearchTerm(searchTerm)
           }
         }}>
           <SheetContent side="bottom" className="h-[85vh] flex flex-col">
@@ -1495,8 +1720,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   <label className="text-sm font-medium">Search</label>
                   <Input
                     placeholder="Search by customer, booking ID, phone..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={tempSearchTerm}
+                    onChange={(e) => setTempSearchTerm(e.target.value)}
                     className="w-full"
                   />
                 </div>
@@ -1580,9 +1805,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Events</SelectItem>
-                      {getUniqueEventNames.map((eventName) => (
-                        <SelectItem key={eventName} value={eventName}>
-                          {eventName}
+                      {getUniqueEventNames.map((event) => (
+                        <SelectItem key={event.id} value={event.id}>
+                          {event.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -1621,8 +1846,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         <SelectContent>
                           <SelectItem value="all">All Organizers</SelectItem>
                           {getUniqueOrganizers.map((organizer) => (
-                            <SelectItem key={organizer} value={organizer}>
-                              {organizer}
+                            <SelectItem key={organizer.id} value={organizer.id}>
+                              {organizer.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -1692,7 +1917,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {eventNameFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          <>Event: {eventNameFilter}</>
+                          <>Event: {getAppliedEventLabel(eventNameFilter)}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setEventNameFilter("all")}
@@ -1701,7 +1926,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       )}
                       {organizerFilter !== "all" && (
                         <Badge variant="secondary" className="flex items-center gap-1">
-                          <>Organizer: {organizerFilter}</>
+                          <>Organizer: {getAppliedOrganizerLabel(organizerFilter)}</>
                           <X
                             className="h-3 w-3 cursor-pointer hover:text-destructive"
                             onClick={() => setOrganizerFilter("all")}
@@ -1736,6 +1961,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   setTempEventNameFilter("all")
                   setTempOrganizerFilter("all")
                   setTempPromoterFilter("all")
+                  setTempSearchTerm("")
                 }}
                 className="flex-1 h-12"
               >
@@ -1744,13 +1970,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
               </Button>
               <Button
                 onClick={() => {
-                  setStatusFilter(tempStatusFilter)
-                  setChannelFilter(tempChannelFilter)
-                  setCityFilter(tempCityFilter)
-                  setVenueFilter(tempVenueFilter)
-                  setEventNameFilter(tempEventNameFilter)
-                  setOrganizerFilter(tempOrganizerFilter)
-                  setPromoterFilter(tempPromoterFilter)
+                  applyBookingFilters()
                   setIsFilterSheetOpen(false)
                 }}
                 className="flex-1 h-12"

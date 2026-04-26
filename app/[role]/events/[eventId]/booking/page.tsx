@@ -99,6 +99,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   const [currentPage, setCurrentPage] = React.useState(1)
   const [activeTab, setActiveTab] = React.useState("all")
   const [eventName, setEventName] = React.useState<string>("")
+  const [bookingDataType, setBookingDataType] = React.useState<"transaction" | "summary">("transaction")
 
   // Search and filter state
   const [searchTerm, setSearchTerm] = React.useState("")
@@ -118,7 +119,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       const ticketName = booking.TicketName || booking.ticketName || booking.ticket_name || ""
       const ticketType = booking.EventTicketType || booking.ticketType || booking.ticket_type || ""
       const ticketPrice = booking.TicketPrice || booking.ticketPrice || booking.ticket_price || 0
-      const quantity = booking.TicketQuantity || booking.quantity || booking.ticket_quantity || 1
+      const quantity = booking.TicketQuantity || booking.Quantity || booking.quantity || booking.ticket_quantity || booking.TotalQuantity || 0
       const bookingDate = booking.BookingDateTime || booking.bookingDate || booking.booking_date || booking.FilterationBookingDateTime || booking.createdAt || booking.created_at || ""
       const totalAmount = booking.TotalAmount || booking.totalAmount || booking.total_amount || booking.Price || booking.price || 0
 
@@ -126,7 +127,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       if (booking.status !== undefined) {
         if (booking.status === 1 || booking.status === "1") {
           status = "Confirmed"
-        } else if (booking.status === 0 || booking.status === "0") {
+        } else if (booking.status === 0 || booking.status === "0" || booking.status === 2 || booking.status === "2") {
           status = "Cancelled"
         } else if (typeof booking.status === "string") {
           if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.status)) {
@@ -136,7 +137,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       } else if (booking.Status !== undefined) {
         if (booking.Status === 1 || booking.Status === "1") {
           status = "Confirmed"
-        } else if (booking.Status === 0 || booking.Status === "0") {
+        } else if (booking.Status === 0 || booking.Status === "0" || booking.Status === 2 || booking.Status === "2") {
           status = "Cancelled"
         } else if (typeof booking.Status === "string") {
           if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.Status)) {
@@ -184,7 +185,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         EventCityName: booking.EventCityName || booking.city,
         EventVenueName: booking.EventVenueName || booking.venue,
         PromoterName: booking.PromoterName || booking.promoterName,
-        TicketQuantity: booking.TicketQuantity || booking.quantity,
+        TicketQuantity: booking.TicketQuantity || booking.Quantity || booking.quantity || booking.TotalQuantity,
         TicketName: booking.TicketName || booking.ticketName,
         EventTicketType: booking.EventTicketType || booking.ticketType,
         TicketPrice: booking.TicketPrice || booking.ticketPrice,
@@ -273,7 +274,10 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         setLoading(false)
         return
       } else {
-        apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+        apiEndpoint =
+          bookingDataType === "summary"
+            ? organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+            : organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
         requestPayload = {
           AdminRole: getNumericRole(role as UserRole),
           user_id: user.user_id,
@@ -311,10 +315,18 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       
       if (data && data.data && data.data.latestBookingData && Array.isArray(data.data.latestBookingData)) {
         bookingsArray = data.data.latestBookingData
+      } else if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
+        bookingsArray = data.data.TicketsData
+      } else if (data && data.data && data.data.SummaryBookingData && Array.isArray(data.data.SummaryBookingData)) {
+        bookingsArray = data.data.SummaryBookingData
       } else if (data && data.data && data.data.BookingData && Array.isArray(data.data.BookingData)) {
         bookingsArray = data.data.BookingData
       } else if (data && data.data && Array.isArray(data.data)) {
         bookingsArray = data.data
+      } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
+        bookingsArray = data.TicketsData
+      } else if (data && data.SummaryBookingData && Array.isArray(data.SummaryBookingData)) {
+        bookingsArray = data.SummaryBookingData
       } else if (data && data.BookingData && Array.isArray(data.BookingData)) {
         bookingsArray = data.BookingData
       } else if (data && data.latestBookingData && Array.isArray(data.latestBookingData)) {
@@ -326,10 +338,11 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       if (bookingsArray && Array.isArray(bookingsArray)) {
         console.log("Processing", bookingsArray.length, "raw bookings")
         
-        // Filter bookings for this specific event
+        // The API is already filtered by event_id in the request payload.
+        // Some responses do not include EventId in each row, so avoid dropping valid rows.
         const eventBookings = bookingsArray.filter(booking => {
-          const eventIdFromBooking = booking.eventId || booking.event_id || booking.EventId
-          return eventIdFromBooking === eventId
+          const eventIdFromBooking = booking.eventId || booking.event_id || booking.EventId || booking.Event_id
+          return !eventIdFromBooking || eventIdFromBooking === eventId
         })
         
         const normalizedBookings = normalizeBookingData(eventBookings)
@@ -434,7 +447,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   // Initial data fetch
   React.useEffect(() => {
     fetchEventBookingsData()
-  }, [eventId, user])
+  }, [eventId, user, bookingDataType])
   // Helper functions
   const formatDate = (date: string | number | Date) => {
     if (!date) return "N/A"
@@ -583,7 +596,24 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Search */}
-              <div className="flex items-center gap-4">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                {(role as UserRole) !== "promoter" && (
+                  <Select
+                    value={bookingDataType}
+                    onValueChange={(value) => {
+                      setCurrentPage(1)
+                      setBookingDataType(value as "transaction" | "summary")
+                    }}
+                  >
+                    <SelectTrigger className="w-full md:w-[240px]">
+                      <SelectValue placeholder="Booking Type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="transaction">Transaction Bookings</SelectItem>
+                      <SelectItem value="summary">Summary Bookings</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <div className="flex-1">
                   <Input
                     placeholder="Search By Customer Name and Booking ID"
