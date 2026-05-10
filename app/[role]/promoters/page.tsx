@@ -53,6 +53,9 @@ interface PromotersPageProps {
 
 interface Promoter {
   _id: string
+  user_id?: string
+  id?: string
+  promoter_id?: string
   FullName: string
   Username: string
   Email: string | null
@@ -207,6 +210,15 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
+      if (response.status === 404 && searchKeyword) {
+        setPromoters([])
+        setTotalPages(1)
+        setTotalPromoters(0)
+        setCurrentPage(1)
+        setShowErrorDialog(false)
+        return
+      }
+
       const result: PromotersApiResponse = await handleApiResponse(response)      // Handle paginated response structure
       if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
         const paginatedData = result.data as {
@@ -277,6 +289,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       hour: '2-digit',
       minute: '2-digit'
     })
+  }
+
+  const getPromoterId = (promoter: Promoter) => {
+    return promoter._id || promoter.user_id || promoter.id || promoter.promoter_id || ""
   }
 
   const handleViewPromoter = (promoter: Promoter) => {
@@ -637,6 +653,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         throw new Error("Authentication required")
       }
 
+      const promoterId = getPromoterId(selectedPromoter)
+      if (!promoterId) {
+        throw new Error("Promoter id not found")
+      }
+
       const response = await fetch(promoterEndPointPannel.PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD, {
         method: "POST",
         headers: {
@@ -644,9 +665,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          promoter_id: selectedPromoter._id,
+          promoter_id: promoterId,
           new_password: newPassword,
-          CreatedBy: "1",
+          CreatedBy: 1,
           createduser_id: user?.user_id || "",
         }),
       })
