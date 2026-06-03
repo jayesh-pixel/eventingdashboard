@@ -146,7 +146,7 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-auto py-2">
+      <div className="scrollbar-hide flex-1 overflow-y-auto py-2">
         <nav className="grid items-start gap-1">
           {navigationItems.map((item) => (
             <NavItem key={item.href} item={item} isCollapsed={isCollapsed} />

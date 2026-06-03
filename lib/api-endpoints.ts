@@ -118,6 +118,10 @@ export const organizerEndpoint = {
     EVENT_TICKETS_BOOKING_BASE + "/getPromoterLatestBookingsForSuperAdminOrganizer",
   GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     EVENT_TICKETS_BOOKING_BASE + "/getOnlineLatestBookingsForSuperAdminOrganizer",
+  DOWNLOAD_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    EVENT_TICKETS_BOOKING_BASE + "/downloadPromoterLatestBookingsForSuperAdminOrganizer",
+  DOWNLOAD_EXCEL_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
@@ -199,6 +203,7 @@ export const eventEndPoint = {
   GET_ALL_REJECTED_EVENTS_DATA: BASE_URL + "/events/getRejectedEvents",
   ENABLE_EVENT: BASE_URL + "/events/enableEvent",
   DISABLE_EVENT: BASE_URL + "/events/disableEvent",
+  GET_EVENT_PROMOTERS: BASE_URL + "/events/getEventPromoters",
   // Paginated endpoints for different tabs
   GET_PAGINATED_PUBLISH_EVENTS: BASE_URL + "/events/getPaginatedPublishEvents",
   GET_PAGINATED_REVIEW_EVENTS: BASE_URL + "/events/getPaginatedReviewEvents",

@@ -51,7 +51,7 @@ interface PromotersPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
 }
 
-interface Promoter {
+interface Promoter {  
   _id: string
   user_id?: string
   id?: string
@@ -209,15 +209,6 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         },
         body: JSON.stringify(requestBody),
       })
-
-      if (response.status === 404 && searchKeyword) {
-        setPromoters([])
-        setTotalPages(1)
-        setTotalPromoters(0)
-        setCurrentPage(1)
-        setShowErrorDialog(false)
-        return
-      }
 
       const result: PromotersApiResponse = await handleApiResponse(response)      // Handle paginated response structure
       if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
@@ -665,7 +656,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          promoter_id: promoterId,
+          user_id: promoterId,
           new_password: newPassword,
           CreatedBy: 1,
           createduser_id: user?.user_id || "",

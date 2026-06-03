@@ -2,24 +2,14 @@
 
 import * as React from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Pagination,
   PaginationContent,
@@ -29,20 +19,26 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import {
-  ArrowLeft,
-  Download,
-  Filter,
-  Loader2,
-  RefreshCw,
-  Search,
-  X,
-} from "lucide-react"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { ArrowLeft, Download, Filter, Loader2, Search } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import { BookingsTable } from "@/components/bookings-table"
-import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { eventEndPoint, organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { getNumericRole } from "@/lib/role-mapping"
 import { getValidToken } from "@/lib/token-utils"
 
@@ -54,246 +50,541 @@ interface Booking {
   _id: string
   eventId: string
   eventName: string
-  customerId: string
   customerName: string
   customerEmail: string
   phoneNumber: string
-  promoterId?: string
-  promoterName?: string
-  bookingChannel: "Promoter" | "Online" | "Bulk"
-  bookingStatus: "Confirmed" | "Pending" | "Cancelled" | "Booked"
+  bookingId: string
+  bookingChannel: "Promoter" | "Online" | "Bulk" | string
+  bookingStatus: "Confirmed" | "Pending" | "Cancelled" | "Booked" | string
   totalAmount: number
   quantity: number
+  checkIn: number | string
   ticketType: string
   ticketName: string
   ticketPrice: number
-  city: string
-  venue: string
   ticketDate: string
   bookingDate: string
-  createdAt: string
-  updatedAt: string
+  promoterId: string
+  promoterName: string
+  city: string
+  venue: string
+  source: string
   [key: string]: any
 }
 
+interface PromoterOption {
+  id: string
+  name: string
+}
+
+interface TransactionTotals {
+  totalQuantity: number
+  totalCheckIn: number
+  totalPrice: number
+}
+
+interface SummaryDateOption {
+  id: string
+  label: string
+  startDate: string
+  endDate: string
+}
+
 const ITEMS_PER_PAGE = 10
+const CONTROL_CLASS =
+  "h-12 border-blue-100 bg-white text-base shadow-sm focus:ring-primary/30 focus-visible:ring-primary/30"
+const ICON_BUTTON_CLASS =
+  "h-12 w-12 shrink-0 border-blue-100 bg-white text-primary shadow-sm hover:bg-blue-50 hover:text-primary"
+const TABLE_CARD_CLASS = "min-w-0 max-w-full overflow-hidden border-blue-100 shadow-sm"
+const TABLE_HEADER_CLASS = "bg-blue-50/80"
+const TABLE_HEAD_CLASS = "text-xs font-bold uppercase text-blue-950"
+
+type BookingDataType = "transaction" | "summary"
+type BookingTab = "all" | "promoter" | "online" | "bulk"
+type DateFilterOption = "all" | "today" | "yesterday" | "last7days" | "last1month" | "manual"
 
 export default function EventBookingPage({ params }: EventBookingPageProps) {
-  // Handle params which might be a Promise
-  let resolvedParams: { role: UserRole; eventId: string }
-  if (params instanceof Promise) {
-    resolvedParams = React.use(params)
-  } else {
-    resolvedParams = params
-  }
+  const resolvedParams = params instanceof Promise ? React.use(params) : params
   const { role, eventId } = resolvedParams
 
   const { user } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
 
-  // State management
   const [loading, setLoading] = React.useState(true)
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
-  const [activeTab, setActiveTab] = React.useState("all")
-  const [eventName, setEventName] = React.useState<string>("")
-  const [bookingDataType, setBookingDataType] = React.useState<"transaction" | "summary">("transaction")
-
-  // Search and filter state
+  const [activeTab, setActiveTab] = React.useState<BookingTab>("all")
+  const [eventName, setEventName] = React.useState("")
+  const [bookingDataType, setBookingDataType] = React.useState<BookingDataType>("transaction")
   const [searchTerm, setSearchTerm] = React.useState("")
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
-  const [channelFilter, setChannelFilter] = React.useState<string>("all")
-  const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
+  const [dateFilter, setDateFilter] = React.useState<DateFilterOption>("all")
+  const [manualStartDate, setManualStartDate] = React.useState("")
+  const [manualEndDate, setManualEndDate] = React.useState("")
+  const [promoterFilter, setPromoterFilter] = React.useState("all")
+  const [summaryTicketFilter, setSummaryTicketFilter] = React.useState("all")
+  const [summaryDateFilter, setSummaryDateFilter] = React.useState("all")
+  const [summaryTicketOptions, setSummaryTicketOptions] = React.useState<string[]>([])
+  const [summaryDateOptions, setSummaryDateOptions] = React.useState<SummaryDateOption[]>([])
+  const [promoters, setPromoters] = React.useState<PromoterOption[]>([])
+  const [apiErrorMessage, setApiErrorMessage] = React.useState("")
+  const [transactionTotals, setTransactionTotals] = React.useState<TransactionTotals>({
+    totalQuantity: 0,
+    totalCheckIn: 0,
+    totalPrice: 0,
+  })
 
-  // Helper function to normalize booking data
+  const getStringValue = (...values: any[]) => {
+    const value = values.find((item) => item !== undefined && item !== null && item !== "")
+    return value === undefined || value === null ? "" : String(value)
+  }
+
+  const getNumberValue = (...values: any[]) => {
+    const value = values.find((item) => item !== undefined && item !== null && item !== "")
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  const formatAmount = (amount: number) => {
+    return new Intl.NumberFormat("en-IN", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount)
+  }
+
+  const toDateInputValue = (date: Date) => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  }
+
+  const addDays = (date: Date, days: number) => {
+    const nextDate = new Date(date)
+    nextDate.setDate(nextDate.getDate() + days)
+    return nextDate
+  }
+
+  const addMonths = (date: Date, months: number) => {
+    const nextDate = new Date(date)
+    nextDate.setMonth(nextDate.getMonth() + months)
+    return nextDate
+  }
+
+  const makeApiDateRange = (startDate: string, endDate = startDate) => ({
+    startDate: `${startDate}T00:00:00+00:00`,
+    endDate: `${endDate}T23:59:59+00:00`,
+  })
+
+  const getSelectedDateRange = React.useCallback(() => {
+    if (bookingDataType === "summary" && summaryDateFilter !== "all") {
+      const [startDate, endDate] = summaryDateFilter.split("|")
+      return startDate ? makeApiDateRange(startDate, endDate || startDate) : null
+    }
+
+    const today = new Date()
+    const todayValue = toDateInputValue(today)
+
+    switch (dateFilter) {
+      case "today":
+        return makeApiDateRange(todayValue)
+      case "yesterday":
+        return makeApiDateRange(toDateInputValue(addDays(today, -1)))
+      case "last7days":
+        return makeApiDateRange(toDateInputValue(addDays(today, -6)), todayValue)
+      case "last1month":
+        return makeApiDateRange(toDateInputValue(addMonths(today, -1)), todayValue)
+      case "manual":
+        return manualStartDate && manualEndDate ? makeApiDateRange(manualStartDate, manualEndDate) : null
+      default:
+        return null
+    }
+  }, [bookingDataType, dateFilter, manualEndDate, manualStartDate, summaryDateFilter])
+
+  const parseDate = (date: string | number | Date | null | undefined): Date | null => {
+    if (!date || date === "Invalid Date") return null
+
+    if (date instanceof Date) {
+      return Number.isNaN(date.getTime()) ? null : date
+    }
+
+    if (typeof date === "number") {
+      const parsed = new Date(date)
+      return Number.isNaN(parsed.getTime()) ? null : parsed
+    }
+
+    const ddmmyyyy = date.match(/^(\d{2})-(\d{2})-(\d{4})(?:[ T](\d{2}):(\d{2}):(\d{2}))?$/)
+    if (ddmmyyyy) {
+      const parsed = new Date(
+        Number(ddmmyyyy[3]),
+        Number(ddmmyyyy[2]) - 1,
+        Number(ddmmyyyy[1]),
+        Number(ddmmyyyy[4] || 0),
+        Number(ddmmyyyy[5] || 0),
+        Number(ddmmyyyy[6] || 0)
+      )
+      return Number.isNaN(parsed.getTime()) ? null : parsed
+    }
+
+    const parsed = new Date(date)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  const formatDate = (date: string | number | Date) => {
+    const parsed = parseDate(date)
+    if (!parsed) return "N/A"
+
+    return parsed.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })
+  }
+
+  const formatDateTime = (date: string | number | Date) => {
+    const parsed = parseDate(date)
+    if (!parsed) return "N/A"
+
+    const datePart = parsed.toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+    const timePart = parsed.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    })
+    return `${datePart.replace(/\//g, "-")} ${timePart}`
+  }
+
+  const getBookingChannel = (booking: any) => {
+    const source = getStringValue(
+      booking.BookingSource,
+      booking.bookingChannel,
+      booking.booking_channel,
+      booking.Channel,
+      booking.Source,
+      booking.source,
+      booking.Sources
+    )
+
+    if (source.toLowerCase().includes("promoter")) return "Promoter"
+    if (source.toLowerCase().includes("bulk")) return "Bulk"
+    if (source.toLowerCase().includes("online")) return "Online"
+    return source || "Online"
+  }
+
   const normalizeBookingData = (bookings: any[]): Booking[] => {
     return bookings.map((booking, index) => {
-      const bookingId = booking._id || booking.id || booking.Booking_id || booking.booking_id || `temp-id-${index}`
-      const phoneNumber = booking.PhoneNumber || booking.phoneNumber || booking.phone_number || booking.Phone || ""
-      const promoterName = booking.PromoterName || booking.promoterName || booking.promoter_name || ""
-      const city = booking.EventCityName || booking.city || booking.event_city || booking.CityName || ""
-      const venue = booking.EventVenueName || booking.venue || booking.event_venue || booking.VenueName || ""
-      const ticketDate = booking.TicketDate || booking.ticketDate || booking.ticket_date || ""
-      const ticketName = booking.TicketName || booking.ticketName || booking.ticket_name || ""
-      const ticketType = booking.EventTicketType || booking.ticketType || booking.ticket_type || ""
-      const ticketPrice = booking.TicketPrice || booking.ticketPrice || booking.ticket_price || 0
-      const quantity = booking.TicketQuantity || booking.Quantity || booking.quantity || booking.ticket_quantity || booking.TotalQuantity || 0
-      const bookingDate = booking.BookingDateTime || booking.bookingDate || booking.booking_date || booking.FilterationBookingDateTime || booking.createdAt || booking.created_at || ""
-      const totalAmount = booking.TotalAmount || booking.totalAmount || booking.total_amount || booking.Price || booking.price || 0
-
-      let status: "Confirmed" | "Pending" | "Cancelled" | "Booked" = "Confirmed"
-      if (booking.status !== undefined) {
-        if (booking.status === 1 || booking.status === "1") {
-          status = "Confirmed"
-        } else if (booking.status === 0 || booking.status === "0" || booking.status === 2 || booking.status === "2") {
-          status = "Cancelled"
-        } else if (typeof booking.status === "string") {
-          if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.status)) {
-            status = booking.status as "Confirmed" | "Pending" | "Cancelled" | "Booked"
-          }
-        }
-      } else if (booking.Status !== undefined) {
-        if (booking.Status === 1 || booking.Status === "1") {
-          status = "Confirmed"
-        } else if (booking.Status === 0 || booking.Status === "0" || booking.Status === 2 || booking.Status === "2") {
-          status = "Cancelled"
-        } else if (typeof booking.Status === "string") {
-          if (["Confirmed", "Pending", "Cancelled", "Booked"].includes(booking.Status)) {
-            status = booking.Status as "Confirmed" | "Pending" | "Cancelled" | "Booked"
-          }
-        }
-      } else {
-        const bookingStatus = booking.bookingStatus || booking.booking_status
-        if (bookingStatus && ["Confirmed", "Pending", "Cancelled", "Booked"].includes(bookingStatus)) {
-          status = bookingStatus as "Confirmed" | "Pending" | "Cancelled" | "Booked"
-        }
-      }
+      const quantity = getNumberValue(
+        booking.TicketQuantity,
+        booking.Quantity,
+        booking.quantity,
+        booking.ticket_quantity,
+        booking.TotalQuantity
+      )
+      const ticketPrice = getNumberValue(booking.TicketPrice, booking.ticketPrice, booking.ticket_price, booking.Price)
+      const totalAmount = getNumberValue(
+        booking.TotalAmount,
+        booking.totalAmount,
+        booking.total_amount,
+        booking.TotalPrice,
+        quantity * ticketPrice
+      )
+      const ticketName = getStringValue(booking.TicketName, booking.ticketName, booking.ticket_name, booking.Name)
+      const ticketDate = getStringValue(booking.TicketDate, booking.ticketDate, booking.ticket_date, booking.EventDate)
+      const eventNameValue = getStringValue(booking.EventName, booking.eventName, booking.event_name)
+      const bookingId = getStringValue(booking.Booking_id, booking.booking_id, booking.bookingId, booking.id, booking._id)
+      const channel = getBookingChannel(booking)
+      const promoterId = getStringValue(booking.promoter_id, booking.PromoterId, booking.promoterId)
+      const statusValue = getStringValue(booking.bookingStatus, booking.BookingStatus, booking.status, booking.Status) || "Confirmed"
 
       return {
-        _id: bookingId,
-        eventId: booking.eventId || booking.event_id || booking.EventId || "",
-        eventName: booking.EventName || booking.eventName || booking.event_name || "N/A",
-        customerId: booking.customerId || booking.customer_id || booking.CustomerId || "",
-        customerName: booking.CustomerName || booking.customerName || booking.customer_name || "N/A",
-        customerEmail: booking.Email || booking.customerEmail || booking.customer_email || booking.email || "",
-        phoneNumber: phoneNumber,
-        promoterId: booking.promoterId || booking.promoter_id || booking.PromoterId || "",
-        promoterName: promoterName,
-        bookingChannel: booking.BookingSource || booking.bookingChannel || booking.booking_channel || booking.Channel || "Promoter",
-        bookingStatus: status,
-        totalAmount: totalAmount,
-        quantity: quantity,
-        ticketType: ticketType,
-        ticketName: ticketName,
-        ticketPrice: ticketPrice,
-        city: city,
-        venue: venue,
-        ticketDate: ticketDate,
-        bookingDate: bookingDate,
-        createdAt: booking.createdAt || booking.CreatedAt || booking.created_at || new Date().toISOString(),
-        updatedAt: booking.updatedAt || booking.UpdatedAt || booking.updated_at || new Date().toISOString(),
-        // Additional API fields for compatibility
-        Booking_id: booking.Booking_id || booking.booking_id,
-        CustomerName: booking.CustomerName || booking.customerName,
-        PhoneNumber: booking.PhoneNumber || booking.phoneNumber,
-        Email: booking.Email || booking.email,
-        BookingDateTime: booking.BookingDateTime || booking.bookingDate,
-        EventName: booking.EventName || booking.eventName,
-        TicketDate: booking.TicketDate || booking.ticketDate,
-        EventCityName: booking.EventCityName || booking.city,
-        EventVenueName: booking.EventVenueName || booking.venue,
-        PromoterName: booking.PromoterName || booking.promoterName,
-        TicketQuantity: booking.TicketQuantity || booking.Quantity || booking.quantity || booking.TotalQuantity,
-        TicketName: booking.TicketName || booking.ticketName,
-        EventTicketType: booking.EventTicketType || booking.ticketType,
-        TicketPrice: booking.TicketPrice || booking.ticketPrice,
-        TotalAmount: booking.TotalAmount || booking.totalAmount,
-        status: booking.status,
-        Remark: booking.Remark || booking.remark,
+        _id: getStringValue(booking._id, booking.id, bookingId, `booking-${index}`),
+        eventId: getStringValue(booking.eventId, booking.event_id, booking.EventId, booking.Event_id, eventId),
+        eventName: eventNameValue || "N/A",
+        customerName: getStringValue(booking.CustomerName, booking.customerName, booking.customer_name, booking.Name) || "N/A",
+        customerEmail: getStringValue(booking.Email, booking.customerEmail, booking.customer_email, booking.email),
+        phoneNumber: getStringValue(booking.PhoneNumber, booking.phoneNumber, booking.phone_number, booking.Phone),
+        bookingId: bookingId || `booking-${index + 1}`,
+        bookingChannel: channel,
+        bookingStatus: statusValue,
+        totalAmount,
+        quantity,
+        checkIn: getStringValue(booking.CheckIn, booking.checkIn, booking.Check_In, booking.checkedIn, booking.CheckinCount) || 0,
+        ticketType: getStringValue(booking.EventTicketType, booking.ticketType, booking.ticket_type, booking.TicketType),
+        ticketName,
+        ticketPrice,
+        ticketDate,
+        bookingDate: getStringValue(
+          booking.BookingDateTime,
+          booking.bookingDate,
+          booking.booking_date,
+          booking.FilterationBookingDateTime,
+          booking.createdAt,
+          booking.created_at
+        ),
+        promoterId,
+        promoterName: getStringValue(booking.PromoterName, booking.promoterName, booking.promoter_name) || "-",
+        city: getStringValue(booking.EventCityName, booking.city, booking.event_city, booking.CityName) || "-",
+        venue: getStringValue(booking.EventVenueName, booking.venue, booking.event_venue, booking.VenueName) || "-",
+        source: channel,
+        Booking_id: bookingId,
+        CustomerName: getStringValue(booking.CustomerName, booking.customerName),
+        PhoneNumber: getStringValue(booking.PhoneNumber, booking.phoneNumber),
+        Email: getStringValue(booking.Email, booking.email),
+        BookingDateTime: getStringValue(booking.BookingDateTime, booking.bookingDate),
+        EventName: eventNameValue,
+        TicketDate: ticketDate,
+        EventCityName: getStringValue(booking.EventCityName, booking.city),
+        EventVenueName: getStringValue(booking.EventVenueName, booking.venue),
+        PromoterName: getStringValue(booking.PromoterName, booking.promoterName),
+        TicketQuantity: quantity,
+        TicketName: ticketName,
+        EventTicketType: getStringValue(booking.EventTicketType, booking.ticketType),
+        TicketPrice: ticketPrice,
+        TotalAmount: totalAmount,
       }
     })
   }
 
-  // Fetch promoter tickets by event date
-  const fetchPromoterTicketsByEventDate = async (eventId: string, eventDateTimeId: string, promoterId: string) => {
-    try {
-      setLoading(true)
-      const apiUrl = "https://devapi.eventingclub.in/eventstickets/getPromoterTicketsbyEventDate"
-      const payload = {
-        event_id: eventId,
-        eventDateTime_id: eventDateTimeId,
-        promoter_id: promoterId,
-      }
-      const response = await fetch(apiUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
+  const extractBookingsArray = (data: any): any[] => {
+    const candidates = [
+      data?.data?.latestBookingData,
+      data?.data?.TicketsData,
+      data?.data?.SummaryBookingData,
+      data?.data?.BookingData,
+      data?.data?.bookings,
+      data?.latestBookingData,
+      data?.TicketsData,
+      data?.SummaryBookingData,
+      data?.BookingData,
+      data?.bookings,
+      data?.data,
+      data,
+    ]
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate
+    }
+
+    return []
+  }
+
+  const extractSummaryTicketOptions = (data: any, fallbackBookings: Booking[] = []) => {
+    const rawTickets = data?.data?.TicketNamesArray || data?.TicketNamesArray || []
+    const tickets = Array.isArray(rawTickets)
+      ? rawTickets.map((ticket) => getStringValue(ticket)).filter(Boolean)
+      : []
+    const fallbackTickets = fallbackBookings.map((booking) => booking.ticketName).filter(Boolean)
+
+    return Array.from(new Set([...tickets, ...fallbackTickets]))
+  }
+
+  const extractSummaryDateOptions = (data: any, fallbackBookings: Booking[] = []): SummaryDateOption[] => {
+    const rawDates = data?.data?.EventDateTimeData || data?.EventDateTimeData || []
+    const options = new Map<string, SummaryDateOption>()
+
+    if (Array.isArray(rawDates)) {
+      rawDates.forEach((dateItem) => {
+        const start = parseDate(dateItem?.EventStartDateTime || dateItem?.startDate || dateItem?.TicketDate)
+        const end = parseDate(dateItem?.EventEndDateTime || dateItem?.endDate || dateItem?.EventStartDateTime)
+        if (!start) return
+
+        const startDate = toDateInputValue(start)
+        const endDate = toDateInputValue(end || start)
+        const id = `${startDate}|${endDate}`
+        options.set(id, {
+          id,
+          label: formatDate(start),
+          startDate,
+          endDate,
+        })
       })
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    fallbackBookings.forEach((booking) => {
+      const parsed = parseDate(booking.ticketDate)
+      if (!parsed) return
+
+      const date = toDateInputValue(parsed)
+      const id = `${date}|${date}`
+      if (!options.has(id)) {
+        options.set(id, {
+          id,
+          label: formatDate(parsed),
+          startDate: date,
+          endDate: date,
+        })
       }
-      const data = await response.json()
-      return data
-    } catch (error) {
-      console.error("Error fetching promoter tickets by event date:", error)
-      return null
-    } finally {
-      setLoading(false)
+    })
+
+    return Array.from(options.values())
+  }
+
+  const extractTransactionTotals = (data: any, fallbackBookings: Booking[]): TransactionTotals => {
+    const responseData = data?.data || data || {}
+    const fallbackTotals = fallbackBookings.reduce(
+      (totals, booking) => ({
+        totalQuantity: totals.totalQuantity + getNumberValue(booking.quantity),
+        totalCheckIn: totals.totalCheckIn + getNumberValue(booking.checkIn),
+        totalPrice: totals.totalPrice + getNumberValue(booking.totalAmount),
+      }),
+      { totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 }
+    )
+
+    return {
+      totalQuantity: getNumberValue(responseData.totalQuantity, responseData.TotalQuantity, fallbackTotals.totalQuantity),
+      totalCheckIn: getNumberValue(
+        responseData.totalCheckInCount,
+        responseData.totalCheckIn,
+        responseData.TotalCheckIn,
+        fallbackTotals.totalCheckIn
+      ),
+      totalPrice: getNumberValue(responseData.totalPrice, responseData.TotalPrice, responseData.totalAmount, fallbackTotals.totalPrice),
     }
   }
 
-  // Fetch bookings data for specific event
-  const fetchEventBookingsData = async () => {
+  const extractPromotersArray = (data: any): any[] => {
+    const candidates = [
+      data?.data?.EventPromoters,
+      data?.data?.EventPromoter,
+      data?.data?.Promoters,
+      data?.data?.promoters,
+      data?.EventPromoters,
+      data?.EventPromoter,
+      data?.Promoters,
+      data?.promoters,
+      data?.data,
+      data,
+    ]
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate
+    }
+
+    return []
+  }
+
+  const normalizePromoterOptions = (rawPromoters: any[]): PromoterOption[] => {
+    const promoterMap = new Map<string, PromoterOption>()
+
+    rawPromoters.forEach((promoter, index) => {
+      const nestedPromoter = promoter?.promoter || promoter?.Promoter || promoter?.PromoterData || promoter
+      const id = getStringValue(
+        promoter?.promoter_id,
+        promoter?.PromoterId,
+        promoter?._id,
+        nestedPromoter?.promoter_id,
+        nestedPromoter?.PromoterId,
+        nestedPromoter?._id,
+        nestedPromoter?.id
+      )
+      const name =
+        getStringValue(
+          promoter?.PromoterName,
+          promoter?.promoterName,
+          promoter?.FullName,
+          promoter?.Username,
+          nestedPromoter?.PromoterName,
+          nestedPromoter?.promoterName,
+          nestedPromoter?.FullName,
+          nestedPromoter?.Username,
+          nestedPromoter?.name
+        ) || `Promoter ${index + 1}`
+
+      if (id) promoterMap.set(id, { id, name })
+    })
+
+    return Array.from(promoterMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  const fetchEventPromoters = React.useCallback(async () => {
+    try {
+      const authToken = getValidToken()
+      if (!authToken) return
+
+      const response = await fetch(eventEndPoint.GET_EVENT_PROMOTERS, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ event_id: eventId }),
+      })
+
+      if (!response.ok) {
+        setPromoters([])
+        return
+      }
+
+      const data = await response.json()
+      setPromoters(normalizePromoterOptions(extractPromotersArray(data)))
+    } catch (error) {
+      console.error("Error fetching event promoters:", error)
+      setPromoters([])
+    }
+  }, [eventId])
+
+  const fetchEventBookingsData = React.useCallback(async () => {
     try {
       setLoading(true)
+      setApiErrorMessage("")
 
       const authToken = getValidToken()
       if (!user || !authToken) {
-        console.warn("No user or auth token available")
         toast({
           title: "Error",
           description: "Please log in to view bookings",
           variant: "destructive",
         })
-        setLoading(false)
+        setBookingsData([])
+        setOriginalData([])
         return
       }
 
-      let apiEndpoint
-      let requestPayload: any = {}
+      const isPromoter = (role as UserRole) === "promoter"
+      let apiEndpoint = promoterEndPointPannel.GET_PROMOTER_LATEST_BOOKINGS
 
-      if ((role as UserRole) === "promoter") {
-        // --- INTEGRATED: Use the new API for promoters ---
-        // TODO: Replace this with actual eventDateTime_id source
-        const eventDateTimeId = "<eventDateTime_id_here>" // <-- Replace with actual value
-        const promoterId = user.user_id
-        const promoterTicketsData = await fetchPromoterTicketsByEventDate(eventId, eventDateTimeId, promoterId)
-        if (promoterTicketsData && Array.isArray(promoterTicketsData.data)) {
-          const normalizedBookings = normalizeBookingData(promoterTicketsData.data)
-          setBookingsData(normalizedBookings)
-          setOriginalData(normalizedBookings)
-          if (normalizedBookings.length > 0) {
-            setEventName(normalizedBookings[0].eventName)
-          }
-          toast({
-            title: "Success",
-            description: `Loaded ${normalizedBookings.length} promoter tickets for this event date`,
-          })
-        } else {
-          setBookingsData([])
-          setOriginalData([])
-          toast({
-            title: "No Data",
-            description: "No promoter tickets found for this event date",
-          })
-        }
-        setLoading(false)
-        return
+      if (!isPromoter && bookingDataType === "summary") {
+        apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+      } else if (!isPromoter && activeTab === "promoter") {
+        apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      } else if (!isPromoter && activeTab === "online") {
+        apiEndpoint = organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      } else if (!isPromoter) {
+        apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      }
+
+      const requestPayload: Record<string, any> = {
+        event_id: eventId,
+        page: "1",
+        limit: "10",
+      }
+      const selectedDateRange = getSelectedDateRange()
+
+      if (selectedDateRange) {
+        requestPayload.startDate = selectedDateRange.startDate
+        requestPayload.endDate = selectedDateRange.endDate
+      }
+
+      if (isPromoter) {
+        requestPayload.promoter_id = user.user_id
       } else {
-        apiEndpoint =
-          bookingDataType === "summary"
-            ? organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
-            : organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
-        requestPayload = {
-          AdminRole: getNumericRole(role as UserRole),
-          user_id: user.user_id,
-          event_id: eventId, // Filter by specific event
-          page: "1",
-          limit: "10", // Get more bookings for this specific event
-        }
-        
-        // For organizer role, add organizer_id to filter only their events' bookings
-        if ((role as UserRole) === "organizer" && user.user_id) {
+        requestPayload.AdminRole = getNumericRole(role as UserRole)
+        requestPayload.user_id = user.user_id
+
+        if ((role as UserRole) === "organizer") {
           requestPayload.organizer_id = user.user_id
-          console.log("🔒 Organizer filter applied - organizer_id:", user.user_id)
+        }
+
+        if (promoterFilter !== "all") {
+          requestPayload.promoter_id = promoterFilter
         }
       }
-
-      console.log("Fetching event bookings:", { eventId, apiEndpoint, requestPayload })
 
       const response = await fetch(apiEndpoint, {
         method: "POST",
@@ -304,424 +595,727 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         body: JSON.stringify(requestPayload),
       })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
+      const data = await response.json().catch(() => null)
 
-      const data = await response.json()
-      console.log("API Response:", data)
-
-      let bookingsArray = null
-      
-      if (data && data.data && data.data.latestBookingData && Array.isArray(data.data.latestBookingData)) {
-        bookingsArray = data.data.latestBookingData
-      } else if (data && data.data && data.data.TicketsData && Array.isArray(data.data.TicketsData)) {
-        bookingsArray = data.data.TicketsData
-      } else if (data && data.data && data.data.SummaryBookingData && Array.isArray(data.data.SummaryBookingData)) {
-        bookingsArray = data.data.SummaryBookingData
-      } else if (data && data.data && data.data.BookingData && Array.isArray(data.data.BookingData)) {
-        bookingsArray = data.data.BookingData
-      } else if (data && data.data && Array.isArray(data.data)) {
-        bookingsArray = data.data
-      } else if (data && data.TicketsData && Array.isArray(data.TicketsData)) {
-        bookingsArray = data.TicketsData
-      } else if (data && data.SummaryBookingData && Array.isArray(data.SummaryBookingData)) {
-        bookingsArray = data.SummaryBookingData
-      } else if (data && data.BookingData && Array.isArray(data.BookingData)) {
-        bookingsArray = data.BookingData
-      } else if (data && data.latestBookingData && Array.isArray(data.latestBookingData)) {
-        bookingsArray = data.latestBookingData
-      } else if (data && Array.isArray(data)) {
-        bookingsArray = data
-      }
-
-      if (bookingsArray && Array.isArray(bookingsArray)) {
-        console.log("Processing", bookingsArray.length, "raw bookings")
-        
-        // The API is already filtered by event_id in the request payload.
-        // Some responses do not include EventId in each row, so avoid dropping valid rows.
-        const eventBookings = bookingsArray.filter(booking => {
-          const eventIdFromBooking = booking.eventId || booking.event_id || booking.EventId || booking.Event_id
-          return !eventIdFromBooking || eventIdFromBooking === eventId
-        })
-        
-        const normalizedBookings = normalizeBookingData(eventBookings)
-        console.log("Normalized", normalizedBookings.length, "bookings for event", eventId)
-        
-        // Set event name from first booking if available
-        if (normalizedBookings.length > 0) {
-          setEventName(normalizedBookings[0].eventName)
-        }
-        
-        setBookingsData(normalizedBookings)
-        setOriginalData(normalizedBookings)
-        
-        toast({
-          title: "Success",
-          description: `Loaded ${normalizedBookings.length} bookings for this event`,
-        })
-      } else {
-        console.error("No valid bookings array found")
+      if (response.status === 404) {
         setBookingsData([])
         setOriginalData([])
-        toast({
-          title: "No Data",
-          description: "No bookings found for this event",
-        })
+        setTransactionTotals({ totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 })
+        setApiErrorMessage(data?.message || "No bookings found")
+        return
       }
+
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || `HTTP error! status: ${response.status}`)
+      }
+
+      const bookingsArray = extractBookingsArray(data)
+      const eventBookings = bookingsArray.filter((booking) => {
+        const rowEventId = getStringValue(booking.eventId, booking.event_id, booking.EventId, booking.Event_id)
+        return !rowEventId || rowEventId === eventId
+      })
+
+      let normalizedBookings = normalizeBookingData(eventBookings)
+
+      if (bookingDataType === "transaction" && ["promoter", "online"].includes(activeTab)) {
+        const channel = activeTab === "promoter" ? "Promoter" : "Online"
+        normalizedBookings = normalizedBookings.map((booking) => ({
+          ...booking,
+          bookingChannel: channel,
+          source: channel,
+        }))
+      }
+
+      if (bookingDataType === "transaction" && ["online", "bulk"].includes(activeTab)) {
+        normalizedBookings = normalizedBookings.filter((booking) => booking.bookingChannel.toLowerCase() === activeTab)
+      }
+
+      if (bookingDataType === "summary") {
+        const ticketOptions = extractSummaryTicketOptions(data, normalizedBookings)
+        const dateOptions = extractSummaryDateOptions(data, normalizedBookings)
+        setSummaryTicketOptions(ticketOptions)
+        setSummaryDateOptions(dateOptions)
+
+        setSummaryTicketFilter((current) => (current !== "all" && !ticketOptions.includes(current) ? "all" : current))
+        setSummaryDateFilter((current) =>
+          current !== "all" && !dateOptions.some((option) => option.id === current) ? "all" : current
+        )
+      }
+
+      setBookingsData(normalizedBookings)
+      setOriginalData(normalizedBookings)
+      setTransactionTotals(
+        bookingDataType === "transaction"
+          ? extractTransactionTotals(data, normalizedBookings)
+          : { totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 }
+      )
+      setCurrentPage(1)
+
+      const firstEventName = normalizedBookings.find((booking) => booking.eventName && booking.eventName !== "N/A")?.eventName
+      if (firstEventName) setEventName(firstEventName)
     } catch (error) {
       console.error("Error fetching event bookings:", error)
+      const message = error instanceof Error ? error.message : "Could not fetch bookings from server"
+      setApiErrorMessage(message)
       toast({
         title: "Error",
-        description: "Could not fetch bookings from server",
+        description: message,
         variant: "destructive",
       })
       setBookingsData([])
       setOriginalData([])
+      setTransactionTotals({ totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 })
     } finally {
       setLoading(false)
     }
-  }
+  }, [activeTab, bookingDataType, eventId, getSelectedDateRange, promoterFilter, role, toast, user])
 
-  // Search with debounce
   React.useEffect(() => {
-    const delay = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm)
-    }, 500)
-    return () => clearTimeout(delay)
-  }, [searchTerm])
+    fetchEventBookingsData()
+  }, [fetchEventBookingsData])
 
-  // Filter bookings based on search term and filters
   React.useEffect(() => {
-    if (debouncedSearchTerm === "" && channelFilter === "all") {
-      setBookingsData(originalData)
-      return
+    if ((role as UserRole) !== "promoter") {
+      fetchEventPromoters()
     }
+  }, [fetchEventPromoters, role])
 
-    let filtered = originalData
+  React.useEffect(() => {
+    const searchLower = searchTerm.trim().toLowerCase()
+    const selectedPromoter = promoters.find((promoter) => promoter.id === promoterFilter)
+    const selectedPromoterName = selectedPromoter?.name.toLowerCase()
+    const selectedDateRange = getSelectedDateRange()
+    const selectedStartTime = selectedDateRange ? new Date(selectedDateRange.startDate).getTime() : null
+    const selectedEndTime = selectedDateRange ? new Date(selectedDateRange.endDate).getTime() : null
 
-    if (debouncedSearchTerm !== "") {
-      const searchLower = debouncedSearchTerm.toLowerCase()
-      filtered = filtered.filter(
-        (booking) =>
-          booking.eventName.toLowerCase().includes(searchLower) ||
-          booking.customerName.toLowerCase().includes(searchLower) ||
-          booking.customerEmail.toLowerCase().includes(searchLower) ||
-          booking._id.toLowerCase().includes(searchLower) ||
-          (booking.phoneNumber && booking.phoneNumber.toLowerCase().includes(searchLower)) ||
-          (booking.promoterName && booking.promoterName.toLowerCase().includes(searchLower))
-      )
-    }
+    const filtered = originalData.filter((booking) => {
+      const matchesSearch =
+        bookingDataType === "summary"
+          ? summaryTicketFilter === "all" || booking.ticketName === summaryTicketFilter
+          : !searchLower ||
+            [
+              booking.customerName,
+              booking.customerEmail,
+              booking.phoneNumber,
+              booking.bookingId,
+              booking.eventName,
+              booking.ticketName,
+              booking.promoterName,
+            ].some((field) => String(field || "").toLowerCase().includes(searchLower))
 
-    if (channelFilter !== "all") {
-      filtered = filtered.filter((booking) => booking.bookingChannel === channelFilter)
-    }
+      const matchesDate =
+        !selectedDateRange ||
+        (() => {
+          const parsedTicketDate = parseDate(booking.ticketDate)
+          const parsedBookingDate = parseDate(booking.bookingDate)
+          return [parsedTicketDate, parsedBookingDate].some((date) => {
+            if (!date || selectedStartTime === null || selectedEndTime === null) return false
+            const time = date.getTime()
+            return time >= selectedStartTime && time <= selectedEndTime
+          })
+        })()
+
+      const matchesPromoter =
+        promoterFilter === "all" ||
+        booking.promoterId === promoterFilter ||
+        Boolean(
+          selectedPromoterName &&
+            booking.promoterName &&
+            booking.promoterName.toLowerCase() === selectedPromoterName
+        )
+
+      return matchesSearch && matchesDate && matchesPromoter
+    })
 
     setBookingsData(filtered)
     setCurrentPage(1)
-  }, [debouncedSearchTerm, channelFilter, originalData])
+  }, [bookingDataType, getSelectedDateRange, originalData, promoterFilter, promoters, searchTerm, summaryTicketFilter])
 
-  // Filter bookings based on tab
-  const filteredBookings = React.useMemo(() => {
-    let filtered = bookingsData
-
-    switch (activeTab) {
-      case "all":
-        return filtered
-      case "promoter":
-        return filtered.filter((booking) => booking.bookingChannel === "Promoter")
-      case "online":
-        return filtered.filter((booking) => booking.bookingChannel === "Online")
-      default:
-        return filtered
-    }
-  }, [bookingsData, activeTab])
-
+  const filteredBookings = bookingsData
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
   const currentBookings = filteredBookings.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE)
+  const dateFilterOptions: Array<{ value: DateFilterOption; label: string }> = [
+    { value: "today", label: "Today" },
+    { value: "yesterday", label: "Yesterday" },
+    { value: "last7days", label: "Last 7 Days" },
+    { value: "last1month", label: "Last 1 Month" },
+    { value: "manual", label: "Manual" },
+    { value: "all", label: "Reset" },
+  ]
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page)
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const link = document.createElement("a")
+    const url = URL.createObjectURL(blob)
+    link.href = url
+    link.download = filename
+    link.style.visibility = "hidden"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
-  // Initial data fetch
-  React.useEffect(() => {
-    fetchEventBookingsData()
-  }, [eventId, user, bookingDataType])
-  // Helper functions
-  const formatDate = (date: string | number | Date) => {
-    if (!date) return "N/A"
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+  const getFilenameFromResponse = (response: Response, fallback: string) => {
+    const contentDisposition = response.headers.get("content-disposition")
+    const filenameMatch = contentDisposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
+    return filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallback
   }
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-    }).format(amount)
-  }
-
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case "Confirmed":
-        return "default"
-      case "Pending":
-        return "secondary"
-      case "Cancelled":
-        return "destructive"
-      case "Booked":
-        return "outline"
-      default:
-        return "default"
+  const downloadPromoterReport = async () => {
+    const authToken = getValidToken()
+    if (!user || !authToken) {
+      throw new Error("Please log in to download report")
     }
+
+    const response = await fetch(organizerEndpoint.DOWNLOAD_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({
+        AdminRole: getNumericRole(role as UserRole),
+        user_id: user.user_id,
+      }),
+    })
+
+    const contentType = response.headers.get("content-type") || ""
+
+    if (!response.ok || contentType.includes("application/json")) {
+      const errorData = await response.json().catch(() => null)
+      throw new Error(errorData?.message || `Download failed with status ${response.status}`)
+    }
+
+    const blob = await response.blob()
+    const filename = getFilenameFromResponse(
+      response,
+      `promoter-bookings-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+    )
+    downloadBlob(blob, filename)
   }
 
-  // Export filtered bookings to Excel
-  const exportToExcel = () => {
+  const exportToExcel = async () => {
     try {
-      const exportData = filteredBookings.map((booking) => ({
-        "Booking ID": booking.Booking_id || booking._id || "N/A",
-        "Event Name": booking.eventName || "N/A",
-        "Customer Name": booking.customerName || "N/A",
-        "Customer Email": booking.customerEmail || "N/A",
-        "Customer Phone": booking.phoneNumber || "N/A",
-        "Ticket Type": booking.ticketType || "N/A",
-        "Quantity": booking.quantity || 0,
-        "Total Amount": `₹${booking.totalAmount || 0}`,
-        "Booking Status": booking.bookingStatus || "N/A",
-        "Booking Channel": booking.bookingChannel || "N/A",
-        "Promoter Name": booking.promoterName || "N/A",
-        "City": booking.city || "N/A",
-        "Venue": booking.venue || "N/A",
-        "Booking Date": formatDate(booking.bookingDate),
-        "Ticket Date": formatDate(booking.ticketDate),
-      }))
+      setApiErrorMessage("")
 
-      // Create CSV content
-      const headers = Object.keys(exportData[0] || {})
-      const csvContent = [
-        headers.join(","),
-        ...exportData.map(row => headers.map(header => `"${row[header as keyof typeof row] || ""}"`).join(","))
-      ].join("\n")
+      if (bookingDataType === "transaction" && activeTab === "promoter") {
+        await downloadPromoterReport()
+        toast({
+          title: "Export Successful",
+          description: "Promoter report downloaded successfully",
+        })
+        return
+      }
 
-      // Download CSV
+      const isSummary = bookingDataType === "summary"
+      const headers = isSummary
+        ? ["Ticket Name", "Quantity", "Ticket Price", "Ticket Date", "Total Amount"]
+        : [
+            "Name",
+            "Booking ID",
+            "Phone No.",
+            "Email",
+            "Booking Date & Time",
+            "Event",
+            "Ticket Date",
+            "City",
+            "Venue",
+            "Promoter Name",
+            "Quantity",
+            "Check In",
+            "Ticket Name",
+            "Ticket Type",
+            "Ticket Price",
+            "Total Amount",
+          ]
+
+      const rows = filteredBookings.map((booking) =>
+        isSummary
+          ? [
+              booking.ticketName,
+              booking.quantity,
+              booking.ticketPrice,
+              formatDate(booking.ticketDate),
+              booking.totalAmount,
+            ]
+          : [
+              booking.customerName,
+              booking.bookingId,
+              booking.phoneNumber,
+              booking.customerEmail,
+              formatDateTime(booking.bookingDate),
+              booking.eventName,
+              formatDate(booking.ticketDate),
+              booking.city,
+              booking.venue,
+              booking.promoterName,
+              booking.quantity,
+              booking.checkIn,
+              booking.ticketName,
+              booking.ticketType,
+              booking.ticketPrice,
+              booking.totalAmount,
+            ]
+      )
+
+      const csvContent = [headers, ...rows]
+        .map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(","))
+        .join("\n")
+
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
-      const link = document.createElement("a")
-      const url = URL.createObjectURL(blob)
-      link.setAttribute("href", url)
-      link.setAttribute("download", `event-${eventId}-bookings-${new Date().toISOString().split("T")[0]}.csv`)
-      link.style.visibility = "hidden"
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
+      downloadBlob(blob, `event-${eventId}-${bookingDataType}-bookings-${new Date().toISOString().slice(0, 10)}.csv`)
 
       toast({
         title: "Export Successful",
-        description: `Exported ${exportData.length} bookings to CSV`,
+        description: `Exported ${filteredBookings.length} bookings to CSV`,
       })
     } catch (error) {
       console.error("Export error:", error)
+      const message = error instanceof Error ? error.message : "Failed to export bookings"
+      setApiErrorMessage(message)
       toast({
         title: "Export Failed",
-        description: "Failed to export bookings",
+        description: message,
         variant: "destructive",
       })
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col gap-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              onClick={() => router.push(`/${role}/events`)}
-              className="flex items-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Events
-            </Button>
-            <h1 className="text-2xl font-semibold">Event Bookings</h1>
-          </div>
+  const renderEmptyRow = (colSpan: number) => (
+    <TableRow>
+      <TableCell colSpan={colSpan} className="h-32 text-center text-muted-foreground">
+        No data found
+      </TableCell>
+    </TableRow>
+  )
+
+  const SummaryTable = () => (
+    <Card className={TABLE_CARD_CLASS}>
+      <CardContent className="p-0">
+        <div className="max-w-full overflow-x-auto">
+          <Table className="min-w-[810px]">
+            <TableHeader>
+              <TableRow className={TABLE_HEADER_CLASS}>
+                <TableHead className={`min-w-[220px] ${TABLE_HEAD_CLASS}`}>Ticket Name</TableHead>
+                <TableHead className={`min-w-[120px] ${TABLE_HEAD_CLASS}`}>Quantity</TableHead>
+                <TableHead className={`min-w-[150px] ${TABLE_HEAD_CLASS}`}>Ticket Price</TableHead>
+                <TableHead className={`min-w-[160px] ${TABLE_HEAD_CLASS}`}>Ticket Date</TableHead>
+                <TableHead className={`min-w-[160px] ${TABLE_HEAD_CLASS}`}>Total Amount</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentBookings.length === 0
+                ? renderEmptyRow(5)
+                : currentBookings.map((booking) => (
+                    <TableRow key={booking._id} className="hover:bg-blue-50/40">
+                      <TableCell className="font-semibold uppercase text-slate-950">{booking.ticketName || "N/A"}</TableCell>
+                      <TableCell>{booking.quantity}</TableCell>
+                      <TableCell>{booking.ticketPrice}</TableCell>
+                      <TableCell>{formatDate(booking.ticketDate)}</TableCell>
+                      <TableCell>{booking.totalAmount}</TableCell>
+                    </TableRow>
+                  ))}
+            </TableBody>
+          </Table>
         </div>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Loading bookings...</span>
+      </CardContent>
+    </Card>
+  )
+
+  const getDisplayedTransactionTotals = () => {
+    const shouldUseFilteredTotals =
+      activeTab === "bulk" || searchTerm.trim() !== "" || dateFilter !== "all" || promoterFilter !== "all"
+
+    if (!shouldUseFilteredTotals) return transactionTotals
+
+    return filteredBookings.reduce(
+      (totals, booking) => ({
+        totalQuantity: totals.totalQuantity + getNumberValue(booking.quantity),
+        totalCheckIn: totals.totalCheckIn + getNumberValue(booking.checkIn),
+        totalPrice: totals.totalPrice + getNumberValue(booking.totalAmount),
+      }),
+      { totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 }
+    )
+  }
+
+  const TransactionSummaryCards = () => {
+    const totals = getDisplayedTransactionTotals()
+
+    return (
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-8 shadow-sm">
+          <p className="text-base font-medium text-blue-950">Total Quantity</p>
+          <p className="mt-2 text-2xl font-semibold text-primary">{totals.totalQuantity}</p>
+        </div>
+        <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-8 shadow-sm">
+          <p className="text-base font-medium text-blue-950">Total Checkin</p>
+          <p className="mt-2 text-2xl font-semibold text-primary">{totals.totalCheckIn}</p>
+        </div>
+        <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-8 shadow-sm">
+          <p className="text-base font-medium text-blue-950">Total Price</p>
+          <p className="mt-2 text-2xl font-semibold text-primary">Rs.{formatAmount(totals.totalPrice)}</p>
         </div>
       </div>
     )
   }
 
+  const TransactionTable = () => (
+    <Card className={TABLE_CARD_CLASS}>
+      <CardContent className="p-0">
+        <div className="max-w-full overflow-x-auto">
+          <Table className="min-w-[1500px]">
+            <TableHeader>
+              <TableRow className={TABLE_HEADER_CLASS}>
+                {[
+                  "Name",
+                  "Booking ID",
+                  "Phone No.",
+                  "Email",
+                  "Booking Date & Time",
+                  "Event",
+                  "Ticket Date",
+                  "City",
+                  "Venue",
+                  "Promoter Name",
+                  "Quantity",
+                  "Check In",
+                  "Ticket Name",
+                  "Ticket Type",
+                  "Ticket Price",
+                  "Total Amount",
+                ].map((heading) => (
+                  <TableHead key={heading} className={TABLE_HEAD_CLASS}>
+                    {heading}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {currentBookings.length === 0
+                ? renderEmptyRow(16)
+                : currentBookings.map((booking) => {
+                    const isCancelled = booking.bookingStatus === "2" || booking.bookingStatus === "Cancelled"
+
+                    return (
+                    <TableRow key={booking._id} className={isCancelled ? "bg-red-200 hover:bg-red-200" : "hover:bg-blue-50/40"}>
+                      <TableCell className="font-semibold text-slate-950">{booking.customerName}</TableCell>
+                      <TableCell className="font-medium">{booking.bookingId}</TableCell>
+                      <TableCell>{booking.phoneNumber || "N/A"}</TableCell>
+                      <TableCell>{booking.customerEmail || "N/A"}</TableCell>
+                      <TableCell className="font-medium">{formatDateTime(booking.bookingDate)}</TableCell>
+                      <TableCell className="font-semibold">{booking.eventName}</TableCell>
+                      <TableCell className="font-medium">{formatDate(booking.ticketDate)}</TableCell>
+                      <TableCell>{booking.city}</TableCell>
+                      <TableCell>{booking.venue}</TableCell>
+                      <TableCell>{booking.promoterName}</TableCell>
+                      <TableCell>{booking.quantity}</TableCell>
+                      <TableCell>{booking.checkIn}</TableCell>
+                      <TableCell>{booking.ticketName || "N/A"}</TableCell>
+                      <TableCell>{booking.ticketType || "N/A"}</TableCell>
+                      <TableCell>{booking.ticketPrice}</TableCell>
+                      <TableCell>{booking.totalAmount}</TableCell>
+                    </TableRow>
+                    )
+                  })}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  )
+
+  const PaginationControls = () => {
+    if (totalPages <= 1) return null
+
+    return (
+      <Pagination className="justify-end">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(event) => {
+                event.preventDefault()
+                if (currentPage > 1) setCurrentPage(currentPage - 1)
+              }}
+              className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
+            />
+          </PaginationItem>
+          {Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((page) => (
+            <PaginationItem key={page}>
+              <PaginationLink
+                href="#"
+                isActive={currentPage === page}
+                onClick={(event) => {
+                  event.preventDefault()
+                  setCurrentPage(page)
+                }}
+              >
+                {page}
+              </PaginationLink>
+            </PaginationItem>
+          ))}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(event) => {
+                event.preventDefault()
+                if (currentPage < totalPages) setCurrentPage(currentPage + 1)
+              }}
+              className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[320px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+        <span className="ml-2">Loading bookings...</span>
+      </div>
+    )
+  }
+
   return (
-    <div className="w-full min-h-screen">
-      <div className="flex flex-col gap-6 max-w-full">
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6">
-          <div className="flex items-center gap-4">
+    <div className="w-full max-w-full min-h-screen overflow-x-hidden">
+      <div className="flex min-w-0 max-w-full flex-col gap-8">
+        <div className="flex min-w-0 flex-col gap-4 border-b px-4 pb-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-normal">Bookings</h1>
+            {eventName && <p className="mt-1 text-sm text-muted-foreground">{eventName}</p>}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Button
               variant="outline"
               onClick={() => router.push(`/${role}/events`)}
-              className="flex items-center gap-2"
+              className="h-12 border-blue-100 bg-white px-6 text-primary shadow-sm hover:bg-blue-50 hover:text-primary"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Events
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
             </Button>
-            <div>
-              <h1 className="text-2xl font-semibold">Event Bookings</h1>
-              {eventName && (
-                <p className="text-sm text-muted-foreground">{eventName}</p>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Bookings Header and Actions */}
-        <div className="px-4 sm:px-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Bookings</CardTitle>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={exportToExcel}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download Report
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Search */}
-              <div className="flex flex-col gap-4 md:flex-row md:items-center">
-                {(role as UserRole) !== "promoter" && (
-                  <Select
-                    value={bookingDataType}
-                    onValueChange={(value) => {
-                      setCurrentPage(1)
-                      setBookingDataType(value as "transaction" | "summary")
-                    }}
-                  >
-                    <SelectTrigger className="w-full md:w-[240px]">
-                      <SelectValue placeholder="Booking Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="transaction">Transaction Bookings</SelectItem>
-                      <SelectItem value="summary">Summary Bookings</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-                <div className="flex-1">
-                  <Input
-                    placeholder="Search By Customer Name and Booking ID"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="max-w-md"
-                  />
-                </div>
-              </div>
+        <div className="grid min-w-0 gap-5 px-4 sm:px-6">
+          <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-center">
+              {(role as UserRole) !== "promoter" && (
+                <Select
+                  value={bookingDataType}
+                  onValueChange={(value) => {
+                    setBookingDataType(value as BookingDataType)
+                    setActiveTab("all")
+                    setSearchTerm("")
+                    setDateFilter("all")
+                    setManualStartDate("")
+                    setManualEndDate("")
+                    setPromoterFilter("all")
+                    setSummaryTicketFilter("all")
+                    setSummaryDateFilter("all")
+                    setCurrentPage(1)
+                  }}
+                >
+                  <SelectTrigger className={`${CONTROL_CLASS} w-full md:w-[360px]`}>
+                    <SelectValue placeholder="Booking Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="summary">Summary Booking</SelectItem>
+                    <SelectItem value="transaction">Transaction Booking</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
 
-            </CardContent>
-          </Card>
-        </div>
+              {bookingDataType === "summary" ? (
+                <>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`${CONTROL_CLASS} w-full justify-start gap-2 px-4 text-muted-foreground md:w-[150px]`}
+                      >
+                        <Filter className="h-4 w-4" />
+                        Name Filter
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="max-h-[360px] w-[280px] overflow-y-auto p-2">
+                      {summaryTicketOptions.length === 0 ? (
+                        <DropdownMenuItem disabled>No tickets found</DropdownMenuItem>
+                      ) : (
+                        summaryTicketOptions.map((ticketName) => (
+                          <DropdownMenuItem
+                            key={ticketName}
+                            onClick={() => setSummaryTicketFilter(ticketName)}
+                            className={summaryTicketFilter === ticketName ? "bg-blue-50 text-primary" : ""}
+                          >
+                            {ticketName}
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => setSummaryTicketFilter("all")}
+                        className="mt-1 border-t pt-2 font-medium text-primary"
+                      >
+                        Reset Filter
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
 
-        {/* Tabs and Content */}
-        <div className="w-full max-w-full overflow-auto">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <div className="px-4 sm:px-6">
-              <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-flex">
-                <TabsTrigger value="all">
-                  All ({originalData.length})
-                </TabsTrigger>
-                <TabsTrigger value="promoter">
-                  Promoter ({originalData.filter((b) => b.bookingChannel === "Promoter").length})
-                </TabsTrigger>
-                <TabsTrigger value="online">
-                  Online ({originalData.filter((b) => b.bookingChannel === "Online").length})
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value={activeTab} className="mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>
-                    {activeTab === "all"
-                      ? "All Bookings"
-                      : activeTab === "promoter"
-                        ? "Promoter Bookings"
-                        : "Online Bookings"}
-                  </CardTitle>
-                  <CardDescription>
-                    {filteredBookings.length} booking(s) found
-                  </CardDescription>
-                </CardHeader>                <CardContent className="p-0 overflow-x-hidden">
-                  <div className="w-full">
-                    <BookingsTable 
-                      bookings={currentBookings}
-                      role={role as UserRole}
-                      searchTerm={searchTerm}
-                      statusFilter="all"
-                      channelFilter={channelFilter}
-                      formatDate={formatDate}
-                      formatCurrency={formatCurrency}
-                      getStatusBadgeVariant={getStatusBadgeVariant}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={`${CONTROL_CLASS} w-full justify-start gap-2 px-4 text-muted-foreground md:w-[150px]`}
+                      >
+                        <Filter className="h-4 w-4" />
+                        Date Filter
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="w-[220px] p-2">
+                      {summaryDateOptions.length === 0 ? (
+                        <DropdownMenuItem disabled>No dates found</DropdownMenuItem>
+                      ) : (
+                        summaryDateOptions.map((dateOption) => (
+                          <DropdownMenuItem
+                            key={dateOption.id}
+                            onClick={() => setSummaryDateFilter(dateOption.id)}
+                            className={summaryDateFilter === dateOption.id ? "bg-blue-50 text-primary" : ""}
+                          >
+                            {dateOption.label}
+                          </DropdownMenuItem>
+                        ))
+                      )}
+                      <DropdownMenuItem
+                        onClick={() => setSummaryDateFilter("all")}
+                        className="mt-1 border-t pt-2 font-medium text-primary"
+                      >
+                        Reset Filter
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <>
+                  <div className="relative w-full md:w-[460px]">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={searchTerm}
+                      onChange={(event) => setSearchTerm(event.target.value)}
+                      placeholder="Search By Customer Name and Booking ID"
+                      className={`${CONTROL_CLASS} pl-10`}
                     />
                   </div>
-
-                  {/* Pagination */}
-                  {totalPages > 1 && (
-                    <div className="p-4 border-t">
-                      <Pagination>
-                        <PaginationContent>
-                          <PaginationItem>
-                            <PaginationPrevious
-                              href="#"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                if (currentPage > 1) handlePageChange(currentPage - 1)
-                              }}
-                              className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
-                            />
-                          </PaginationItem>
-                          {[...Array(Math.min(totalPages, 5))].map((_, i) => {
-                            const pageNum = i + 1
-                            return (
-                              <PaginationItem key={pageNum}>
-                                <PaginationLink
-                                  href="#"
-                                  isActive={currentPage === pageNum}
-                                  onClick={(e) => {
-                                    e.preventDefault()
-                                    handlePageChange(pageNum)
-                                  }}
-                                >
-                                  {pageNum}
-                                </PaginationLink>
-                              </PaginationItem>
-                            )
-                          })}
-                          <PaginationItem>
-                            <PaginationNext
-                              href="#"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                if (currentPage < totalPages) handlePageChange(currentPage + 1)
-                              }}
-                              className={currentPage === totalPages ? "pointer-events-none opacity-50" : ""}
-                            />
-                          </PaginationItem>
-                        </PaginationContent>
-                      </Pagination>
-                    </div>
+                  {(role as UserRole) !== "promoter" && (
+                    <Select value={promoterFilter} onValueChange={setPromoterFilter}>
+                      <SelectTrigger className={`${CONTROL_CLASS} w-full md:w-[200px]`}>
+                        <SelectValue placeholder="Promoter" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Promoter</SelectItem>
+                        {promoters.map((promoter) => (
+                          <SelectItem key={promoter.id} value={promoter.id}>
+                            {promoter.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
+                </>
+              )}
+            </div>
+          </div>
+
+          {bookingDataType === "transaction" && activeTab !== "all" && <TransactionSummaryCards />}
+
+          {bookingDataType === "transaction" && (role as UserRole) !== "promoter" && (
+            <div className="flex min-w-0 flex-wrap items-center gap-4 md:gap-8">
+              {(["all", "promoter", "online", "bulk"] as BookingTab[]).map((tab) => (
+                <Button
+                  key={tab}
+                  variant={activeTab === tab ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => {
+                    setActiveTab(tab)
+                    setCurrentPage(1)
+                  }}
+                  className={
+                    activeTab === tab
+                      ? "h-10 min-w-20 capitalize bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                      : "h-10 min-w-20 capitalize text-blue-950 hover:bg-blue-50 hover:text-primary"
+                  }
+                >
+                  {tab}
+                </Button>
+              ))}
+              <div className="w-full sm:ml-auto sm:w-auto">
+                <div className="flex w-full gap-3 sm:w-auto">
+                  <Button variant="outline" size="icon" type="button" className={ICON_BUTTON_CLASS}>
+                    <Filter className="h-5 w-5" />
+                  </Button>
+                  <Select
+                    value={dateFilter}
+                    onValueChange={(value) => {
+                      setDateFilter(value as DateFilterOption)
+                      if (value !== "manual") {
+                        setManualStartDate("")
+                        setManualEndDate("")
+                      }
+                    }}
+                  >
+                  <SelectTrigger className={`${CONTROL_CLASS} w-full sm:w-[170px]`}>
+                    <span>
+                      {dateFilter === "all"
+                        ? "Select date"
+                        : dateFilterOptions.find((option) => option.value === dateFilter)?.label || "Select date"}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {dateFilterOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                </div>
+                {dateFilter === "manual" && (
+                  <div className="mt-3 flex w-full flex-col gap-3 sm:flex-row">
+                    <Input
+                      type="date"
+                      value={manualStartDate}
+                      onChange={(event) => setManualStartDate(event.target.value)}
+                      aria-label="Start date"
+                      className={`${CONTROL_CLASS} w-full sm:w-[170px]`}
+                    />
+                    <Input
+                      type="date"
+                      value={manualEndDate}
+                      onChange={(event) => setManualEndDate(event.target.value)}
+                      aria-label="End date"
+                      className={`${CONTROL_CLASS} w-full sm:w-[170px]`}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="grid min-w-0 gap-4 px-4 sm:px-6">
+          {apiErrorMessage && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+              {apiErrorMessage}
+            </div>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={exportToExcel} className="h-12 bg-primary px-6 text-primary-foreground shadow-sm hover:bg-primary/90">
+              <Download className="mr-2 h-4 w-4" />
+              Download Report
+            </Button>
+          </div>
+          {bookingDataType === "summary" ? <SummaryTable /> : <TransactionTable />}
+          <PaginationControls />
         </div>
       </div>
     </div>

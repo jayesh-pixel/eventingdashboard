@@ -130,17 +130,28 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
 
   // Filter state
+  // "selected*" / "dateFilterOption" are the DRAFT values bound to the popover controls.
+  // "applied*" are committed only when the user clicks Search, and are what actually drive data fetching/filtering.
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
   const [selectedCity, setSelectedCity] = React.useState("__all__")
   const [selectedVenue, setSelectedVenue] = React.useState("__all__")
   const [selectedOrganizer, setSelectedOrganizer] = React.useState("__all__")
   const [selectedPromoter, setSelectedPromoter] = React.useState("__all__")
-  
-  // Date filter state
+
+  // Applied (committed on Search) filter values
+  const [appliedCity, setAppliedCity] = React.useState("__all__")
+  const [appliedVenue, setAppliedVenue] = React.useState("__all__")
+  const [appliedOrganizer, setAppliedOrganizer] = React.useState("__all__")
+  const [appliedPromoter, setAppliedPromoter] = React.useState("__all__")
+
+  // Date filter state (startDate/endDate are the APPLIED dates; draft dates hold the pending selection)
   const [startDate, setStartDate] = React.useState<string | null>(null)
   const [endDate, setEndDate] = React.useState<string | null>(null)
+  const [draftStartDate, setDraftStartDate] = React.useState<string | null>(null)
+  const [draftEndDate, setDraftEndDate] = React.useState<string | null>(null)
   const [isManual, setIsManual] = React.useState(false)
   const [dateFilterOption, setDateFilterOption] = React.useState("")
+  const [appliedDateOption, setAppliedDateOption] = React.useState("")
   // Event format modal state
   const [showEventFormatModal, setShowEventFormatModal] = React.useState(false)
   
@@ -348,117 +359,18 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
   }
 
-  // Function to fetch filter data for organizers using consolidated endpoint
-  const fetchFilterDataForOrganizer = async () => {
-    // Only execute for organizer role
-    if ((role as UserRole) !== "organizer") {
-      console.log('fetchFilterDataForOrganizer: Skipping - not organizer role')
-      return
-    }
-
-    try {
-      const authToken = getValidToken()
-      if (!user || !authToken) {
-        console.warn('No user or auth token for filter data fetch')
-        return
-      }
-
-      const numericRole = getNumericAdminRole(user.AdminRole || (role as UserRole))
-      
-      const payload = {
-        AdminRole: numericRole,
-        user_id: user.user_id
-      }
-
-      console.log('Fetching filter data for organizer with payload:', payload)
-
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getVenueCitiesandPromoterDataforEvents`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(payload)
-      })
-      
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.warn('Filter data API error response:', errorText)
-        throw new Error(`Failed to fetch filter data: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
-      console.log('Filter data API response for organizer:', data)
-      
-      if (data.data) {
-        const { EventVenues, EventCities, EventPromoters } = data.data
-        
-        // Update cities
-        if (EventCities && Array.isArray(EventCities)) {
-          console.log('Cities data:', EventCities)
-          const citiesData = EventCities.map((city: any) => city.CityName || city.cityName || city.name).filter(Boolean) as string[]
-          setFilterCities([...new Set(citiesData)].sort())
-        }
-        
-        // Update venues
-        if (EventVenues && Array.isArray(EventVenues)) {
-          console.log('Venues data:', EventVenues)
-          const venuesData = EventVenues.map((venue: any) => ({
-            id: venue.venue_id || venue._id || venue.venueId || venue.VenueId || venue.id,
-            name: venue.VenueName || venue.venueName || venue.Name || venue.name || 'Unknown Venue'
-          }))
-          setFilterVenues(venuesData)
-        }
-        
-        // Update promoters
-        if (EventPromoters && Array.isArray(EventPromoters)) {
-          console.log('Promoters data:', EventPromoters)
-          const promotersData = EventPromoters.map((promoter: any) => ({
-            id: promoter.promoter_id || promoter._id || promoter.promoterId || promoter.PromoterId || promoter.id,
-            name: promoter.PromoterUsername || promoter.FullName || promoter.CompanyName || promoter.PromoterName || promoter.name || 'Unknown Promoter'
-          }))
-          setFilterPromoters(promotersData)
-        }
-      }
-    } catch (error) {
-      console.warn('Error fetching filter data for organizer (handled):', error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to fetch filter data",
-        variant: "destructive",
-      })
-      // Fallback to local data
-      const cities = originalData.map(event => event.city).filter(Boolean)
-      setFilterCities([...new Set(cities)].sort())
-      const venues = originalData.map(event => ({
-        id: event.venueId || event._id,
-        name: event.venueName || 'Unknown Venue'
-      })).filter(venue => venue.name && venue.name !== 'Unknown Venue')
-      setFilterVenues([...new Map(venues.map(venue => [venue.id, venue])).values()])
-      const promoters = originalData.map(event => ({
-        id: event.promoterId || event._id,
-        name: event.promoterName || 'Unknown Promoter'
-      })).filter(promoter => promoter.name && promoter.name !== 'Unknown Promoter')
-      setFilterPromoters([...new Map(promoters.map(promoter => [promoter.id, promoter])).values()])
-    }
-  }
-
   // Function to fetch all filter options
+  // Always use the dedicated per-resource endpoints for every role:
+  //   /events/getAllEventCities, /organizer/getAll, /venue/getall, /promoter/getAll
   const fetchAllFilterOptions = async () => {
     setFilterOptionsLoading(true)
     try {
-      if ((role as UserRole) === "organizer") {
-        // For organizers, use the consolidated endpoint
-        await fetchFilterDataForOrganizer()
-      } else {
-        // For superadmin and promoter, fetch all filter options separately
-        await Promise.all([
-          fetchFilterCities(),
-          fetchFilterOrganizers(),
-          fetchFilterVenues(),
-          fetchFilterPromoters()
-        ])
-      }
+      await Promise.all([
+        fetchFilterCities(),
+        fetchFilterOrganizers(),
+        fetchFilterVenues(),
+        fetchFilterPromoters()
+      ])
     } catch (error) {
       console.warn('Error fetching filter options (handled):', error)
     } finally {
@@ -663,11 +575,11 @@ export default function EventsPage({ params }: EventsPageProps) {
           limit: limit.toString(),
           ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm }),
           // Include filter parameters if applyFilters is true
-          ...(applyFilters && selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
-          ...(applyFilters && selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
+          ...(applyFilters && appliedCity && appliedCity !== "__all__" && { city: appliedCity }),
+          ...(applyFilters && appliedVenue && appliedVenue !== "__all__" && { venue_id: appliedVenue }),
           // Only include organizer filter if role is not organizer
-          ...(applyFilters && (role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
-          ...(applyFilters && selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
+          ...(applyFilters && (role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && { organizer_id: appliedOrganizer }),
+          ...(applyFilters && appliedPromoter && appliedPromoter !== "__all__" && { promoter_id: appliedPromoter })
         }
         console.log("Admin paginated endpoint URL:", apiEndpoint)
         console.log("Admin paginated payload JSON:", JSON.stringify(requestPayload))
@@ -905,11 +817,11 @@ export default function EventsPage({ params }: EventsPageProps) {
         limit: limit.toString(),
         eventNameSearchKeyword: keyword,
         // Include filter parameters
-        ...(selectedCity && selectedCity !== "__all__" && { city: selectedCity }),
-        ...(selectedVenue && selectedVenue !== "__all__" && { venue_id: selectedVenue }),
+        ...(appliedCity && appliedCity !== "__all__" && { city: appliedCity }),
+        ...(appliedVenue && appliedVenue !== "__all__" && { venue_id: appliedVenue }),
         // Only include organizer filter if role is not organizer
-        ...((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && { organizer_id: selectedOrganizer }),
-        ...(selectedPromoter && selectedPromoter !== "__all__" && { promoter_id: selectedPromoter })
+        ...((role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && { organizer_id: appliedOrganizer }),
+        ...(appliedPromoter && appliedPromoter !== "__all__" && { promoter_id: appliedPromoter })
       }
 
       // Use the getAllPaginated endpoint for search
@@ -1014,30 +926,34 @@ export default function EventsPage({ params }: EventsPageProps) {
       }
 
       if (start && end) {
-        setStartDate(start.toISOString())
-        setEndDate(end.toISOString())
-        
-        // For promoters, use API call. For others, use client-side filtering
-        if ((role as UserRole) === "promoter") {
-          dateFilterApiCall(start.toISOString(), end.toISOString())
-        }
+        // Stage the dates as DRAFT only; they are applied when the user clicks Search.
+        setDraftStartDate(start.toISOString())
+        setDraftEndDate(end.toISOString())
+      } else {
+        setDraftStartDate(null)
+        setDraftEndDate(null)
       }
     }
   }
 
   const handleManualDateChange = (value: string, type: "start" | "end") => {
     if (type === "start") {
-      setStartDate(value)
+      setDraftStartDate(value)
     } else {
-      setEndDate(value)
+      setDraftEndDate(value)
     }
   }
 
+  // Manual "Apply Dates" button commits the draft dates immediately.
   const handleManualSubmit = () => {
-    if (startDate && endDate) {
+    if (draftStartDate && draftEndDate) {
+      setStartDate(draftStartDate)
+      setEndDate(draftEndDate)
+      setAppliedDateOption("Manual")
+
       // For promoters, use API call. For others, the filtering is handled in useMemo
       if ((role as UserRole) === "promoter") {
-        dateFilterApiCall(startDate, endDate)
+        dateFilterApiCall(draftStartDate, draftEndDate)
       } else {
         toast({
           title: "Success",
@@ -1045,6 +961,39 @@ export default function EventsPage({ params }: EventsPageProps) {
         })
       }
     }
+  }
+
+  // Commit all draft filter selections (called by the popover Search button)
+  const applySearchFilters = () => {
+    setAppliedCity(selectedCity)
+    setAppliedVenue(selectedVenue)
+    setAppliedOrganizer(selectedOrganizer)
+    setAppliedPromoter(selectedPromoter)
+
+    // Apply date selection (manual dates are applied via their own "Apply Dates" button)
+    if (!isManual) {
+      setStartDate(draftStartDate)
+      setEndDate(draftEndDate)
+      setAppliedDateOption(dateFilterOption)
+
+      if ((role as UserRole) === "promoter" && draftStartDate && draftEndDate) {
+        dateFilterApiCall(draftStartDate, draftEndDate)
+      }
+    }
+
+    setOpenFilterDialog(false)
+  }
+
+  // Revert draft selections back to the currently-applied values (used when closing without searching)
+  const revertDraftFilters = () => {
+    setSelectedCity(appliedCity)
+    setSelectedVenue(appliedVenue)
+    setSelectedOrganizer(appliedOrganizer)
+    setSelectedPromoter(appliedPromoter)
+    setDateFilterOption(appliedDateOption)
+    setIsManual(appliedDateOption === "Manual")
+    setDraftStartDate(startDate)
+    setDraftEndDate(endDate)
   }
 
   const dateFilterApiCall = async (startDateApiCall: string, endDateApiCall: string) => {
@@ -1120,7 +1069,7 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
 
     setCurrentPage(1)
-  }, [selectedCity, selectedVenue, selectedOrganizer, selectedPromoter])
+  }, [appliedCity, appliedVenue, appliedOrganizer, appliedPromoter])
 
   React.useEffect(() => {
     // Page navigation for API-paginated views
@@ -1146,31 +1095,31 @@ export default function EventsPage({ params }: EventsPageProps) {
     // When using API pagination, backend already applied most filters.
     // Keep client-side filters only when forced into client paging (promoter/date-range).
     if (useClientPaging) {
-      if (selectedCity && selectedCity !== "__all__") {
-        events = events.filter(event => event.city === selectedCity)
+      if (appliedCity && appliedCity !== "__all__") {
+        events = events.filter(event => event.city === appliedCity)
       }
 
-      if (selectedVenue && selectedVenue !== "__all__") {
-        const selectedVenueData = filterVenues.find(venue => venue.id === selectedVenue)
+      if (appliedVenue && appliedVenue !== "__all__") {
+        const selectedVenueData = filterVenues.find(venue => venue.id === appliedVenue)
         events = events.filter(event =>
           event.venueName === selectedVenueData?.name ||
-          event.venueId === selectedVenue
+          event.venueId === appliedVenue
         )
       }
 
-      if ((role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__") {
-        const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === selectedOrganizer)
+      if ((role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__") {
+        const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === appliedOrganizer)
         events = events.filter(event =>
           event.organizerName === selectedOrganizerData?.name ||
-          event.organizerId === selectedOrganizer
+          event.organizerId === appliedOrganizer
         )
       }
 
-      if (selectedPromoter && selectedPromoter !== "__all__") {
-        const selectedPromoterData = filterPromoters.find(promoter => promoter.id === selectedPromoter)
+      if (appliedPromoter && appliedPromoter !== "__all__") {
+        const selectedPromoterData = filterPromoters.find(promoter => promoter.id === appliedPromoter)
         events = events.filter(event =>
           event.promoterName === selectedPromoterData?.name ||
-          event.promoterId === selectedPromoter
+          event.promoterId === appliedPromoter
         )
       }
     }
@@ -1189,7 +1138,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       const dateB = new Date(b.updatedAt || b.createdAt || 0)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [allEventsData, useClientPaging, selectedCity, selectedVenue, selectedOrganizer, selectedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
+  }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedOrganizer, appliedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
 
   const totalPages = useClientPaging ? Math.ceil(filteredEvents.length / ITEMS_PER_PAGE) : serverTotalPages
   const currentEvents = useClientPaging
@@ -1384,18 +1333,34 @@ export default function EventsPage({ params }: EventsPageProps) {
     setDebouncedSearchTerm("")
     setStartDate(null)
     setEndDate(null)
+    setDraftStartDate(null)
+    setDraftEndDate(null)
     setIsManual(false)
     setDateFilterOption("")
+    setAppliedDateOption("")
     setSelectedCity("__all__")
     setSelectedVenue("__all__")
     setSelectedOrganizer("__all__")
     setSelectedPromoter("__all__")
+    setAppliedCity("__all__")
+    setAppliedVenue("__all__")
+    setAppliedOrganizer("__all__")
+    setAppliedPromoter("__all__")
     setAllEventsData(originalData)
     toast({
       title: "Filters Reset",
       description: "All filters have been cleared",
     })
   }
+
+  // Count of currently-active (applied) filters (shown as a badge on the funnel icon)
+  const activeFilterCount = [
+    appliedCity !== "__all__",
+    appliedVenue !== "__all__",
+    (role as UserRole) !== "organizer" && appliedOrganizer !== "__all__",
+    appliedPromoter !== "__all__",
+    !!appliedDateOption,
+  ].filter(Boolean).length
   const stripHtmlTags = (html: string) => {
     return html.replace(/<[^>]*>/g, '').trim()
   }
@@ -1993,14 +1958,49 @@ export default function EventsPage({ params }: EventsPageProps) {
               {/* Filter Controls */}
               <div className="flex flex-col gap-4">
                 {/* Filters Container */}
-                <div className="flex flex-col lg:flex-row gap-3 lg:gap-4">
-                  {/* Filter Selects Row */}
-                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 flex-1">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Filter funnel: opens a popover containing all filters */}
+                  <Popover open={openFilterDialog} onOpenChange={(open) => { if (!open) revertDraftFilters(); setOpenFilterDialog(open) }}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        title="Filters"
+                        disabled={filterOptionsLoading}
+                        className="relative h-12 w-12 flex-shrink-0 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60"
+                      >
+                        {filterOptionsLoading ? (
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                        ) : (
+                          <Filter className="h-5 w-5" />
+                        )}
+                        {activeFilterCount > 0 && (
+                          <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-[320px] sm:w-[540px] p-4 sm:p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-base font-semibold">Event Filter</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={resetFilters}
+                          className="text-xs border-border/40 hover:border-border/60 hover:bg-muted/30"
+                        >
+                          Reset All
+                        </Button>
+                      </div>
+                      {/* Filter Selects Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Event Filters (for all roles except promoter) */}
                     {(role as UserRole) !== "promoter" && (
                       <>
                         {/* City Filter */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-sm font-medium">City</Label>
                           <Popover open={cityPopoverOpen} onOpenChange={setCityPopoverOpen}>
                             <PopoverTrigger asChild>
                               <Button
@@ -2068,7 +2068,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </div>
 
                         {/* Venue Filter */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-sm font-medium">Venue</Label>
                           <Popover open={venuePopoverOpen} onOpenChange={setVenuePopoverOpen}>
                             <PopoverTrigger asChild>
                               <Button
@@ -2137,7 +2138,8 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                         {/* Organizer Filter */}
                         {(role as UserRole) !== "organizer" && (
-                          <div className="flex-1 sm:flex-none min-w-[160px]">
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-sm font-medium">Organizer</Label>
                             <Popover open={organizerPopoverOpen} onOpenChange={setOrganizerPopoverOpen}>
                               <PopoverTrigger asChild>
                                 <Button
@@ -2206,7 +2208,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                         )}
 
                         {/* Promoter Filter */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                        <div className="flex flex-col gap-1.5">
+                          <Label className="text-sm font-medium">Promoter</Label>
                           <Popover open={promoterPopoverOpen} onOpenChange={setPromoterPopoverOpen}>
                             <PopoverTrigger asChild>
                               <Button
@@ -2274,7 +2277,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </div>
 
                         {/* Date Range Filter for Non-Promoters */}
-                        <div className="flex-1 sm:flex-none min-w-[160px]">
+                        <div className="flex flex-col gap-1.5 sm:col-span-2">
+                          <Label className="text-sm font-medium">Date</Label>
                           <select
                             className="w-full block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
                             value={dateFilterOption}
@@ -2293,7 +2297,8 @@ export default function EventsPage({ params }: EventsPageProps) {
 
                     {/* Promoter-specific Date Filter */}
                     {(role as UserRole) === "promoter" && (
-                      <div className="flex-1 sm:flex-none min-w-[160px]">
+                      <div className="flex flex-col gap-1.5 sm:col-span-2">
+                        <Label className="text-sm font-medium">Date</Label>
                         <select
                           className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
                           value={dateFilterOption}
@@ -2308,26 +2313,40 @@ export default function EventsPage({ params }: EventsPageProps) {
                         </select>
                       </div>
                     )}
-                  </div>
+                      </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2 flex-shrink-0">
-                    {/* Reset All Filters Button */}
-                    {(searchTerm || dateFilterOption || (selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (((role as UserRole) !== "organizer") && selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__")) && (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={resetFilters} 
-                        className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all whitespace-nowrap"
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Reset All
-                      </Button>
-                    )}
-                    
-      
-              
-                  </div>
+                      {/* Footer actions */}
+                      <div className="flex justify-end gap-2 mt-6">
+                        <Button
+                          variant="outline"
+                          onClick={() => { revertDraftFilters(); setOpenFilterDialog(false) }}
+                          className="text-sm"
+                        >
+                          Close
+                        </Button>
+                        <Button
+                          onClick={applySearchFilters}
+                          className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow"
+                        >
+                          <Search className="mr-2 h-4 w-4" />
+                          Search
+                        </Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  {/* Quick Reset (visible when any filter is active) */}
+                  {(searchTerm || appliedDateOption || (appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__")) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={resetFilters}
+                      className="text-sm border-border/40 hover:border-border/60 hover:bg-muted/30 transition-all whitespace-nowrap"
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Reset All
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -2338,7 +2357,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <label className="text-xs font-medium text-muted-foreground">Start Date</label>
                     <Input
                       type="date"
-                      value={startDate ? startDate.split('T')[0] : ''}
+                      value={draftStartDate ? draftStartDate.split('T')[0] : ''}
                       onChange={(e) => handleManualDateChange(e.target.value, "start")}
                       className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
                     />
@@ -2347,17 +2366,17 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <label className="text-xs font-medium text-muted-foreground">End Date</label>
                     <Input
                       type="date"
-                      value={endDate ? endDate.split('T')[0] : ''}
+                      value={draftEndDate ? draftEndDate.split('T')[0] : ''}
                       onChange={(e) => handleManualDateChange(e.target.value, "end")}
                       className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
                     />
                   </div>
                   <div className="flex flex-col justify-end">
-                    <Button 
-                      onClick={handleManualSubmit} 
-                      size="sm" 
+                    <Button
+                      onClick={handleManualSubmit}
+                      size="sm"
                       className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
-                      disabled={!startDate || !endDate}
+                      disabled={!draftStartDate || !draftEndDate}
                     >
                        Apply Dates
                     </Button>
@@ -2365,41 +2384,44 @@ export default function EventsPage({ params }: EventsPageProps) {
                 </div>
               )}
 
-              {/* Active Filters Display */}
-              {((selectedCity && selectedCity !== "__all__") || (selectedVenue && selectedVenue !== "__all__") || (((role as UserRole) !== "organizer") && selectedOrganizer && selectedOrganizer !== "__all__") || (selectedPromoter && selectedPromoter !== "__all__") || dateFilterOption) && (
+              {/* Active Filters Display (reflects applied filters) */}
+              {((appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__") || appliedDateOption) && (
                 <div className="flex flex-wrap gap-2 p-3 bg-muted/10 dark:bg-muted/5 rounded-lg border border-border/20">
                   <span className="text-xs font-medium text-muted-foreground mr-2">Active Filters:</span>
-                  {selectedCity && selectedCity !== "__all__" && (
+                  {appliedCity && appliedCity !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      City: {selectedCity}
-                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedCity("__all__")} />
+                      City: {appliedCity}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedCity("__all__"); setAppliedCity("__all__") }} />
                     </Badge>
                   )}
-                  {selectedVenue && selectedVenue !== "__all__" && (
+                  {appliedVenue && appliedVenue !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Venue: {filterVenues.find(v => v.id === selectedVenue)?.name || selectedVenue}
-                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedVenue("__all__")} />
+                      Venue: {filterVenues.find(v => v.id === appliedVenue)?.name || appliedVenue}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedVenue("__all__"); setAppliedVenue("__all__") }} />
                     </Badge>
                   )}
-                  {(role as UserRole) !== "organizer" && selectedOrganizer && selectedOrganizer !== "__all__" && (
+                  {(role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Organizer: {filterOrganizers.find(o => o.id === selectedOrganizer)?.name || selectedOrganizer}
-                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedOrganizer("__all__")} />
+                      Organizer: {filterOrganizers.find(o => o.id === appliedOrganizer)?.name || appliedOrganizer}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedOrganizer("__all__"); setAppliedOrganizer("__all__") }} />
                     </Badge>
                   )}
-                  {selectedPromoter && selectedPromoter !== "__all__" && (
+                  {appliedPromoter && appliedPromoter !== "__all__" && (
                     <Badge variant="secondary" className="text-xs">
-                      Promoter: {filterPromoters.find(p => p.id === selectedPromoter)?.name || selectedPromoter}
-                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => setSelectedPromoter("__all__")} />
+                      Promoter: {filterPromoters.find(p => p.id === appliedPromoter)?.name || appliedPromoter}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedPromoter("__all__"); setAppliedPromoter("__all__") }} />
                     </Badge>
                   )}
-                  {dateFilterOption && (
+                  {appliedDateOption && (
                     <Badge variant="secondary" className="text-xs">
-                      Date: {dateFilterOption}
+                      Date: {appliedDateOption}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => {
                         setDateFilterOption("")
+                        setAppliedDateOption("")
                         setStartDate(null)
                         setEndDate(null)
+                        setDraftStartDate(null)
+                        setDraftEndDate(null)
                         setIsManual(false)
                       }} />
                     </Badge>
