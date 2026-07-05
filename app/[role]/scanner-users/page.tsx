@@ -589,23 +589,17 @@ export default function ScannerUsersPage() {
                             .map((event) => (
                             <div key={event._id} className="flex items-start space-x-3 p-2 rounded border hover:bg-gray-50">
                               <input
-                                type="checkbox"
+                                type="radio"
+                                name="create-event-selection"
                                 id={`event-${event._id}`}
-                                checked={formData.selectedEvents.includes(event._id)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setFormData({
-                                      ...formData,
-                                      selectedEvents: [...formData.selectedEvents, event._id]
-                                    })
-                                  } else {
-                                    setFormData({
-                                      ...formData,
-                                      selectedEvents: formData.selectedEvents.filter(id => id !== event._id)
-                                    })
-                                  }
+                                checked={formData.selectedEvents[0] === event._id}
+                                onChange={() => {
+                                  setFormData({
+                                    ...formData,
+                                    selectedEvents: [event._id]
+                                  })
                                 }}
-                                className="rounded border-gray-300 mt-1"
+                                className="border-gray-300 mt-1"
                               />
                               <div className="flex-1">
                                 <Label htmlFor={`event-${event._id}`} className="text-sm font-medium cursor-pointer">

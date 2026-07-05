@@ -6,7 +6,6 @@ import CreateEvent from "@/components/create-event"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 
 interface CreateEventPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>
@@ -69,10 +68,10 @@ export default function CreateEventPage({ params }: CreateEventPageProps) {
               </Button>
               <div className="h-6 w-px bg-border" />
               <div>
-                <h1 className="text-xl font-semibold text-foreground">
+                <h1 className="text-lg font-semibold text-foreground">
                   Create New {eventSelectionFlag === 1 ? 'Tour' : ''} Event
                 </h1>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {eventSelectionFlag === 1 
                     ? 'Create a new event as part of a tour or campaign series'
                     : 'Create a new standalone event'
@@ -85,7 +84,7 @@ export default function CreateEventPage({ params }: CreateEventPageProps) {
       </div>
 
       {/* Content */}
-      <div className="py-6">
+      <div className="py-4 text-[13px] [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-xs [&_label]:text-xs [&_button]:text-xs [&_input]:text-xs [&_textarea]:text-xs [&_.text-3xl]:!text-xl [&_.text-2xl]:!text-lg [&_.text-xl]:!text-base [&_.text-lg]:!text-sm [&_.text-base]:!text-sm [&_.text-sm]:!text-xs">
         <CreateEvent
           eventSelectionFlag={eventSelectionFlag}
           setEventCreationModal={handleEventCreated}

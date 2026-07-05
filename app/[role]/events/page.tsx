@@ -130,7 +130,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
 
   // Filter state
-  // "selected*" / "dateFilterOption" are the DRAFT values bound to the popover controls.
+  // "selected*" / draft dates are the DRAFT values bound to the popover controls.
   // "applied*" are committed only when the user clicks Search, and are what actually drive data fetching/filtering.
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
   const [selectedCity, setSelectedCity] = React.useState("__all__")
@@ -149,8 +149,6 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [endDate, setEndDate] = React.useState<string | null>(null)
   const [draftStartDate, setDraftStartDate] = React.useState<string | null>(null)
   const [draftEndDate, setDraftEndDate] = React.useState<string | null>(null)
-  const [isManual, setIsManual] = React.useState(false)
-  const [dateFilterOption, setDateFilterOption] = React.useState("")
   const [appliedDateOption, setAppliedDateOption] = React.useState("")
   // Event format modal state
   const [showEventFormatModal, setShowEventFormatModal] = React.useState(false)
@@ -887,80 +885,16 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
   }
 
-  // Date filter functionality
-  const handleDateSelection = (option: string) => {
-    setDateFilterOption(option)
-    setIsManual(option === "Manual")
-
-    if (option !== "Manual") {
-      const currentDate = new Date()
-      let start: Date | null = null
-      let end: Date | null = null
-
-      switch (option) {
-        case "Today":
-          start = new Date(currentDate.setHours(0, 1, 1, 0))
-          end = new Date(currentDate.setHours(23, 59, 59, 999))
-          break
-        case "Yesterday":
-          start = new Date(currentDate.setDate(currentDate.getDate() - 1))
-          start.setHours(0, 1, 1, 0)
-          end = new Date(start)
-          end.setHours(23, 59, 59, 999)
-          break
-        case "Last 7 Days":
-          start = new Date(currentDate.setDate(currentDate.getDate() - 7))
-          start.setHours(0, 1, 1, 0)
-          end = new Date()
-          end.setHours(23, 59, 59, 999)
-          break
-        case "Last 1 Month":
-          start = new Date(currentDate.setMonth(currentDate.getMonth() - 1))
-          start.setHours(0, 1, 1, 0)
-          end = new Date()
-          end.setHours(23, 59, 59, 999)
-          break
-        default:
-          start = null
-          end = null
-      }
-
-      if (start && end) {
-        // Stage the dates as DRAFT only; they are applied when the user clicks Search.
-        setDraftStartDate(start.toISOString())
-        setDraftEndDate(end.toISOString())
-      } else {
-        setDraftStartDate(null)
-        setDraftEndDate(null)
-      }
-    }
-  }
-
   const handleManualDateChange = (value: string, type: "start" | "end") => {
     if (type === "start") {
-      setDraftStartDate(value)
+      setDraftStartDate(value ? `${value}T00:00:00` : null)
     } else {
-      setDraftEndDate(value)
+      setDraftEndDate(value ? `${value}T23:59:59` : null)
     }
   }
 
-  // Manual "Apply Dates" button commits the draft dates immediately.
-  const handleManualSubmit = () => {
-    if (draftStartDate && draftEndDate) {
-      setStartDate(draftStartDate)
-      setEndDate(draftEndDate)
-      setAppliedDateOption("Manual")
-
-      // For promoters, use API call. For others, the filtering is handled in useMemo
-      if ((role as UserRole) === "promoter") {
-        dateFilterApiCall(draftStartDate, draftEndDate)
-      } else {
-        toast({
-          title: "Success",
-          description: "Date filter applied successfully",
-        })
-      }
-    }
+  const getDateRangeLabel = (from: string, to: string) => {
+    return `${from.split("T")[0]} to ${to.split("T")[0]}`
   }
 
   // Commit all draft filter selections (called by the popover Search button)
@@ -970,15 +904,18 @@ export default function EventsPage({ params }: EventsPageProps) {
     setAppliedOrganizer(selectedOrganizer)
     setAppliedPromoter(selectedPromoter)
 
-    // Apply date selection (manual dates are applied via their own "Apply Dates" button)
-    if (!isManual) {
+    if (draftStartDate && draftEndDate) {
       setStartDate(draftStartDate)
       setEndDate(draftEndDate)
-      setAppliedDateOption(dateFilterOption)
+      setAppliedDateOption(getDateRangeLabel(draftStartDate, draftEndDate))
 
-      if ((role as UserRole) === "promoter" && draftStartDate && draftEndDate) {
+      if ((role as UserRole) === "promoter") {
         dateFilterApiCall(draftStartDate, draftEndDate)
       }
+    } else {
+      setStartDate(null)
+      setEndDate(null)
+      setAppliedDateOption("")
     }
 
     setOpenFilterDialog(false)
@@ -990,8 +927,6 @@ export default function EventsPage({ params }: EventsPageProps) {
     setSelectedVenue(appliedVenue)
     setSelectedOrganizer(appliedOrganizer)
     setSelectedPromoter(appliedPromoter)
-    setDateFilterOption(appliedDateOption)
-    setIsManual(appliedDateOption === "Manual")
     setDraftStartDate(startDate)
     setDraftEndDate(endDate)
   }
@@ -1335,8 +1270,6 @@ export default function EventsPage({ params }: EventsPageProps) {
     setEndDate(null)
     setDraftStartDate(null)
     setDraftEndDate(null)
-    setIsManual(false)
-    setDateFilterOption("")
     setAppliedDateOption("")
     setSelectedCity("__all__")
     setSelectedVenue("__all__")
@@ -2276,43 +2209,34 @@ export default function EventsPage({ params }: EventsPageProps) {
                           </Popover>
                         </div>
 
-                        {/* Date Range Filter for Non-Promoters */}
-                        <div className="flex flex-col gap-1.5 sm:col-span-2">
-                          <Label className="text-sm font-medium">Date</Label>
-                          <select
-                            className="w-full block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
-                            value={dateFilterOption}
-                            onChange={(e) => handleDateSelection(e.target.value)}
-                          >
-                            <option value="">📅 Select Date Filter</option>
-                            <option value="Today">📍 Today</option>
-                            <option value="Yesterday">⏮️ Yesterday</option>
-                            <option value="Last 7 Days">📊 Last 7 Days</option>
-                            <option value="Last 1 Month">📈 Last 1 Month</option>
-                            <option value="Manual">🔧 Manual Selection</option>
-                          </select>
-                        </div>
                       </>
                     )}
 
-                    {/* Promoter-specific Date Filter */}
-                    {(role as UserRole) === "promoter" && (
-                      <div className="flex flex-col gap-1.5 sm:col-span-2">
-                        <Label className="text-sm font-medium">Date</Label>
-                        <select
-                          className="w-full sm:w-auto block px-4 py-3 border border-border/40 rounded-lg bg-background/50 dark:bg-muted/10 text-sm hover:border-border/60 focus:ring-2 focus:ring-primary/50 focus:border-primary/60 transition-all duration-200 shadow-inner cursor-pointer"
-                          value={dateFilterOption}
-                          onChange={(e) => handleDateSelection(e.target.value)}
-                        >
-                          <option value="">📅 Select Date Filter</option>
-                          <option value="Today">📍 Today</option>
-                          <option value="Yesterday">⏮️ Yesterday</option>
-                          <option value="Last 7 Days">📊 Last 7 Days</option>
-                          <option value="Last 1 Month">📈 Last 1 Month</option>
-                          <option value="Manual">🔧 Manual Selection</option>
-                        </select>
+                    {/* Date Range Filter */}
+                    <div className="flex flex-col gap-2 sm:col-span-2">
+                      <Label className="text-sm font-medium">Date Range</Label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-border/30 bg-muted/10 p-3">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs font-medium text-muted-foreground">From Date</Label>
+                          <Input
+                            type="date"
+                            value={draftStartDate ? draftStartDate.split("T")[0] : ""}
+                            onChange={(e) => handleManualDateChange(e.target.value, "start")}
+                            className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs font-medium text-muted-foreground">To Date</Label>
+                          <Input
+                            type="date"
+                            min={draftStartDate ? draftStartDate.split("T")[0] : undefined}
+                            value={draftEndDate ? draftEndDate.split("T")[0] : ""}
+                            onChange={(e) => handleManualDateChange(e.target.value, "end")}
+                            className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
+                          />
+                        </div>
                       </div>
-                    )}
+                    </div>
                       </div>
 
                       {/* Footer actions */}
@@ -2350,40 +2274,6 @@ export default function EventsPage({ params }: EventsPageProps) {
                 </div>
               </div>
 
-              {/* Manual Date Selection (for both promoter and non-promoter) */}
-              {isManual && (
-                <div className="flex flex-col sm:flex-row gap-3 p-4 bg-muted/20 dark:bg-muted/10 rounded-lg border border-border/30">
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-muted-foreground">Start Date</label>
-                    <Input
-                      type="date"
-                      value={draftStartDate ? draftStartDate.split('T')[0] : ''}
-                      onChange={(e) => handleManualDateChange(e.target.value, "start")}
-                      className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                    />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-muted-foreground">End Date</label>
-                    <Input
-                      type="date"
-                      value={draftEndDate ? draftEndDate.split('T')[0] : ''}
-                      onChange={(e) => handleManualDateChange(e.target.value, "end")}
-                      className="bg-background/70 dark:bg-muted/20 text-sm border-border/40 focus:border-primary/60"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <Button
-                      onClick={handleManualSubmit}
-                      size="sm"
-                      className="text-sm bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg"
-                      disabled={!draftStartDate || !draftEndDate}
-                    >
-                       Apply Dates
-                    </Button>
-                  </div>
-                </div>
-              )}
-
               {/* Active Filters Display (reflects applied filters) */}
               {((appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__") || appliedDateOption) && (
                 <div className="flex flex-wrap gap-2 p-3 bg-muted/10 dark:bg-muted/5 rounded-lg border border-border/20">
@@ -2416,13 +2306,11 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <Badge variant="secondary" className="text-xs">
                       Date: {appliedDateOption}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => {
-                        setDateFilterOption("")
                         setAppliedDateOption("")
                         setStartDate(null)
                         setEndDate(null)
                         setDraftStartDate(null)
                         setDraftEndDate(null)
-                        setIsManual(false)
                       }} />
                     </Badge>
                   )}

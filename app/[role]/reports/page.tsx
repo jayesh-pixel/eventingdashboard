@@ -693,12 +693,13 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             ticketPrice: ticketPrice,
             ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
             totalRevenue: totalRevenue,
+            checkIn: Number(item.CheckIn ?? item.Check_In ?? item.checkIn ?? item.CheckedIn ?? item.TotalCheckIn ?? item.totalCheckIn ?? 0),
             bookingType: item.EventTicketType === 1 || item.eventTicketType === 1 ? "Promoter" : item.EventTicketType === 2 || item.eventTicketType === 2 ? "Online" : item.BookingType || item.bookingType || "N/A",
           }
         })
         
         // Sort summary data by quantitySold (highest first)
-        const sortedSummaryData = summaryData.sort((a, b) => b.quantitySold - a.quantitySold)
+        const sortedSummaryData = summaryData.sort((a: any, b: any) => b.quantitySold - a.quantitySold)
         
         console.log("📈 Processed and sorted summary data:", sortedSummaryData)
         setReportData(sortedSummaryData)
@@ -736,6 +737,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           bookingDate: item.BookingDateTime || item.bookingDate || item.booking_date || item.date || "N/A",
           eventName: item.EventName || item.eventName || item.event_name || "N/A",
           ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || "N/A",
+          source: item.BookingSource || item.bookingChannel || item.Source || item.source || "Online",
+          city: item.EventCityName || item.city || item.City || item.event_city || "N/A",
+          venue: item.EventVenueName || item.venue || item.Venue || item.event_venue || "N/A",
+          checkIn: Number(item.Check_In ?? item.CheckIn ?? item.checkIn ?? item.CheckedIn ?? 0),
+          scannedBy: item.ScannedBy || item.scannedBy || item.scanned_by || item.ScannedByName || "N/A",
           quantity: Number(item.TicketQuantity || item.quantity || item.Quantity || 0),
           ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
           ticketType: item.EventTicketType || item.ticketType || item.ticket_type || "Standard",
@@ -747,7 +753,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         }))
         
         // Sort transaction data by bookingDate (latest first)
-        const sortedTransactionData = transactionData.sort((a, b) => {
+        const sortedTransactionData = transactionData.sort((a: any, b: any) => {
           const dateA = new Date(a.bookingDate).getTime()
           const dateB = new Date(b.bookingDate).getTime()
           if (isNaN(dateA) && isNaN(dateB)) return 0
@@ -886,6 +892,34 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         </Card>
       )}
 
+      {/* Totals summary cards */}
+      {reportData.length > 0 && matchedEvent && (() => {
+        const num = (v: unknown) => {
+          const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[^0-9.-]/g, ""))
+          return Number.isFinite(n) ? n : 0
+        }
+        const isSummary = reportType === "Summary"
+        const totalQuantity = reportData.reduce((sum, r) => sum + num(isSummary ? r.quantitySold : r.quantity), 0)
+        const totalCheckIn = reportData.reduce((sum, r) => sum + num(r.checkIn), 0)
+        const totalPrice = reportData.reduce((sum, r) => sum + num(isSummary ? r.totalRevenue : r.amount), 0)
+        return (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Quantity</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">{totalQuantity.toLocaleString()}</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Checkin</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">{totalCheckIn.toLocaleString()}</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Price</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">₹{totalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+        )
+      })()}
+
       {reportData.length > 0 && matchedEvent && (
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
@@ -926,14 +960,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                         </>
                       )}                      {reportType === "Transaction" && (
                         <>
+                          <TableHead>Name</TableHead>
                           <TableHead>Booking ID</TableHead>
                           <TableHead>Phone No.</TableHead>
+                          <TableHead>Email</TableHead>
                           <TableHead>Booking Date & Time</TableHead>
+                          <TableHead>Event</TableHead>
+                          <TableHead>Ticket Date</TableHead>
+                          <TableHead>Sources</TableHead>
+                          <TableHead>City</TableHead>
+                          <TableHead>Venue</TableHead>
                           <TableHead className="text-center">Quantity</TableHead>
-                          <TableHead className="text-right">Total Amount</TableHead>
-                          <TableHead className="text-center">Booking Type</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead className="text-center">Action</TableHead>
+                          <TableHead className="text-center">Check In</TableHead>
+                          <TableHead>Scanned By</TableHead>
                         </>
                       )}
                     </TableRow>
@@ -955,31 +994,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                           </>
                         )}                        {reportType === "Transaction" && (
                           <>
+                            <TableCell>{item.customerName || "N/A"}</TableCell>
                             <TableCell className="font-medium">{item.bookingId}</TableCell>
                             <TableCell>{item.phoneNumber || "N/A"}</TableCell>
-                            <TableCell>{item.bookingDate ? new Date(item.bookingDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell>{item.email || "N/A"}</TableCell>
+                            <TableCell>{item.bookingDate && item.bookingDate !== "N/A" ? new Date(item.bookingDate).toLocaleString() : "N/A"}</TableCell>
+                            <TableCell>{item.eventName || "N/A"}</TableCell>
+                            <TableCell>{item.ticketDate && item.ticketDate !== "N/A" ? new Date(item.ticketDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell>{item.source || "Online"}</TableCell>
+                            <TableCell>{item.city || "N/A"}</TableCell>
+                            <TableCell>{item.venue || "N/A"}</TableCell>
                             <TableCell className="text-center">{item.quantity || 0}</TableCell>
-                            <TableCell className="text-right">₹{(item.amount || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant={item.bookingType === "Promoter" ? "default" : item.bookingType === "Online" ? "secondary" : "outline"}>
-                                {item.bookingType}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant={item.status === "Confirmed" ? "default" : item.status === "Cancelled" ? "destructive" : "secondary"}>
-                                {item.status || "N/A"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleViewTransactionDetails(item)}
-                                className="text-xs"
-                              >
-                                View Details
-                              </Button>
-                            </TableCell>
+                            <TableCell className="text-center">{item.checkIn || 0}</TableCell>
+                            <TableCell>{item.scannedBy || "N/A"}</TableCell>
                           </>
                         )}
                       </TableRow>

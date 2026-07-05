@@ -869,7 +869,6 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           <CardDescription>
             View and manage venues.
             {loading && " Loading..."}
-            {!loading && ` (${totalVenues} total, page ${currentPage} of ${totalPages})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -894,7 +893,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                     <TableHead>City</TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Priority</TableHead>
-        
+                    <TableHead>Created At</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -932,7 +931,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                         <TableCell>{venue.City}</TableCell>
                         <TableCell>{venue.State}</TableCell>
                         <TableCell>{venue.Priority}</TableCell>
-        
+                        <TableCell>{venue.createdAt ? formatDate(venue.createdAt) : "-"}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

@@ -29,7 +29,16 @@ import { promoterEndPointPannel } from "@/lib/api-endpoints"
 import { getValidToken } from "@/lib/token-utils"
 import { useRouter } from "next/navigation"
 import type { UserRole } from "@/lib/navigation"
-import { BookingsTable } from "@/components/bookings-table"
+import { BookingsTable, type BookingColumnKey } from "@/components/bookings-table"
+
+const REPORT_SUMMARY_COLUMNS: BookingColumnKey[] = [
+  "ticketName", "quantity", "ticketPrice", "ticketDate", "totalAmount",
+]
+
+const REPORT_TRANSACTION_COLUMNS: BookingColumnKey[] = [
+  "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
+  "source", "city", "venue", "quantity", "checkIn", "scannedBy",
+]
 import type { Booking } from "@/lib/types"
 
 interface EventReportPageProps {
@@ -535,6 +544,8 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     TicketPrice: transaction.TicketPrice,
     TotalAmount: transaction.TotalAmount,
     Check_In: transaction.Check_In,
+    checkIn: transaction.Check_In ?? transaction.CheckIn ?? transaction.checkIn ?? 0,
+    scannedBy: transaction.ScannedBy || transaction.scannedBy || transaction.scanned_by || transaction.ScannedByName || "",
   }))
 
   if (loading) {
@@ -706,6 +717,34 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         </CardContent>
       </Card>
 
+      {/* Totals summary cards */}
+      {(() => {
+        const rows = selectedBookingType === 1 ? transformedSummaryData : transformedTransactionData
+        const num = (v: unknown) => {
+          const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(/[^0-9.-]/g, ""))
+          return Number.isFinite(n) ? n : 0
+        }
+        const totalQuantity = rows.reduce((sum, r) => sum + num(r.TicketQuantity ?? r.quantity), 0)
+        const totalCheckIn = rows.reduce((sum, r) => sum + num((r as any).checkIn ?? (r as any).Check_In), 0)
+        const totalPrice = rows.reduce((sum, r) => sum + num(r.TotalAmount ?? r.totalAmount), 0)
+        return (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Quantity</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">{totalQuantity}</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Checkin</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">{totalCheckIn}</p>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-white px-5 py-6 shadow-sm">
+              <p className="text-base font-medium text-blue-950">Total Price</p>
+              <p className="mt-2 text-2xl font-semibold text-primary">{formatCurrency(totalPrice)}</p>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* Data Tables */}
       <Card>
         <CardHeader>
@@ -726,6 +765,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
               searchTerm=""
               statusFilter="all"
               channelFilter="all"
+              columns={REPORT_SUMMARY_COLUMNS}
               formatDate={formatDate}
               formatCurrency={formatCurrency}
               getStatusBadgeVariant={getStatusBadgeVariant}
@@ -737,6 +777,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
               searchTerm={searchTerm}
               statusFilter="all"
               channelFilter="all"
+              columns={REPORT_TRANSACTION_COLUMNS}
               formatDate={formatDate}
               formatCurrency={formatCurrency}
               getStatusBadgeVariant={getStatusBadgeVariant}

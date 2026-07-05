@@ -807,12 +807,7 @@ export default function PromocodesPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Promocodes 
-            {!loading && (
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({totalPromocodes} total)
-              </span>
-            )}
+            Promocodes
           </CardTitle>
           <CardDescription>
             Overview of all promotional codes
@@ -879,15 +874,6 @@ export default function PromocodesPage() {
                           >
                             {submitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                             {promocode.status === PromocodeStatus.Active ? "Disable" : "Enable"}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleDelete(promocode)}
-                            disabled={submitting}
-                            className="text-red-600"
-                          >
-                            Delete
                           </Button>
                         </div>
                       </TableCell>

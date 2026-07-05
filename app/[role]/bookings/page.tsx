@@ -28,7 +28,41 @@ import { useToast } from "@/components/ui/use-toast"
 import { getNumericRole } from "@/lib/role-mapping"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
-import { BookingsTable } from "@/components/bookings-table"
+import { BookingsTable, type BookingColumnKey } from "@/components/bookings-table"
+
+const ONLINE_TAB_COLUMNS: BookingColumnKey[] = [
+  "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
+  "source", "city", "venue", "quantity", "checkIn", "ticketName", "ticketType",
+  "referenceId", "ticketPrice", "promocode", "promoValue", "convenienceFee", "gst",
+  "totalAmount", "status", "actions",
+]
+
+const PROMOTER_TAB_COLUMNS: BookingColumnKey[] = [
+  "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
+  "city", "venue", "promoterName", "quantity", "checkIn", "ticketName", "ticketType",
+  "ticketPrice", "totalAmount", "remark", "status", "actions",
+]
+
+// Superset used for the "All Bookings" tab (mixes online + promoter bookings)
+const ALL_TAB_COLUMNS: BookingColumnKey[] = [
+  "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
+  "source", "city", "venue", "promoterName", "quantity", "checkIn", "ticketName", "ticketType",
+  "referenceId", "ticketPrice", "promocode", "promoValue", "convenienceFee", "gst",
+  "totalAmount", "remark", "status", "actions",
+]
+
+// Resolve the column set for a given tab so no tab falls back to the reduced default
+const getColumnsForTab = (tab: string): BookingColumnKey[] => {
+  switch (tab) {
+    case "online":
+      return ONLINE_TAB_COLUMNS
+    case "promoter":
+    case "my-bookings":
+      return PROMOTER_TAB_COLUMNS
+    default:
+      return ALL_TAB_COLUMNS
+  }
+}
 import {
   Pagination,
   PaginationContent,
@@ -332,6 +366,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         TotalAmount: booking.TotalAmount || booking.totalAmount,
         status: booking.status,
         Remark: booking.Remark || booking.remark,
+        // Extended columns (best-effort mapping of raw API fields; render "-"/0 when absent)
+        checkIn: booking.CheckIn ?? booking.checkIn ?? booking.Check_In ?? booking.Checkin ?? booking.CheckinCount ?? 0,
+        Check_In: booking.Check_In ?? booking.CheckIn ?? booking.checkIn,
+        referenceId: booking.ReferenceId || booking.referenceId || booking.Reference_id || booking.reference_id || booking.ReferenceID || "",
+        promocode: booking.CustomerPromocode || booking.Promocode || booking.promocode || booking.PromoCodeName || booking.promocode_name || "",
+        promoValue: booking.PromoValue ?? booking.promoValue ?? booking.Discount ?? booking.discount ?? "",
+        convenienceFee: booking.ConvinienceFeeValue ?? booking.convenienceFeeValue ?? booking.ConvenienceFee ?? booking.convenienceFee ?? booking.ConvinienceFeeAmount ?? "",
+        gst: booking.GST ?? booking.Gst ?? booking.gst ?? booking.GSTAmount ?? "",
+        scannedBy: booking.ScannedBy || booking.scannedBy || booking.scanned_by || booking.ScannedByName || "",
       }
     })
   }
@@ -1096,12 +1139,13 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                         <p className="text-sm text-muted-foreground">No data found</p>
                       </div>
                     ) : (
-                      <BookingsTable 
+                      <BookingsTable
                         bookings={currentBookings}
                         role={role as UserRole}
                         searchTerm={searchTerm}
                         statusFilter="all"
                         channelFilter="all"
+                        columns={getColumnsForTab(activeTab)}
                         formatDate={formatDate}
                         formatDateTime={formatDateTime}
                         formatCurrency={formatCurrency}

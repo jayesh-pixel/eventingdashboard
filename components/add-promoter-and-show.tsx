@@ -28,7 +28,9 @@ interface AddPromoterAndShowProps {
  */
 const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowProps) => {
   const { user } = useAuth()
-  const promoterss = eventData.EventPromoter || []
+  // PopUpPromoterData carries the display-ready { promoter_id, PromoterName };
+  // EventPromoter is a reference-only array without the name, so prefer PopUpPromoterData.
+  const promoterss = eventData.PopUpPromoterData || eventData.EventPromoter || []
   const eventID = eventData._id
 
   const [eventId, setEventId] = useState(eventID)
@@ -91,7 +93,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                             onClick={() => handlerPromoter(promoters)}
                           >
                             <AvatarFallback className="text-xs bg-muted">
-                              {promoter.PromoterName ? promoter.PromoterName.charAt(0).toUpperCase() : "P"}
+                              {(promoter.PromoterName || (promoter as any).FullName) ? (promoter.PromoterName || (promoter as any).FullName).charAt(0).toUpperCase() : "P"}
                             </AvatarFallback>
                           </Avatar>
                         </TooltipTrigger>
@@ -116,7 +118,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                       <p className="font-medium">Additional promoters:</p>
                       {promoters.slice(4).map((promoter: PromoterData, index: number) => (
                         <p key={index} className="text-sm">
-                          {promoter.PromoterName || "Unknown Promoter"}
+                          {promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
                         </p>
                       ))}
                     </div>
@@ -207,7 +209,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                     <p className="font-medium">Additional promoters:</p>
                     {promoters.slice(4).map((promoter: PromoterData, index: number) => (
                       <p key={index} className="text-sm">
-                        {promoter.PromoterName || "Unknown Promoter"}
+                        {promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
                       </p>
                     ))}
                   </div>

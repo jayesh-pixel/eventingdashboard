@@ -935,8 +935,6 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Category Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Priority</TableHead>
                 <TableHead>
                   <span className="sr-only">Actions</span>
                 </TableHead>
@@ -977,12 +975,6 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                           <Badge variant="destructive" className="text-xs font-bold animate-pulse">DISABLED</Badge>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell className={`max-w-xs truncate ${isDisabled ? 'text-red-600 dark:text-red-400' : ''}`}>
-                      {category.Description || "No description"}
-                    </TableCell>
-                    <TableCell className={isDisabled ? 'text-red-600 dark:text-red-400' : ''}>
-                      {category.Priority || 0}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>

@@ -240,6 +240,15 @@ export interface Booking {
   status?: number
   Remark?: string
   remark?: string
+  // Extended columns (booking management / reports)
+  checkIn?: number | string
+  referenceId?: string
+  promocode?: string
+  promoValue?: number | string
+  convenienceFee?: number | string
+  gst?: number | string
+  scannedBy?: string
+  Check_In?: number | string
 }
 
 export interface DashboardStats {

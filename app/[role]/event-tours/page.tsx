@@ -753,8 +753,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 <TableRow>
                   <TableHead>Image</TableHead>
                   <TableHead>Tour Name</TableHead>
-                  <TableHead className="hidden md:table-cell">Description</TableHead>
-      
+
                   <TableHead>
                     <span className="sr-only">Actions</span>
                   </TableHead>
@@ -791,13 +790,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                         )}
                       </TableCell>
                       <TableCell className="font-medium">{tour.Name || "Untitled Tour"}</TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        <div className="max-w-xs truncate">
-                          {tour.Description || "No description"}
-                        </div>
-                      </TableCell>
-       
-               
+
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

@@ -755,7 +755,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       {/* Artists List */}
       <Card>
         <CardHeader>
-          <CardTitle>Artists ({filteredArtists.length})</CardTitle>
+          <CardTitle>Artists</CardTitle>
           <CardDescription>
             Manage your artists and their information
           </CardDescription>
@@ -780,8 +780,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
 <TableHeader>
                   <TableRow>
 <TableHead>Artist</TableHead>
-<TableHead>Priority</TableHead>
-<TableHead>Description</TableHead>
+<TableHead>Email</TableHead>
+<TableHead>Phone No.</TableHead>
 <TableHead>Images</TableHead>
 <TableHead>Actions</TableHead>
                   </TableRow>
@@ -817,23 +817,24 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                       </div>
 </TableCell>
 <TableCell>
-                        <Badge variant="outline" className="font-mono">
-                          {artist.Priority || 0}
-                        </Badge>
+                        {artist.Email ? (
+                          <div className="flex items-center text-sm">
+                            <Mail className="mr-1 h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span>{artist.Email}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
 </TableCell>
 <TableCell>
-                        <div className="max-w-xs">
-                          {artist.Description ? (
-                            <div className="flex items-start">
-                              <FileText className="mr-1 h-3 w-3 mt-1 text-muted-foreground flex-shrink-0" />
-                              <span className="text-sm text-muted-foreground line-clamp-2">
-                                {artist.Description}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-sm text-muted-foreground italic">No description</span>
-                          )}
-                        </div>
+                        {artist.PhoneNo ? (
+                          <div className="flex items-center text-sm">
+                            <Phone className="mr-1 h-3 w-3 text-muted-foreground flex-shrink-0" />
+                            <span>{artist.PhoneNo}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">-</span>
+                        )}
 </TableCell>
 <TableCell>
                         <div className="flex items-center space-x-1">

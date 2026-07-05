@@ -258,16 +258,6 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         </Card>
       )}
 
-      {/* Bookings Summary */}
-      <div className="grid grid-cols-1 gap-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-sm text-muted-foreground">Total Bookings</div>
-            <div className="text-2xl font-bold">{filteredBookings.length}</div>
-          </CardContent>
-        </Card>
-      </div>
-
       {/* Bookings List */}
       <Card>
         <CardHeader>

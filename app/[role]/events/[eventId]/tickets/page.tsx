@@ -72,6 +72,7 @@ import {
   X,
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useToast } from "@/hooks/use-toast"
@@ -79,7 +80,6 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericRole } from "@/lib/role-mapping"
 import { eventEndPoint, ticketEndPoint } from "@/lib/api-endpoints"
-import { promoterEndpoint } from "@/lib/api-endpoints"
 import { NormalTicket, BulkTicket, Event } from "@/lib/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -334,7 +334,7 @@ export default function TicketsPage() {
   // Map backend promoter record into our Promoter shape
   const mapToPromoter = (p: any): Promoter => {
     return {
-      _id: p?._id ?? p?.promoter_id ?? p?.id ?? "",
+      _id: p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? "",
       FullName: p?.FullName ?? p?.PromoterName ?? p?.name ?? "Unknown Promoter",
       Username: p?.Username ?? p?.username ?? p?.FullName ?? "",
       Email: p?.Email ?? p?.email ?? "",
@@ -342,6 +342,25 @@ export default function TicketsPage() {
       Status: normalizeStatus(p?.Status ?? p?.status ?? p?.PromoterStatus ?? p?.is_active),
     }
   }
+
+  const getAssignedPromotersFromEvent = (event: any): Promoter[] => {
+    const sources = [
+      ...(Array.isArray(event?.PopUpPromoterData) ? event.PopUpPromoterData : []),
+      ...(Array.isArray(event?.EventPromoter) ? event.EventPromoter : []),
+      ...(Array.isArray(event?.EventPromoters) ? event.EventPromoters : []),
+      ...(Array.isArray(event?.Promoters) ? event.Promoters : []),
+    ]
+
+    const uniquePromoters = new Map<string, Promoter>()
+    sources.map(mapToPromoter).forEach((promoter) => {
+      if (promoter._id && !uniquePromoters.has(promoter._id)) {
+        uniquePromoters.set(promoter._id, promoter)
+      }
+    })
+
+    return Array.from(uniquePromoters.values())
+  }
+
   const getTicketTypeName = (type: number) => {
     switch (type) {
       case 1: return "Single Day"
@@ -353,24 +372,37 @@ export default function TicketsPage() {
   }
   
   // API Functions
-  const fetchPromoters = async () => {
+  // `allowedIds`, when provided and non-empty, restricts the result to the event's
+  // assigned promoters so the ticket selector never lists unassigned promoters.
+  const fetchPromoters = async (allowedIds?: Set<string>) => {
     try {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
-        method: "GET",
+      const response = await fetch(eventEndPoint.GET_EVENT_PROMOTERS, {
+        method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
+        body: JSON.stringify({
+          event_id: eventId,
+          AdminRole: getNumericRole(role),
+          user_id: user.user_id,
+        }),
       })
 
       if (response.ok) {
         const data = await response.json()
         if (!data.error) {
-          const list = Array.isArray(data.data) ? data.data : []
+          const list = Array.isArray(data.data)
+            ? data.data
+            : data.data?.EventPromoters || data.data?.PromoterData || data.data?.promoters || []
           const normalized: Promoter[] = list.map(mapToPromoter)
-          setPromoters(normalized)
+          const scoped = allowedIds && allowedIds.size > 0
+            ? normalized.filter((p) => allowedIds.has(p._id))
+            : normalized
+          setPromoters(scoped)
         }
       }
     } catch (error) {
@@ -424,6 +456,16 @@ export default function TicketsPage() {
           
           // Set event data for display
           setEventData(data.data)
+          // The event's embedded promoter arrays only carry promoter_id references
+          // (no name/email/phone/status), which is why they render as "Unknown Promoter".
+          // Seed with them for an instant paint, then always hydrate the authoritative
+          // full records (FullName/Email/Phone1/Status) from GET_EVENT_PROMOTERS.
+          const assignedPromoters = getAssignedPromotersFromEvent(data.data)
+          if (assignedPromoters.length > 0) {
+            setPromoters(assignedPromoters)
+          }
+          // Hydrate full details, but keep the list scoped to this event's assigned promoters only.
+          fetchPromoters(new Set(assignedPromoters.map((p) => p._id)))
           
           // Determine ticket type based on event type and date times
           let automaticTicketType = 1 // Default to Single Day
@@ -577,6 +619,7 @@ export default function TicketsPage() {
       // Add name filter if not "all"
       if (nameFilter !== "all") {
         filterPayload.name = nameFilter
+        filterPayload.ticketName = nameFilter
       }
 
       // Add date filter if not "all"
@@ -711,6 +754,7 @@ export default function TicketsPage() {
       // Add name filter if not "all"
       if (nameFilter !== "all") {
         filterPayload.name = nameFilter
+        filterPayload.ticketName = nameFilter
       }
 
       console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
@@ -1523,7 +1567,6 @@ export default function TicketsPage() {
   React.useEffect(() => {
     // Load initial data when component mounts
     if (user && eventId) {
-      fetchPromoters()
       fetchEventDateTimes()
       
       // Load tickets for the initial active tab only
@@ -1634,7 +1677,7 @@ export default function TicketsPage() {
     // Open promoter selection modal if "Promoters" is selected
     if (value === "3") {
       // Check if event has assigned promoters first
-      if (!(eventData as any)?.EventPromoter || (eventData as any).EventPromoter.length === 0) {
+      if (promoters.length === 0) {
         toast({
           title: "No Promoters Assigned",
           description: "You need to assign promoters to this event first before creating promoter-only tickets. Please assign promoters from the events management page.",
@@ -1678,7 +1721,7 @@ export default function TicketsPage() {
       if (visibilityStr === '3') {
         // Extract promoter IDs from both possible field names
         const promotersArray = (normalTicket as any).Promoters || normalTicket.EventPromoters || []
-        const existingPromoterIds = promotersArray.map((ep: any) => ep.promoter_id || ep._id).filter(Boolean)
+        const existingPromoterIds = promotersArray.map((ep: any) => ep.promoter_id || ep.Promoter_id || ep.promoterId || ep._id).filter(Boolean)
         console.log('Edit Modal - Found promoters for visibility 3:', existingPromoterIds)
         setSelectedPromoters(existingPromoterIds)
       } else {
@@ -1687,16 +1730,8 @@ export default function TicketsPage() {
     }
     
     setShowEditModal(true)
-  }  // Filter promoters based on search AND event assignment
+  }  // Filter promoters based on search; promoters state contains only event-assigned promoters.
   const filteredPromoters = promoters.filter(promoter => {
-    // First check if promoter is assigned to this event
-    const isAssignedToEvent = (eventData as any)?.EventPromoter?.some(
-      (ep: any) => ep.promoter_id === promoter._id
-    )
-    
-    if (!isAssignedToEvent) return false
-    
-    // Then check if promoter matches search term
     const matchesSearch = 
       promoter.FullName.toLowerCase().includes(promoterSearchTerm.toLowerCase()) ||
       (promoter.Username && promoter.Username.toLowerCase().includes(promoterSearchTerm.toLowerCase())) ||
@@ -1840,13 +1875,13 @@ export default function TicketsPage() {
         <TabsList>
           <TabsTrigger value="normal" className="flex items-center gap-2">
             <Ticket className="h-4 w-4" />
-            Normal Tickets ({filteredNormalTickets.length})
+            Normal Tickets
           </TabsTrigger>
           {/* Bulk Tickets tab - Visible to SuperAdmins and Organizers */}
           {(getNumericRole(role) === 1 || getNumericRole(role) === 2) && (
             <TabsTrigger value="bulk" className="flex items-center gap-2">
               <Ticket className="h-4 w-4" />
-              Bulk Tickets ({filteredBulkTickets.length})
+              Bulk Tickets
             </TabsTrigger>
           )}
         </TabsList>
@@ -2254,7 +2289,38 @@ export default function TicketsPage() {
                     value={normalFormData.TicketName}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                   />
-                </div>                <div className="grid grid-cols-1 gap-4">
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Event Type</Label>
+                  {(isMultiDateEvent || eventDateTimes.length > 1) ? (
+                    // Multi-day event: allow Multiple Day or Season Pass
+                    <RadioGroup
+                      value={normalFormData.TicketType.toString()}
+                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketType: parseInt(value) }))}
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-2"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="2" id="ticketType-multiple" />
+                        <Label htmlFor="ticketType-multiple" className="font-normal cursor-pointer">Multiple Day</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="3" id="ticketType-season" />
+                        <Label htmlFor="ticketType-season" className="font-normal cursor-pointer">Season Pass</Label>
+                      </div>
+                    </RadioGroup>
+                  ) : (
+                    // Single-day event: only Single Day (selected by default)
+                    <RadioGroup value="1" className="grid grid-cols-1">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="1" id="ticketType-single" />
+                        <Label htmlFor="ticketType-single" className="font-normal cursor-pointer">Single Day</Label>
+                      </div>
+                    </RadioGroup>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="visibilityLevel">Visibility</Label>
                     <Select

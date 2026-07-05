@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Search, Loader2, RefreshCw, AlertCircle, Plus, Edit, Trash2, Eye, EyeOff, UserCheck, UserX, KeyRound, MoreHorizontal } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
@@ -137,6 +138,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   const [statusAction, setStatusAction] = React.useState<'enable' | 'disable'>('disable')
   const [showPassword, setShowPassword] = React.useState(false)
   const [newPassword, setNewPassword] = React.useState("")
+  const [sendAccountInfo, setSendAccountInfo] = React.useState(false)
   // Form data
   const [formData, setFormData] = React.useState({
     FullName: "",
@@ -422,7 +424,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       const payload: any = {
         FullName: formData.FullName,
         Username: formData.Username,
-        SendMailFlag: 1,
+        SendMailFlag: sendAccountInfo ? 1 : 0,
         CreatedBy: 1,
         createduser_id: user?.user_id || "",
       }
@@ -747,6 +749,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     // Reset password visibility
     setShowPassword(false)
     setNewPassword("")
+
+    // Reset send account info checkbox
+    setSendAccountInfo(false)
   }
 
   // Generate password function
@@ -841,11 +846,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       <Card>
         <CardHeader>
           <CardTitle>
-            Promoters Management            {!loading && (
-              <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({totalPromoters} total, page {currentPage} of {totalPages})
-              </span>
-            )}
+            Promoters Management
           </CardTitle>
           <CardDescription>
             View and manage all promoter accounts
@@ -872,7 +873,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Location</TableHead>
-  
+                  <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -886,6 +887,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                     <TableCell>{promoter.Phone1 || 'N/A'}</TableCell>
                     <TableCell>
                       {[promoter.City, promoter.State, promoter.Country].filter(Boolean).join(", ")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[promoter.status as keyof typeof statusColors]}>
+                        {statusLabels[promoter.status as keyof typeof statusLabels]}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -1124,7 +1130,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       {/* Create Promoter Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create New Promoter</DialogTitle>
             <DialogDescription>
@@ -1221,17 +1227,28 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 setCityName={setCityName}
               />
             </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="sendAccountInfo"
+                checked={sendAccountInfo}
+                onCheckedChange={(checked) => setSendAccountInfo(checked === true)}
+                className="mt-0.5"
+              />
+              <Label htmlFor="sendAccountInfo" className="text-sm font-normal leading-snug cursor-pointer">
+                Tick here to send a new account information message to this individual
+              </Label>
+            </div>
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setShowCreateDialog(false)
                 resetForm()
               }}
             >
               Cancel
-            </Button>            <Button 
+            </Button>            <Button
               onClick={handleCreatePromoter}
               disabled={submitting || !formData.FullName || !formData.Username}
             >

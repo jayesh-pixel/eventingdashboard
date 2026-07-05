@@ -818,7 +818,6 @@ export default function GenresPage({ params }: GenresPageProps) {
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Genre Name</TableHead>
-                <TableHead className="hidden md:table-cell">Description</TableHead>
                 <TableHead>
 Actions
                 </TableHead>
@@ -848,10 +847,7 @@ Actions
                       )}
                     </TableCell>
                     <TableCell className="font-medium">{genre.Name}</TableCell>
-                    <TableCell className="hidden md:table-cell max-w-xs truncate">
-                      {genre.Description || "No description"}
-                    </TableCell>
-    
+
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
