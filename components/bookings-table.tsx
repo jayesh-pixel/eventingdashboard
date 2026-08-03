@@ -132,7 +132,7 @@ export function BookingsTable({
 
   const COLUMN_DEFS: Record<BookingColumnKey, ColumnDef> = {
     name: {
-      header: "Name",
+      header: "Customer Name",
       thClass: "w-36 text-left",
       render: (b) => trunc(b.CustomerName || b.customerName || "N/A", b.CustomerName || b.customerName || "N/A"),
     },
@@ -157,7 +157,7 @@ export function BookingsTable({
       render: (b) => trunc(formatDateTimeSafe(b.BookingDateTime || b.bookingDate), undefined, "center"),
     },
     eventName: {
-      header: "Event Name",
+      header: "Event",
       thClass: "w-40 text-left",
       render: (b) => trunc(b.EventName || b.eventName || "N/A", b.EventName || b.eventName || "N/A"),
     },

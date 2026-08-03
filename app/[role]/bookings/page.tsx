@@ -14,10 +14,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Download, Filter, Loader2, AlertCircle, ChevronDown } from "lucide-react"
 import { useIsMobile } from "@/components/ui/use-mobile"
@@ -39,8 +48,8 @@ const ONLINE_TAB_COLUMNS: BookingColumnKey[] = [
 
 const PROMOTER_TAB_COLUMNS: BookingColumnKey[] = [
   "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
-  "city", "venue", "promoterName", "quantity", "checkIn", "ticketName", "ticketType",
-  "ticketPrice", "totalAmount", "remark", "status", "actions",
+  "city", "venue", "promoterName", "quantity", "ticketName", "ticketType",
+  "ticketPrice", "totalAmount", "status",
 ]
 
 // Superset used for the "All Bookings" tab (mixes online + promoter bookings)
@@ -115,6 +124,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [dateFilter, setDateFilter] = React.useState<DateFilterOption>("all")
   const [manualStartDate, setManualStartDate] = React.useState("")
   const [manualEndDate, setManualEndDate] = React.useState("")
+  const [cityFilter, setCityFilter] = React.useState("all")
+  const [venueFilter, setVenueFilter] = React.useState("all")
+  const [eventNameFilter, setEventNameFilter] = React.useState("all")
+  const [promoterFilter, setPromoterFilter] = React.useState("all")
+  const [draftCityFilter, setDraftCityFilter] = React.useState("all")
+  const [draftVenueFilter, setDraftVenueFilter] = React.useState("all")
+  const [draftEventNameFilter, setDraftEventNameFilter] = React.useState("all")
+  const [draftPromoterFilter, setDraftPromoterFilter] = React.useState("all")
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
 
   // Mobile UI state
   const [isTabsDropdownOpen, setIsTabsDropdownOpen] = React.useState(false)
@@ -197,7 +215,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       })
     }
 
-    if ((role as UserRole) === "superadmin") {
+    if ((role as UserRole) === "superadmin" || (role as UserRole) === "organizer") {
       tabs.push({
         value: "promoter",
         label: "Promoter",
@@ -278,7 +296,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return bookings.map((booking, index) => {
       const bookingId = booking._id || booking.id || booking.Booking_id || booking.booking_id || `temp-id-${index}`
       const phoneNumber = booking.PhoneNumber || booking.phoneNumber || booking.phone_number || booking.Phone || ""
-      const promoterName = booking.PromoterName || booking.promoterName || booking.promoter_name || ""
+      const promoterName =
+        booking.PromoterName ||
+        booking.promoterName ||
+        booking.promoter_name ||
+        booking.PromoterFullName ||
+        booking.promoter_full_name ||
+        booking.promoter?.FullName ||
+        booking.Promoter?.FullName ||
+        ""
       const organizerName = booking.OrganizerName || booking.organizerName || booking.organizer_name || ""
       const city = booking.EventCityName || booking.city || booking.event_city || booking.CityName || ""
       const venue = booking.EventVenueName || booking.venue || booking.event_venue || booking.VenueName || ""
@@ -292,7 +318,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       
       // BookingSource is the CORRECT API field - it returns "Promoter" or "Online"
       // Do NOT use other fields as they may have different values
-      const bookingSource = booking.BookingSource || "Online"
+      const bookingSource =
+        booking.BookingSource ||
+        ((role as UserRole) === "promoter" || activeTab === "promoter" ? "Promoter" : "Online")
 
       let status: "Confirmed" | "Pending" | "Cancelled" | "Booked" = "Confirmed"
       if (booking.status !== undefined) {
@@ -356,7 +384,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         TicketDate: booking.TicketDate || booking.ticketDate,
         EventCityName: booking.EventCityName || booking.city,
         EventVenueName: booking.EventVenueName || booking.venue,
-        PromoterName: booking.PromoterName || booking.promoterName,
+        PromoterName: promoterName,
         OrganizerName: booking.OrganizerName || booking.organizerName,
         OrganizerId: booking.OrganizerId || booking.organizerId,
         TicketQuantity: booking.TicketQuantity || booking.Quantity || booking.quantity || booking.TotalQuantity,
@@ -383,6 +411,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const fetchBookingsData = async (filters?: {
     searchTerm?: string
     page?: number
+    city?: string
+    venue?: string
+    eventName?: string
+    promoterId?: string
   }) => {
     try {
       setLoading(true)
@@ -408,6 +440,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         // Add filter parameters for promoter endpoint
         if (filters?.searchTerm) {
           requestPayload.searchkeyword = filters.searchTerm
+        }
+        if (filters?.city && filters.city !== "all") {
+          requestPayload.city = filters.city
+        }
+        if (filters?.venue && filters.venue !== "all") {
+          requestPayload.venue = filters.venue
+        }
+        if (filters?.eventName && filters.eventName !== "all") {
+          requestPayload.eventName = filters.eventName
         }
       } else {
         // For superadmin/organizer, use different endpoints based on active tab
@@ -449,6 +490,18 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         
         if (filters?.searchTerm) {
           requestPayload.searchkeyword = filters.searchTerm
+        }
+        if (filters?.city && filters.city !== "all") {
+          requestPayload.city = filters.city
+        }
+        if (filters?.venue && filters.venue !== "all") {
+          requestPayload.venue = filters.venue
+        }
+        if (filters?.eventName && filters.eventName !== "all") {
+          requestPayload.eventName = filters.eventName
+        }
+        if (filters?.promoterId && filters.promoterId !== "all") {
+          requestPayload.promoter_id = filters.promoterId
         }
       }
 
@@ -628,19 +681,40 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     const filters = {
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
       page: 1,
+      city: cityFilter,
+      venue: venueFilter,
+      eventName: eventNameFilter,
+      promoterId: promoterFilter,
     }
 
     setCurrentPage(1)
     console.log("🔍 Applying filters via API:", filters)
     fetchBookingsData(filters)
-  }, [debouncedSearchTerm, user, bookingDataType, dateFilter, manualStartDate, manualEndDate])
+  }, [
+    debouncedSearchTerm,
+    user,
+    bookingDataType,
+    dateFilter,
+    manualStartDate,
+    manualEndDate,
+    cityFilter,
+    venueFilter,
+    eventNameFilter,
+    promoterFilter,
+  ])
 
   // Initial data fetch - refetch when user or activeTab changes
   React.useEffect(() => {
     if (user) {
       // Fetch data without filters initially
       setCurrentPage(1)
-      fetchBookingsData({ page: 1 })
+      fetchBookingsData({
+        page: 1,
+        city: cityFilter,
+        venue: venueFilter,
+        eventName: eventNameFilter,
+        promoterId: promoterFilter,
+      })
     }
   }, [user, activeTab, bookingDataType])
   
@@ -650,7 +724,79 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     fetchBookingsData({
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
       page,
+      city: cityFilter,
+      venue: venueFilter,
+      eventName: eventNameFilter,
+      promoterId: promoterFilter,
     })
+  }
+
+  const getUniqueFilterValues = React.useCallback(
+    (values: Array<string | undefined>) =>
+      Array.from(new Set(values.filter((value): value is string => Boolean(value?.trim())))).sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    []
+  )
+
+  const uniqueCities = React.useMemo(
+    () => getUniqueFilterValues(originalData.map((booking) => booking.city || booking.EventCityName)),
+    [getUniqueFilterValues, originalData]
+  )
+  const uniqueVenues = React.useMemo(
+    () => getUniqueFilterValues(originalData.map((booking) => booking.venue || booking.EventVenueName)),
+    [getUniqueFilterValues, originalData]
+  )
+  const uniqueEventNames = React.useMemo(
+    () => getUniqueFilterValues(originalData.map((booking) => booking.eventName || booking.EventName)),
+    [getUniqueFilterValues, originalData]
+  )
+  const promoterOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string }>()
+
+    originalData.forEach((booking) => {
+      const name = booking.promoterName || booking.PromoterName
+      if (!name?.trim()) return
+
+      const id = booking.promoterId || name
+      options.set(id, { id, name })
+    })
+
+    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [originalData])
+  const activeFilterCount = [cityFilter, venueFilter, eventNameFilter, promoterFilter].filter(
+    (value) => value !== "all"
+  ).length
+
+  const resetBookingFilters = () => {
+    setDraftCityFilter("all")
+    setDraftVenueFilter("all")
+    setDraftEventNameFilter("all")
+    setDraftPromoterFilter("all")
+    setCityFilter("all")
+    setVenueFilter("all")
+    setEventNameFilter("all")
+    setPromoterFilter("all")
+    setCurrentPage(1)
+  }
+
+  const handleFilterDialogOpenChange = (open: boolean) => {
+    if (open) {
+      setDraftCityFilter(cityFilter)
+      setDraftVenueFilter(venueFilter)
+      setDraftEventNameFilter(eventNameFilter)
+      setDraftPromoterFilter(promoterFilter)
+    }
+    setIsFilterDialogOpen(open)
+  }
+
+  const applyBookingFilters = () => {
+    setCityFilter(draftCityFilter)
+    setVenueFilter(draftVenueFilter)
+    setEventNameFilter(draftEventNameFilter)
+    setPromoterFilter(draftPromoterFilter)
+    setCurrentPage(1)
+    setIsFilterDialogOpen(false)
   }
   
   // Client-side filtering of bookings
@@ -681,8 +827,29 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       })
     }
 
+    if (cityFilter !== "all") {
+      filtered = filtered.filter((booking) => (booking.city || booking.EventCityName) === cityFilter)
+    }
+
+    if (venueFilter !== "all") {
+      filtered = filtered.filter((booking) => (booking.venue || booking.EventVenueName) === venueFilter)
+    }
+
+    if (eventNameFilter !== "all") {
+      filtered = filtered.filter((booking) => (booking.eventName || booking.EventName) === eventNameFilter)
+    }
+
+    if (promoterFilter !== "all") {
+      const promoterName = promoterOptions.find((promoter) => promoter.id === promoterFilter)?.name
+      filtered = filtered.filter(
+        (booking) =>
+          booking.promoterId === promoterFilter ||
+          Boolean(promoterName && (booking.promoterName || booking.PromoterName) === promoterName)
+      )
+    }
+
     return filtered
-  }, [bookingsData, debouncedSearchTerm])
+  }, [bookingsData, cityFilter, debouncedSearchTerm, eventNameFilter, promoterFilter, promoterOptions, venueFilter])
 
   // Paginated bookings for current page
   const currentBookings = React.useMemo(() => {
@@ -1057,9 +1224,109 @@ export default function BookingsPage({ params }: BookingsPageProps) {
               className="h-12"
             />
             <div className="flex flex-wrap gap-3">
-              <Button variant="outline" size="icon" type="button" className="h-12 w-12 shrink-0">
-                <Filter className="h-5 w-5 text-muted-foreground" />
-              </Button>
+              <Dialog open={isFilterDialogOpen} onOpenChange={handleFilterDialogOpenChange}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    title="Filter bookings"
+                    aria-label="Filter bookings"
+                    className="relative h-12 w-12 shrink-0"
+                  >
+                    <Filter className="h-5 w-5 text-muted-foreground" />
+                    {activeFilterCount > 0 && (
+                      <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-xl">
+                  <div className="flex items-center justify-between gap-4 pr-6">
+                    <DialogTitle>Event Filter</DialogTitle>
+                    <Button variant="secondary" type="button" onClick={resetBookingFilters}>
+                      Reset All
+                    </Button>
+                  </div>
+                  <div className="grid gap-6 py-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">City</label>
+                      <Select value={draftCityFilter} onValueChange={setDraftCityFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select City" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Select City</SelectItem>
+                          {uniqueCities.map((city) => (
+                            <SelectItem key={city} value={city}>
+                              {city}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Venue</label>
+                      <Select value={draftVenueFilter} onValueChange={setDraftVenueFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Venue" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Select Venue</SelectItem>
+                          {uniqueVenues.map((venue) => (
+                            <SelectItem key={venue} value={venue}>
+                              {venue}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium">Event Name</label>
+                      <Select value={draftEventNameFilter} onValueChange={setDraftEventNameFilter}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select Event names" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Select Event names</SelectItem>
+                          {uniqueEventNames.map((eventName) => (
+                            <SelectItem key={eventName} value={eventName}>
+                              {eventName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {(role as UserRole) !== "promoter" && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Promoters</label>
+                        <Select value={draftPromoterFilter} onValueChange={setDraftPromoterFilter}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Promoter" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Select Promoter</SelectItem>
+                            {promoterOptions.map((promoter) => (
+                              <SelectItem key={promoter.id} value={promoter.id}>
+                                {promoter.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                  <DialogFooter className="sm:justify-end">
+                    <Button variant="outline" type="button" onClick={() => handleFilterDialogOpenChange(false)}>
+                      Close
+                    </Button>
+                    <Button type="button" onClick={applyBookingFilters}>
+                      Search
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="h-12 min-w-[128px] justify-between">
@@ -1133,27 +1400,20 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                   {/* Mobile Card View */}
                                  {/* Desktop Table View */}
                   <div className="w-full">
-                    {filteredBookings.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-center gap-2">
-                        <AlertCircle className="h-10 w-10 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">No data found</p>
-                      </div>
-                    ) : (
-                      <BookingsTable
-                        bookings={currentBookings}
-                        role={role as UserRole}
-                        searchTerm={searchTerm}
-                        statusFilter="all"
-                        channelFilter="all"
-                        columns={getColumnsForTab(activeTab)}
-                        formatDate={formatDate}
-                        formatDateTime={formatDateTime}
-                        formatCurrency={formatCurrency}
-                        getStatusBadgeVariant={getStatusBadgeVariant}
-                        onCancelBooking={handleCancelBooking}
-                        onResendTicket={handleResendTicket}
-                      />
-                    )}
+                    <BookingsTable
+                      bookings={currentBookings}
+                      role={role as UserRole}
+                      searchTerm={searchTerm}
+                      statusFilter="all"
+                      channelFilter="all"
+                      columns={getColumnsForTab(activeTab)}
+                      formatDate={formatDate}
+                      formatDateTime={formatDateTime}
+                      formatCurrency={formatCurrency}
+                      getStatusBadgeVariant={getStatusBadgeVariant}
+                      onCancelBooking={handleCancelBooking}
+                      onResendTicket={handleResendTicket}
+                    />
                   </div>
 
                   {/* Pagination */}

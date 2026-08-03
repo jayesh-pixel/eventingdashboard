@@ -135,12 +135,14 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [openFilterDialog, setOpenFilterDialog] = React.useState(false)
   const [selectedCity, setSelectedCity] = React.useState("__all__")
   const [selectedVenue, setSelectedVenue] = React.useState("__all__")
+  const [selectedEventName, setSelectedEventName] = React.useState("__all__")
   const [selectedOrganizer, setSelectedOrganizer] = React.useState("__all__")
   const [selectedPromoter, setSelectedPromoter] = React.useState("__all__")
 
   // Applied (committed on Search) filter values
   const [appliedCity, setAppliedCity] = React.useState("__all__")
   const [appliedVenue, setAppliedVenue] = React.useState("__all__")
+  const [appliedEventName, setAppliedEventName] = React.useState("__all__")
   const [appliedOrganizer, setAppliedOrganizer] = React.useState("__all__")
   const [appliedPromoter, setAppliedPromoter] = React.useState("__all__")
 
@@ -168,6 +170,13 @@ export default function EventsPage({ params }: EventsPageProps) {
   const [filterVenues, setFilterVenues] = React.useState<{id: string, name: string}[]>([])
   const [filterPromoters, setFilterPromoters] = React.useState<{id: string, name: string}[]>([])
   const [filterOptionsLoading, setFilterOptionsLoading] = React.useState(false)
+  const filterEventNames = React.useMemo(
+    () =>
+      Array.from(
+        new Set(originalData.map((event) => String(event.eventName || "").trim()).filter(Boolean))
+      ).sort((a, b) => a.localeCompare(b)),
+    [originalData]
+  )
   
   // Popover open states for filter dropdowns
   const [cityPopoverOpen, setCityPopoverOpen] = React.useState(false)
@@ -901,6 +910,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   const applySearchFilters = () => {
     setAppliedCity(selectedCity)
     setAppliedVenue(selectedVenue)
+    setAppliedEventName(selectedEventName)
     setAppliedOrganizer(selectedOrganizer)
     setAppliedPromoter(selectedPromoter)
 
@@ -925,6 +935,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   const revertDraftFilters = () => {
     setSelectedCity(appliedCity)
     setSelectedVenue(appliedVenue)
+    setSelectedEventName(appliedEventName)
     setSelectedOrganizer(appliedOrganizer)
     setSelectedPromoter(appliedPromoter)
     setDraftStartDate(startDate)
@@ -1042,6 +1053,10 @@ export default function EventsPage({ params }: EventsPageProps) {
         )
       }
 
+      if (appliedEventName && appliedEventName !== "__all__") {
+        events = events.filter(event => event.eventName === appliedEventName)
+      }
+
       if ((role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__") {
         const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === appliedOrganizer)
         events = events.filter(event =>
@@ -1073,7 +1088,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       const dateB = new Date(b.updatedAt || b.createdAt || 0)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedOrganizer, appliedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
+  }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedEventName, appliedOrganizer, appliedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
 
   const totalPages = useClientPaging ? Math.ceil(filteredEvents.length / ITEMS_PER_PAGE) : serverTotalPages
   const currentEvents = useClientPaging
@@ -1273,10 +1288,12 @@ export default function EventsPage({ params }: EventsPageProps) {
     setAppliedDateOption("")
     setSelectedCity("__all__")
     setSelectedVenue("__all__")
+    setSelectedEventName("__all__")
     setSelectedOrganizer("__all__")
     setSelectedPromoter("__all__")
     setAppliedCity("__all__")
     setAppliedVenue("__all__")
+    setAppliedEventName("__all__")
     setAppliedOrganizer("__all__")
     setAppliedPromoter("__all__")
     setAllEventsData(originalData)
@@ -1290,6 +1307,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   const activeFilterCount = [
     appliedCity !== "__all__",
     appliedVenue !== "__all__",
+    appliedEventName !== "__all__",
     (role as UserRole) !== "organizer" && appliedOrganizer !== "__all__",
     appliedPromoter !== "__all__",
     !!appliedDateOption,
@@ -1928,9 +1946,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                       </div>
                       {/* Filter Selects Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Event Filters (for all roles except promoter) */}
-                    {(role as UserRole) !== "promoter" && (
-                      <>
+                    {/* Event filters available to every role */}
                         {/* City Filter */}
                         <div className="flex flex-col gap-1.5">
                           <Label className="text-sm font-medium">City</Label>
@@ -2069,8 +2085,28 @@ export default function EventsPage({ params }: EventsPageProps) {
                           </Popover>
                         </div>
 
+                        {/* Event Name Filter (promoter view) */}
+                        {(role as UserRole) === "promoter" && (
+                          <div className="flex flex-col gap-1.5">
+                            <Label className="text-sm font-medium">Event Name</Label>
+                            <Select value={selectedEventName} onValueChange={setSelectedEventName}>
+                              <SelectTrigger className="w-full bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 text-sm">
+                                <SelectValue placeholder="Select Event names" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">Select Event names</SelectItem>
+                                {filterEventNames.map((eventName) => (
+                                  <SelectItem key={eventName} value={eventName}>
+                                    {eventName}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         {/* Organizer Filter */}
-                        {(role as UserRole) !== "organizer" && (
+                        {(role as UserRole) !== "organizer" && (role as UserRole) !== "promoter" && (
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-sm font-medium">Organizer</Label>
                             <Popover open={organizerPopoverOpen} onOpenChange={setOrganizerPopoverOpen}>
@@ -2141,6 +2177,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         )}
 
                         {/* Promoter Filter */}
+                        {(role as UserRole) !== "promoter" && (
                         <div className="flex flex-col gap-1.5">
                           <Label className="text-sm font-medium">Promoter</Label>
                           <Popover open={promoterPopoverOpen} onOpenChange={setPromoterPopoverOpen}>
@@ -2208,9 +2245,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             </PopoverContent>
                           </Popover>
                         </div>
-
-                      </>
-                    )}
+                        )}
 
                     {/* Date Range Filter */}
                     <div className="flex flex-col gap-2 sm:col-span-2">
@@ -2260,7 +2295,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                   </Popover>
 
                   {/* Quick Reset (visible when any filter is active) */}
-                  {(searchTerm || appliedDateOption || (appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__")) && (
+                  {(searchTerm || appliedDateOption || (appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (appliedEventName && appliedEventName !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__")) && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -2275,7 +2310,7 @@ export default function EventsPage({ params }: EventsPageProps) {
               </div>
 
               {/* Active Filters Display (reflects applied filters) */}
-              {((appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__") || appliedDateOption) && (
+              {((appliedCity && appliedCity !== "__all__") || (appliedVenue && appliedVenue !== "__all__") || (appliedEventName && appliedEventName !== "__all__") || (((role as UserRole) !== "organizer") && appliedOrganizer && appliedOrganizer !== "__all__") || (appliedPromoter && appliedPromoter !== "__all__") || appliedDateOption) && (
                 <div className="flex flex-wrap gap-2 p-3 bg-muted/10 dark:bg-muted/5 rounded-lg border border-border/20">
                   <span className="text-xs font-medium text-muted-foreground mr-2">Active Filters:</span>
                   {appliedCity && appliedCity !== "__all__" && (
@@ -2288,6 +2323,12 @@ export default function EventsPage({ params }: EventsPageProps) {
                     <Badge variant="secondary" className="text-xs">
                       Venue: {filterVenues.find(v => v.id === appliedVenue)?.name || appliedVenue}
                       <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedVenue("__all__"); setAppliedVenue("__all__") }} />
+                    </Badge>
+                  )}
+                  {appliedEventName && appliedEventName !== "__all__" && (
+                    <Badge variant="secondary" className="text-xs">
+                      Event: {appliedEventName}
+                      <X className="ml-1 h-3 w-3 cursor-pointer" onClick={() => { setSelectedEventName("__all__"); setAppliedEventName("__all__") }} />
                     </Badge>
                   )}
                   {(role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && (

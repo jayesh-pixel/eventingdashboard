@@ -212,6 +212,17 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
+      // A search with no matches is an empty result, not a page-level loading error.
+      if (response.status === 404 && searchKeyword) {
+        setPromoters([])
+        setTotalPages(1)
+        setTotalPromoters(0)
+        setCurrentPage(1)
+        setApiError(null)
+        setShowErrorDialog(false)
+        return
+      }
+
       const result: PromotersApiResponse = await handleApiResponse(response)      // Handle paginated response structure
       if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
         const paginatedData = result.data as {
@@ -658,7 +669,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          user_id: promoterId,
+          promoter_id: promoterId,
           new_password: newPassword,
           CreatedBy: 1,
           createduser_id: user?.user_id || "",

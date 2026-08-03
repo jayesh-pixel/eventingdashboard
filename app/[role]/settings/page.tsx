@@ -31,7 +31,7 @@
  * - Role-specific settings sections
  * 
  * Form Data Schema:
- * - Profile: { user_id, FullName, Email, Phone1, ProfileImage? }
+ * - Profile: { user_id, FullName, Email, Phone1, WhatsappNumber, Address, State, City, ProfileImage? }
  * - Password: { user_id, CurrentPassword, NewPassword }
  */
 
@@ -41,6 +41,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { AddressSelector } from "@/components/address-selector"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api-client"
@@ -56,6 +58,12 @@ interface UserProfile {
   FullName: string
   Email: string
   Phone1: string
+  WhatsappNumber: string
+  Address: string
+  State: string
+  StateIsoCode: string
+  City: string
+  CityIsoCode: string
   ProfileImage?: string
 }
 
@@ -63,8 +71,27 @@ interface ApiUserData {
   FullName?: string
   Email?: string
   Phone1?: string
+  WhatsappNumber?: string
+  WhatsAppNumber?: string
+  Address?: string
+  State?: string
+  StateIsoCode?: string
+  City?: string
+  CityIsoCode?: string
   ProfileImage?: string
   [key: string]: any
+}
+
+const emptyProfile: UserProfile = {
+  FullName: "",
+  Email: "",
+  Phone1: "",
+  WhatsappNumber: "",
+  Address: "",
+  State: "",
+  StateIsoCode: "",
+  City: "",
+  CityIsoCode: "",
 }
 
 export default function SettingsPage({ params }: SettingsPageProps) {
@@ -91,14 +118,12 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   // Profile update state
-  const [profileForm, setProfileForm] = useState<UserProfile>({
-    FullName: "",
-    Email: "",
-    Phone1: "",
-  })
+  const [profileForm, setProfileForm] = useState<UserProfile>(emptyProfile)
+  const [savedProfileForm, setSavedProfileForm] = useState<UserProfile>(emptyProfile)
   const [profileLoading, setProfileLoading] = useState(false)
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null)
   const [profileImagePreview, setProfileImagePreview] = useState<string>("")
+  const [savedProfileImage, setSavedProfileImage] = useState<string>("")
 
   // SMTP settings state (for superadmin)
   const [smtpForm, setSmtpForm] = useState({
@@ -116,29 +141,44 @@ export default function SettingsPage({ params }: SettingsPageProps) {
 
       try {
         let endpoint = ""
-          switch (role) {
+        switch (role) {
           case "superadmin":
-            endpoint = `${dashboard.ADMIN_PROFILE_API}/${user.user_id}`
+            endpoint = dashboard.ADMIN_PROFILE_API
             break
           case "promoter":
-            endpoint = `${promoterEndPointPannel.GET_PROMOTER_PROFILE_DATA_BY_ID}/${user.user_id}`
+            endpoint = promoterEndPointPannel.GET_PROMOTER_PROFILE_DATA_BY_ID
             break
           case "organizer":
-            endpoint = `${organizerEndpoint.GET_ORGANIZER_DATA_BY_ID_URL}/${user.user_id}`
+            endpoint = organizerEndpoint.GET_ORGANIZER_DATA_BY_ID_URL
             break
           default:
             return
-        }const response = await apiClient.get(endpoint)
+        }
+
+        const response = await apiClient.post(endpoint, { user_id: user.user_id })
         if (response.success && response.data) {
           const userData = response.data as ApiUserData
-          setProfileForm({
+          const loadedProfile: UserProfile = {
             FullName: userData.FullName || "",
             Email: userData.Email || "",
             Phone1: userData.Phone1 || "",
-          })
-          if (userData.ProfileImage) {
-            setProfileImagePreview(userData.ProfileImage)
+            WhatsappNumber:
+              userData.WhatsappNumber ||
+              userData.WhatsAppNumber ||
+              userData.WhatsappNo ||
+              userData.WhatsAppNo ||
+              "",
+            Address: userData.Address || userData.address || "",
+            State: userData.State || userData.state || "",
+            StateIsoCode: userData.StateIsoCode || userData.stateIsoCode || "",
+            City: userData.City || userData.city || "",
+            CityIsoCode: userData.CityIsoCode || userData.cityIsoCode || "",
+            ProfileImage: userData.ProfileImage || "",
           }
+          setProfileForm(loadedProfile)
+          setSavedProfileForm(loadedProfile)
+          setProfileImagePreview(loadedProfile.ProfileImage || "")
+          setSavedProfileImage(loadedProfile.ProfileImage || "")
         }
       } catch (error) {
         console.error("Failed to fetch profile:", error)
@@ -296,6 +336,24 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       return
     }
 
+    if (profileForm.Phone1 && profileForm.Phone1.length !== 10) {
+      toast({
+        title: "Error",
+        description: "Phone number must contain 10 digits.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (profileForm.WhatsappNumber && profileForm.WhatsappNumber.length !== 10) {
+      toast({
+        title: "Error",
+        description: "WhatsApp number must contain 10 digits.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setProfileLoading(true)
 
     try {
@@ -320,6 +378,14 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       formData.append("FullName", profileForm.FullName)
       formData.append("Email", profileForm.Email)
       formData.append("Phone1", profileForm.Phone1)
+      formData.append("WhatsappNumber", profileForm.WhatsappNumber)
+      formData.append("Address", profileForm.Address)
+      formData.append("Country", "India")
+      formData.append("CountryIsoCode", "IN")
+      formData.append("State", profileForm.State)
+      formData.append("StateIsoCode", profileForm.StateIsoCode)
+      formData.append("City", profileForm.City)
+      formData.append("CityIsoCode", profileForm.CityIsoCode)
       
       if (profileImageFile) {
         formData.append("ProfileImage", profileImageFile)
@@ -340,6 +406,13 @@ export default function SettingsPage({ params }: SettingsPageProps) {
           title: "Success",
           description: "Profile updated successfully.",
         })
+        const updatedProfile = {
+          ...profileForm,
+          ProfileImage: profileImagePreview,
+        }
+        setProfileForm(updatedProfile)
+        setSavedProfileForm(updatedProfile)
+        setSavedProfileImage(profileImagePreview)
         setProfileImageFile(null)
       } else {
         toast({
@@ -372,17 +445,23 @@ export default function SettingsPage({ params }: SettingsPageProps) {
     }
   }
 
+  const handleProfileCancel = () => {
+    setProfileForm(savedProfileForm)
+    setProfileImageFile(null)
+    setProfileImagePreview(savedProfileImage)
+  }
+
   return (    <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
 
-      {/* Profile Information Card - Only for superadmin and organizer */}
-      {(role === "superadmin" || role === "organizer") && (
+      {/* Profile Information Card - Only for superadmin */}
+      {role === "superadmin" && (
         <Card>
           <CardHeader>
-            <CardTitle>Profile Information</CardTitle>
+            <CardTitle>Personal data</CardTitle>
             <CardDescription>Update your personal information and profile picture.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-6">
             {/* Profile Image */}
             <div className="space-y-2">
               <Label>Profile Picture</Label>
@@ -406,35 +485,90 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="full-name">Full Name</Label>
-              <Input
-                id="full-name"
-                value={profileForm.FullName}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, FullName: e.target.value }))}
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="full-name">Full Name</Label>
+                <Input
+                  id="full-name"
+                  value={profileForm.FullName}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, FullName: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone No.</Label>
+                <Input
+                  id="phone"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="Enter Admin phone number"
+                  value={profileForm.Phone1}
+                  onChange={(e) => setProfileForm(prev => ({
+                    ...prev,
+                    Phone1: e.target.value.replace(/\D/g, "").slice(0, 10),
+                  }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="whatsapp-number">Whatsapp No.</Label>
+                <Input
+                  id="whatsapp-number"
+                  inputMode="numeric"
+                  maxLength={10}
+                  placeholder="Enter Admin phone number"
+                  value={profileForm.WhatsappNumber}
+                  onChange={(e) => setProfileForm(prev => ({
+                    ...prev,
+                    WhatsappNumber: e.target.value.replace(/\D/g, "").slice(0, 10),
+                  }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Id</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="Enter Admin emailId"
+                  value={profileForm.Email}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, Email: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="address">Address</Label>
+                <Textarea
+                  id="address"
+                  placeholder="Enter text here..."
+                  value={profileForm.Address}
+                  onChange={(e) => setProfileForm(prev => ({ ...prev, Address: e.target.value }))}
+                />
+              </div>
+
+              <AddressSelector
+                className="md:col-span-2"
+                required={false}
+                stateIsoCode={profileForm.StateIsoCode}
+                setStateIsoCode={(StateIsoCode) => setProfileForm(prev => ({ ...prev, StateIsoCode }))}
+                stateName={profileForm.State}
+                setStateName={(State) => setProfileForm(prev => ({ ...prev, State }))}
+                cityIsoCode={profileForm.CityIsoCode}
+                setCityIsoCode={(CityIsoCode) => setProfileForm(prev => ({ ...prev, CityIsoCode }))}
+                cityName={profileForm.City}
+                setCityName={(City) => setProfileForm(prev => ({ ...prev, City }))}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input
-                id="email"
-                type="email"
-                value={profileForm.Email}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, Email: e.target.value }))}
-              />
+
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="outline" onClick={handleProfileCancel} disabled={profileLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleProfileUpdate} disabled={profileLoading}>
+                {profileLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
-              <Input
-                id="phone"
-                value={profileForm.Phone1}
-                onChange={(e) => setProfileForm(prev => ({ ...prev, Phone1: e.target.value }))}
-              />
-            </div>
-            <Button onClick={handleProfileUpdate} disabled={profileLoading}>
-              {profileLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Profile
-            </Button>
           </CardContent>
         </Card>
       )}

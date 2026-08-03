@@ -27,6 +27,7 @@ interface AddressSelectorProps {
   cityName: string
   setCityName: (value: string) => void
   className?: string
+  required?: boolean
 }
 
 export const AddressSelector: React.FC<AddressSelectorProps> = ({
@@ -38,7 +39,8 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   setCityIsoCode,
   cityName,
   setCityName,
-  className = ""
+  className = "",
+  required = true,
 }) => {
   const [stateData, setStateData] = React.useState<State[]>([])
   const [cityData, setCityData] = React.useState<City[]>([])
@@ -51,6 +53,24 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   React.useEffect(() => {
     getAllStateData()
   }, [])
+
+  React.useEffect(() => {
+    if (!stateIsoCode && stateName && stateData.length > 0) {
+      const matchingState = stateData.find(
+        (state) => state.name.toLowerCase() === stateName.toLowerCase()
+      )
+      if (matchingState) setStateIsoCode(matchingState.iso2)
+    }
+  }, [stateData, stateIsoCode, stateName, setStateIsoCode])
+
+  React.useEffect(() => {
+    if (!cityIsoCode && cityName && cityData.length > 0) {
+      const matchingCity = cityData.find(
+        (city) => city.name.toLowerCase() === cityName.toLowerCase()
+      )
+      if (matchingCity) setCityIsoCode(matchingCity.id.toString())
+    }
+  }, [cityData, cityIsoCode, cityName, setCityIsoCode])
 
   const getAllStateData = async () => {
     try {
@@ -83,21 +103,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     }
   }
 
-  // Fetch cities when state changes
-  const handleStateChange = async (selectedStateIso: string) => {
-    setStateIsoCode(selectedStateIso)
-    
-    // Find the selected state and set its name
-    const selectedState = stateData.find((state) => state.iso2 === selectedStateIso)
-    setStateName(selectedState ? selectedState.name : "")
-
-    // Clear city selection when state changes
-    setCityIsoCode("")
-    setCityName("")
-    setCityData([])
-
-    if (!selectedStateIso) return
-
+  const getCities = async (selectedStateIso: string) => {
     try {
       setLoading(true)
       const config = {
@@ -128,6 +134,29 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     }
   }
 
+  React.useEffect(() => {
+    if (!stateIsoCode) {
+      setCityData([])
+      return
+    }
+
+    void getCities(stateIsoCode)
+  }, [stateIsoCode])
+
+  // Fetch cities when state changes
+  const handleStateChange = (selectedStateIso: string) => {
+    setStateIsoCode(selectedStateIso)
+
+    // Find the selected state and set its name
+    const selectedState = stateData.find((state) => state.iso2 === selectedStateIso)
+    setStateName(selectedState ? selectedState.name : "")
+
+    // Clear city selection when state changes
+    setCityIsoCode("")
+    setCityName("")
+    setCityData([])
+  }
+
   const handleCityChange = (selectedCityId: string) => {
     setCityIsoCode(selectedCityId)
     
@@ -140,7 +169,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${className}`}>
       {/* State Selector */}
       <div className="space-y-2">
-        <Label htmlFor="state">State *</Label>
+        <Label htmlFor="state">State{required ? " *" : ""}</Label>
         <Select value={stateIsoCode} onValueChange={handleStateChange} disabled={loading}>
           <SelectTrigger>
             <SelectValue placeholder={loading ? "Loading states..." : "Select State"} />
@@ -157,7 +186,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
 
       {/* City Selector */}
       <div className="space-y-2">
-        <Label htmlFor="city">City *</Label>
+        <Label htmlFor="city">City{required ? " *" : ""}</Label>
         <Select 
           value={cityIsoCode} 
           onValueChange={handleCityChange} 
