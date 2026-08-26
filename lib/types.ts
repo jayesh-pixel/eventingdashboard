@@ -284,12 +284,10 @@ export const TicketType = {
   BulkTicket: 4,
 } as const
 
-// Ticket Status Constants
+// Ticket Status Constants (matches backend Enum.js: Enable=1, Disable=0)
 export const TicketStatus = {
-  Active: 1,
-  Inactive: 0,
-  Draft: 2,
-  SoldOut: 3,
+  Enable: 1,
+  Disable: 0,
 } as const
 
 // Normal Ticket Interface

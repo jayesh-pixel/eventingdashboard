@@ -42,15 +42,15 @@ import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { AdminRoles, getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors: Record<number, string> = {
-  0: "bg-gray-100 text-gray-800",    // Inactive
+  0: "bg-gray-100 text-gray-800",    // InActive
   1: "bg-green-100 text-green-800",  // Active
-  2: "bg-red-100 text-red-800"       // Disabled
+  2: "bg-red-100 text-red-800"       // Expired
 }
 
 const statusLabels: Record<number, string> = {
   0: "Inactive",
   1: "Active", 
-  2: "Disabled"
+  2: "Expired"
 }
 
 const typeLabels: Record<number, string> = {

@@ -40,6 +40,7 @@ import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { SendDefaultPasswordMail } from "@/lib/api-constants"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
@@ -596,7 +597,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         StateIsoCode: formData.StateIsoCode,
         City: formData.City,
         CityIsoCode: formData.CityIsoCode,
-        SendMailFlag: formData.sendEmailNotification ? 2: 1,
+        SendMailFlag: formData.sendEmailNotification ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
         createduser_id: user?.user_id || "",
         CreatedBy: 1,
       }

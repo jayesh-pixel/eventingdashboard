@@ -399,10 +399,58 @@ export default function TicketsPage() {
             ? data.data
             : data.data?.EventPromoters || data.data?.PromoterData || data.data?.promoters || []
           const normalized: Promoter[] = list.map(mapToPromoter)
-          const scoped = allowedIds && allowedIds.size > 0
-            ? normalized.filter((p) => allowedIds.has(p._id))
-            : normalized
-          setPromoters(scoped)
+
+          // Match hydrated records against the event's assigned promoter IDs.
+          // A promoter may be referenced by different id fields (_id vs promoter_id),
+          // so collect every possible id from the hydrated record before checking.
+          const allIdsOf = (p: Promoter): string[] => {
+            const ids = [
+              p._id,
+              (p as any).promoter_id,
+              (p as any).Promoter_id,
+              (p as any).promoterId,
+              (p as any).id,
+            ]
+            return ids.filter((id): id is string => Boolean(id))
+          }
+
+          let scoped: Promoter[]
+          if (allowedIds && allowedIds.size > 0) {
+            scoped = normalized.filter((p) =>
+              allIdsOf(p).some((id) => allowedIds.has(id))
+            )
+            // If the id-based scoping dropped everything (id mismatch between the
+            // event's embedded references and the hydrated promoter records), fall
+            // back to the full hydrated list rather than leaving "Unknown Promoter".
+            if (scoped.length === 0 && normalized.length > 0) {
+              scoped = normalized
+            }
+          } else {
+            scoped = normalized
+          }
+
+          // Merge: prefer hydrated names/details, but keep any seeded promoter that
+          // wasn't returned by the API so nothing disappears unexpectedly.
+          setPromoters((prev) => {
+            if (prev.length === 0) return scoped
+            const hydratedById = new Map<string, Promoter>()
+            scoped.forEach((p) => allIdsOf(p).forEach((id) => hydratedById.set(id, p)))
+            const merged: Promoter[] = []
+            const seen = new Set<string>()
+            prev.forEach((seeded) => {
+              const hydrated = allIdsOf(seeded).map((id) => hydratedById.get(id)).find(Boolean)
+              const resolved = hydrated ?? seeded
+              allIdsOf(resolved).forEach((id) => seen.add(id))
+              merged.push(resolved)
+            })
+            // Append any hydrated promoters not already present
+            scoped.forEach((p) => {
+              if (!allIdsOf(p).some((id) => seen.has(id))) {
+                merged.push(p)
+              }
+            })
+            return merged
+          })
         }
       }
     } catch (error) {

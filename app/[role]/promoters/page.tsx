@@ -15,6 +15,7 @@ import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { SendDefaultPasswordMail } from "@/lib/api-constants"
 import {
   Pagination,
   PaginationContent,
@@ -435,7 +436,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       const payload: any = {
         FullName: formData.FullName,
         Username: formData.Username,
-        SendMailFlag: sendAccountInfo ? 1 : 0,
+        SendMailFlag: sendAccountInfo ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
         CreatedBy: 1,
         createduser_id: user?.user_id || "",
       }

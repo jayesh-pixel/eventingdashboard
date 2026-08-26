@@ -11,9 +11,19 @@ export const EventType = {
   WhatsApp: 3,
 } as const
 
+export const Status = {
+  Active: 1,
+  Inactive: 2,
+} as const
+
 export const isEventFeatured = {
-  true: 1,
-  false: 0,
+  Yes: 1,
+  No: 0,
+} as const
+
+export const isTourEvent = {
+  Yes: 1,
+  No: 0,
 } as const
 
 export const EventStatus = {
@@ -67,21 +77,116 @@ export const TicketVisiblity = {
   All: 1,
   AllCustomers: 2,
   Promoters: 3,
+  Self: 4,
 } as const
 
-export const TicketStatus = {
+export const EventEnableDisableStatus = {
   Enable: 1,
   Disable: 2,
 } as const
 
-export const TicketAvailability = {
-  Available: 1,
-  SoldOut: 2,
-} as const
-
-export const ticketEnabledDisabledStatus = {
+export const TicketStatus = {
   Enable: 1,
   Disable: 0,
+} as const
+
+export const TicketAvailability = {
+  Available: 1,
+  SoldOut: 0,
+} as const
+
+export const CustomerType = {
+  WebsiteRegistration: 1,
+  AdminPanelRegistration: 2,
+} as const
+
+export const BulkTicketStatus = {
+  Booked: 1,
+  Cancelled: 2,
+} as const
+
+export const OrganizerOwnerType = {
+  Club: 1,
+  EventCompany: 2,
+} as const
+
+export const CheckInStatus = {
+  False: 0,
+  True: 1,
+} as const
+
+export const TicketBookingSource = {
+  Promoter: 0,
+  Website: 1,
+} as const
+
+export const ReportType = {
+  SummaryBooking: 1,
+  TransactionBooking: 2,
+} as const
+
+export const BookingStatus = {
+  Booked: 1,
+  Cancelled: 2,
+  InProcess: 3,
+  Failed: 4,
+} as const
+
+export const EventDateTimeIsExpired = {
+  Yes: 1,
+  No: 0,
+} as const
+
+export const ScannerUserType = {
+  Event: 1,
+  Organizer: 2,
+} as const
+
+export const PromocodeCanbeUsedIn = {
+  AllEvents: 1,
+  SpecificEvents: 2,
+} as const
+
+export const PromocodeUnit = {
+  Amount: 1,
+  Percentage: 2,
+} as const
+
+export const PromocodeOneTimePerCustomerFlag = {
+  Yes: 1,
+  No: 0,
+} as const
+
+export const PromocodeValid = {
+  Public: 1,
+  Private: 2,
+} as const
+
+export const PromocodeStatus = {
+  InActive: 0,
+  Active: 1,
+  Expired: 2,
+} as const
+
+export const DownloadExcelReport = {
+  Yes: 1,
+  No: 0,
+} as const
+
+export const defaultAccessLevels = {
+  Events: "Events",
+  Artist: "Artist",
+  Categories: "Categories",
+  Cities: "Cities",
+  Booking: "Booking",
+  Registration: "Registration",
+  Tickets: "Tickets",
+  Users: "Users",
+  Venue: "Venue",
+  Genre: "Genre",
+  Reports: "Reports",
+  "Tags&Rules": "Tags&Rules",
+  "FAQ's": "FAQ's",
 } as const
 
 export const BulkCancelStatus = {

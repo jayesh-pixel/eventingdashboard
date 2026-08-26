@@ -265,7 +265,9 @@ export default function EventsPage({ params }: EventsPageProps) {
         console.log('Organizer object keys:', Object.keys(org))
         return {
           id: org._id || org.id,
-          name: org.CompanyName || org.FullName || org.Name || org.OrganizerName || org.name || 'Unknown Organizer'
+          // Keep name extraction order consistent with normalizeEventsData's organizerName
+          // so the same organizer resolves to the same label everywhere.
+          name: org.OrganizerName || org.CompanyName || org.FullName || org.Name || org.Username || org.name || 'Unknown Organizer'
         }
       })
       console.log('Mapped organizers:', organizers)
@@ -417,8 +419,11 @@ export default function EventsPage({ params }: EventsPageProps) {
         
         // Organizer info from PopUpOrganizerData (handle multiple organizers)
         organizers: event.PopUpOrganizerData || event.EventOrganizers || [],
-        organizerId: event.PopUpOrganizerData?.[0]?.organizer_id || event.organizerId || event.OrganizerId,
-        organizerName: event.PopUpOrganizerData?.[0]?.OrganizerName || event.organizerName || event.OrganizerName || "Unknown Organizer",
+        organizerId: event.PopUpOrganizerData?.[0]?.organizer_id || event.PopUpOrganizerData?.[0]?._id || event.organizerId || event.OrganizerId,
+        organizerName: event.PopUpOrganizerData?.[0]?.OrganizerName || event.PopUpOrganizerData?.[0]?.CompanyName || event.PopUpOrganizerData?.[0]?.FullName || event.organizerName || event.OrganizerName || event.CompanyName || "Unknown Organizer",
+        organizerIds: (Array.isArray(event.PopUpOrganizerData) ? event.PopUpOrganizerData : (Array.isArray(event.EventOrganizers) ? event.EventOrganizers : []))
+          .map((o: any) => o?.organizer_id || o?._id || o?.id)
+          .filter(Boolean),
         
         // Promoter info from PopUpPromoterData (handle multiple promoters)
         PopUpPromoterData: event.PopUpPromoterData || [],
@@ -1061,7 +1066,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         const selectedOrganizerData = filterOrganizers.find(organizer => organizer.id === appliedOrganizer)
         events = events.filter(event =>
           event.organizerName === selectedOrganizerData?.name ||
-          event.organizerId === appliedOrganizer
+          event.organizerId === appliedOrganizer ||
+          (Array.isArray((event as any).organizerIds) && (event as any).organizerIds.includes(appliedOrganizer))
         )
       }
 

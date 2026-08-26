@@ -147,26 +147,35 @@ const AddNewPromoterModal = ({
         return
       }
 
-      const payload = {
-        event_id: eventId,
-        promoterIds: selectedPromoterIds,
-      }
+      // The /events/addpromoter endpoint accepts a single promoter_id (string),
+      // not an array. Send one request per selected promoter and collect results.
+      const results = await Promise.all(
+        selectedPromoterIds.map((promoterId) =>
+          fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({
+              event_id: eventId,
+              promoter_id: promoterId,
+            }),
+          }).then((res) => handleApiResponse(res))
+        )
+      )
 
-      const response = await fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await handleApiResponse(response)
-      onPromoterUpdate(data.data.EventPromoter)
+      // Use the last successful result's EventPromoter, or merge all returned promoters
+      const mergedPromoters = results
+        .map((r) => r?.data?.EventPromoter)
+        .filter(Boolean)
+        .flat()
+      const lastPromoter = results[results.length - 1]?.data?.EventPromoter
+      onPromoterUpdate(mergedPromoters.length > 0 ? mergedPromoters : lastPromoter)
       onOpenChange(false)
       toast({
         title: "Success",
-        description: data.message || "Promoters updated successfully",
+        description: "Promoters updated successfully",
       })
     } catch (error) {
       console.error("Error updating promoters:", error)
