@@ -24,6 +24,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { UserRole } from "@/lib/navigation"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { getNumericAdminRole } from "@/lib/api-constants"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { 
   createVenueOption, 
@@ -1350,11 +1351,9 @@ export default function CreateEvent({
         submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
       }
       
-      // ConvinienceFeeUnit and ConvinienceFeeValue are only allowed for superadmin
-      if (role === "superadmin") {
-        submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
-        submitData.append("ConvinienceFeeValue", (values.feevalue || 0).toString())
-      }
+      // ConvinienceFeeUnit and ConvinienceFeeValue - always include so they are not lost on update
+      submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
+      submitData.append("ConvinienceFeeValue", String(values.feevalue != null ? values.feevalue : 0))
       
       // Set the correct status value based on the eventStatus parameter
       submitData.append("Status", eventStatus.toString())
@@ -2557,47 +2556,52 @@ export default function CreateEvent({
                   </CardContent>
                 </Card>
 
-                {/* 13. Convenience Fee - Hidden for organizers, only SuperAdmin can set */}
-                {!isOrganizer && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Convenience Fee</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
-                          <UISelect
-                            value={values.feeunit.toString()}
-                            onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Amount" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
-                              <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
-                            </SelectContent>
-                          </UISelect>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
-                          <Field
-                            as={Input}
-                            name="feevalue"
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="Enter fee value"
-                          />
-                          {touched.feevalue && errors.feevalue && (
-                            <p className="text-sm text-red-600">{errors.feevalue}</p>
-                          )}
-                        </div>
+                {/* 13. Convenience Fee - SuperAdmin/Employee can set; Organizer can view/set own value if backend allows */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Convenience Fee</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
+                        <UISelect
+                          value={values.feeunit.toString()}
+                          onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
+                          disabled={isOrganizer}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Amount" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
+                            <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
+                          </SelectContent>
+                        </UISelect>
                       </div>
-                    </CardContent>
-                  </Card>
-                )}
+                      <div className="space-y-2">
+                        <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
+                        <Field
+                          as={Input}
+                          name="feevalue"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="Enter fee value"
+                          disabled={isOrganizer}
+                        />
+                        {touched.feevalue && errors.feevalue && (
+                          <p className="text-sm text-red-600">{errors.feevalue}</p>
+                        )}
+                      </div>
+                    </div>
+                    {isOrganizer && (
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Only SuperAdmin/Employee can edit convenience fees. Organizers can view the current setting.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
 
               {/* Right Column */}
@@ -3086,7 +3090,7 @@ export default function CreateEvent({
       {/* Create Modals */}
       {showCreateVenueModal && (
         <Dialog open={showCreateVenueModal} onOpenChange={setShowCreateVenueModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Venue</DialogTitle>
             </DialogHeader>
@@ -3126,7 +3130,7 @@ export default function CreateEvent({
 
                   // Prepare payload matching the API requirements
                   const payload = {
-                    AdminRole: user?.AdminRole || role === "superadmin" ? 1 : 2,
+                    AdminRole: getNumericAdminRole(user?.AdminRole || role || "superadmin"),
                     user_id: user?.user_id || "",
                     Name: values.Name,
                     Description: values.Description || "",
@@ -3271,7 +3275,7 @@ export default function CreateEvent({
         </Dialog>
       )}      {showCreateOrganizerModal && (
         <Dialog open={showCreateOrganizerModal} onOpenChange={setShowCreateOrganizerModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Organizer</DialogTitle>
             </DialogHeader>
@@ -3384,7 +3388,7 @@ export default function CreateEvent({
         </Dialog>
       )}      {!isOrganizer && showCreateCategoryModal && (
         <Dialog open={showCreateCategoryModal} onOpenChange={setShowCreateCategoryModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Category</DialogTitle>
             </DialogHeader>
@@ -3467,7 +3471,7 @@ export default function CreateEvent({
         </Dialog>
       )}      {!isOrganizer && showCreateArtistModal && (
         <Dialog open={showCreateArtistModal} onOpenChange={setShowCreateArtistModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Artist</DialogTitle>
             </DialogHeader>
@@ -3570,7 +3574,7 @@ export default function CreateEvent({
         </Dialog>
       )}      {!isOrganizer && showCreateGenreModal && (
         <Dialog open={showCreateGenreModal} onOpenChange={setShowCreateGenreModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Genre</DialogTitle>
             </DialogHeader>
@@ -3653,7 +3657,7 @@ export default function CreateEvent({
         </Dialog>
       )}      {showCreateEventTourModal && (
         <Dialog open={showCreateEventTourModal} onOpenChange={setShowCreateEventTourModal}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Event Tour</DialogTitle>
             </DialogHeader>

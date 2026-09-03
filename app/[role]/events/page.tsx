@@ -587,7 +587,7 @@ export default function EventsPage({ params }: EventsPageProps) {
           limit: limit.toString(),
           ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm }),
           // Include filter parameters if applyFilters is true
-          ...(applyFilters && appliedCity && appliedCity !== "__all__" && { city: appliedCity }),
+          ...(applyFilters && appliedCity && appliedCity !== "__all__" && { CityName: appliedCity }),
           ...(applyFilters && appliedVenue && appliedVenue !== "__all__" && { venue_id: appliedVenue }),
           // Only include organizer filter if role is not organizer
           ...(applyFilters && (role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && { organizer_id: appliedOrganizer }),
@@ -1373,7 +1373,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       // Create payload with complete event data
       const payload = {
         event_id: eventId,
-        Status: "3", // Published status
+        Status: 3, // Published status (number — backend Joi expects number)
         
         // Include all event fields from the original data
         EventName: eventToApproveData.EventName || eventToApproveData.eventName,
@@ -1381,8 +1381,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         EventLanguages: eventToApproveData.EventLanguages || eventToApproveData.eventLanguages || [],
         EventTermsCondition: eventToApproveData.EventTermsCondition || eventToApproveData.eventTermsCondition || "",
         
-        // Event flags and settings
-        TourEvent: (eventToApproveData.TourEvent ?? eventToApproveData.tourEvent ?? 0).toString(),
+        // Event flags and settings — all must be numbers
+        TourEvent: Number(eventToApproveData.TourEvent ?? eventToApproveData.tourEvent ?? 0),
         VenueEventFlag: eventToApproveData.VenueEventFlag ?? eventToApproveData.venueEventFlag ?? 1,
         EventType: eventToApproveData.EventType ?? eventToApproveData.eventType ?? 1,
         OnlineEventFlag: eventToApproveData.OnlineEventFlag ?? eventToApproveData.onlineEventFlag ?? 0,
@@ -1479,7 +1479,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       // Create payload with complete event data plus rejection remark
       const payload = {
         event_id: eventToReject,
-        Status: "4", // Rejected status
+        Status: 4, // Rejected status (number — backend Joi expects number)
         EventRejectRemark: EventRejectRemark.trim(), // Rejection remark
         
         // Include all event fields from the original data
@@ -1488,8 +1488,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         EventLanguages: eventToRejectData.EventLanguages || eventToRejectData.eventLanguages || [],
         EventTermsCondition: eventToRejectData.EventTermsCondition || eventToRejectData.eventTermsCondition || "",
         
-        // Event flags and settings
-        TourEvent: (eventToRejectData.TourEvent ?? eventToRejectData.tourEvent ?? 0).toString(),
+        // Event flags and settings — all must be numbers
+        TourEvent: Number(eventToRejectData.TourEvent ?? eventToRejectData.tourEvent ?? 0),
         VenueEventFlag: eventToRejectData.VenueEventFlag ?? eventToRejectData.venueEventFlag ?? 1,
         EventType: eventToRejectData.EventType ?? eventToRejectData.eventType ?? 1,
         OnlineEventFlag: eventToRejectData.OnlineEventFlag ?? eventToRejectData.onlineEventFlag ?? 0,

@@ -501,9 +501,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       // Create FormData for multipart/form-data request
       const formDataToSend = new FormData()
       formDataToSend.append("Name", formData.categoryName)
-      if (formData.categoryDescription) {
-        formDataToSend.append("Description", formData.categoryDescription)
-      }
+      formDataToSend.append("Description", formData.categoryDescription || "")
       formDataToSend.append("Priority", formData.categoryPriority.toString())
       
       // Add all selected images to the payload
@@ -803,7 +801,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
               <PlusCircle className="mr-2 h-4 w-4" /> Add 
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Category</DialogTitle>
               <DialogDescription>Add a new event category to the system.</DialogDescription>
@@ -843,7 +841,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 <Label>Add Images</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
+                    Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
                   </p>
                   <Input
                     type="file"
@@ -1052,7 +1050,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Category</DialogTitle>
             <DialogDescription>Update the category information.</DialogDescription>
@@ -1133,7 +1131,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
               <Label>Add New Images</Label>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
+                  Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
                 </p>
                 <Input
                   type="file"

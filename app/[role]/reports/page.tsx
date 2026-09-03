@@ -478,7 +478,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         // For superadmin/organizer - determine AdminRole based on role
         let adminRole = 1 // Default to superadmin
         if ((role as UserRole) === "organizer") {
-          adminRole = 2 // Organizer role ID  
+          adminRole = 3 // Organizer role ID (AdminRoles.Organizer = 3)
         }
         
         if (reportType === "Summary") {

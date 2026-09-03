@@ -430,7 +430,7 @@ export enum PromocodeType {
 export enum PromocodeStatus {
   Inactive = 0,
   Active = 1,
-  Disabled = 2
+  Expired = 2
 }
 
 export interface Promocode {
@@ -442,7 +442,8 @@ export interface Promocode {
   MinCheckoutAmount: number
   ExpiryDate: string
   OneTimeUseFlag: number // 1 = Yes, 0 = No
-  PromocodeValidFor?: string
+  PromocodeValidFor?: number // 1 = Public, 2 = Private
+  CanBeUsed?: number // 1 = All Events, 2 = Specific Events
   status: PromocodeStatus
   createdAt: string
   updatedAt?: string
@@ -472,16 +473,15 @@ export interface PromocodesApiResponse {
 
 export interface CreatePromocodeRequest {
   PromoCodeName: string
-  TermsCondition?: string
-  PromocodeType: string
+  TermsCondition: string
+  PromocodeType: number // 1 = Fixed Amount, 2 = Percentage
   Value: number
   MinCheckoutAmount: number
-  ExpiryDate: string
+  ExpiryDate: string // YYYY-MM-DD format
   OneTimeUseFlag: number // 0 = No, 1 = Yes
-  PromocodeValidFor?: string
+  PromocodeValidFor: number // 1 = Public, 2 = Private
+  CanBeUsed: number // 1 = All Events, 2 = Specific Events
   Events?: Array<{ event_id: string }>
-  CustomerIds?: Array<{ customer_id: string }>
-  CanBeUsed?: string
 }
 
 // Banner Types

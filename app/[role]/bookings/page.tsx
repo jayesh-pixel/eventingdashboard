@@ -1411,8 +1411,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       formatDateTime={formatDateTime}
                       formatCurrency={formatCurrency}
                       getStatusBadgeVariant={getStatusBadgeVariant}
-                      onCancelBooking={handleCancelBooking}
-                      onResendTicket={handleResendTicket}
+                      onCancelBooking={role === "superadmin" ? handleCancelBooking : undefined}
+                      onResendTicket={role === "superadmin" ? handleResendTicket : undefined}
                     />
                   </div>
 

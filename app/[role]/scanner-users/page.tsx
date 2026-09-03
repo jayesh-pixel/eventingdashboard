@@ -41,6 +41,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { useToast } from "@/hooks/use-toast"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -299,6 +300,24 @@ export default function ScannerUsersPage() {
         variant: "destructive",
       })
       return
+    }
+
+    if (formData.username.trim().length < 5) {
+      toast({
+        title: "Error",
+        description: "Username must be at least 5 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.password.length < 5 || formData.password.length > 10) {
+      toast({
+        title: "Error",
+        description: "Password must be 5-10 characters long",
+        variant: "destructive",
+      })
+      return
     }    if (formData.userType === "1" && formData.selectedEvents.length === 0) {
       toast({
         title: "Error", 
@@ -327,10 +346,10 @@ export default function ScannerUsersPage() {
       const payload = {
         Username: formData.username,
         Password: formData.password,
-        UserType: formData.userType,
+        UserType: Number(formData.userType),
         Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
         Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
-        CreatedBy: "1",
+        CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user.user_id,
       }
 
@@ -375,7 +394,7 @@ export default function ScannerUsersPage() {
 
       const payload = {
         scanneruser_id: selectedUser._id,
-        UserType: formData.userType,
+        UserType: Number(formData.userType),
         Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
         Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
       }

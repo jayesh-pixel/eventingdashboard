@@ -216,33 +216,33 @@ export const eventEndPoint = {
 export const ticketEndPoint = {
   // Normal Tickets
   CREATE_NORMAL_TICKET: BASE_URL + "/eventstickets/create",
-  GET_ALL_TICKETS_BY_EVENT: BASE_URL + "/eventstickets/getTicketsByEventId",
+  GET_ALL_TICKETS_BY_EVENT: BASE_URL + "/eventstickets/getAllEventTickets",
   GET_ALL_EVENT_TICKETS: BASE_URL + "/eventstickets/getAllEventTickets",
-  GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getbyId",
+  GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getEventTicketDetailsById",
   UPDATE_TICKET: BASE_URL + "/eventstickets/updateEventTicketById",
-  DELETE_TICKET: BASE_URL + "/eventstickets/delete",
-  ENABLE_TICKET: BASE_URL + "/eventstickets/enable",
-  DISABLE_TICKET: BASE_URL + "/eventstickets/disable",
+  DELETE_TICKET: BASE_URL + "/eventstickets/delete", // NOTE: No delete route exists in backend yet — will 404
+  ENABLE_TICKET: BASE_URL + "/eventstickets/enableEventTicket",
+  DISABLE_TICKET: BASE_URL + "/eventstickets/disableEventTicket",
   UPDATE_AVAILABILITY_TO_SOLD_OUT: BASE_URL + "/eventstickets/updateAvailabilityToSoldOut",
   UPDATE_AVAILABILITY_TO_AVAILABLE: BASE_URL + "/eventstickets/updateAvailabilityToAvailable",
-  GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData",
+  GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData", // NOTE: No paginated route exists in backend — will 404
   
-  // Bulk Tickets
+  // Bulk Tickets — backend only has: createBulkTicketForEvent, getBulkTicketsOfEvent, cancelBukTicket, exportBulkTicketBookingIds, getBulkTicketsByFilter
   CREATE_BULK_TICKET: BASE_URL + "/eventbulktickets/createBulkTicketForEvent",
   GET_ALL_BULK_TICKETS_BY_EVENT: BASE_URL + "/eventbulktickets/getBulkTicketsOfEvent",
-  GET_BULK_TICKET_BY_ID: BASE_URL + "/eventsbulktickets/getbyId",
-  UPDATE_BULK_TICKET: BASE_URL + "/eventsbulktickets/update",
-  DELETE_BULK_TICKET: BASE_URL + "/eventsbulktickets/delete",
-  ENABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/enable",
-  DISABLE_BULK_TICKET: BASE_URL + "/eventsbulktickets/disable",
+  GET_BULK_TICKET_BY_ID: BASE_URL + "/eventbulktickets/getbyId", // NOTE: No getbyId route exists — will 404
+  UPDATE_BULK_TICKET: BASE_URL + "/eventbulktickets/update", // NOTE: No update route exists — will 404
+  DELETE_BULK_TICKET: BASE_URL + "/eventbulktickets/delete", // NOTE: No delete route exists — will 404
+  ENABLE_BULK_TICKET: BASE_URL + "/eventbulktickets/enable", // NOTE: No enable route exists — will 404
+  DISABLE_BULK_TICKET: BASE_URL + "/eventbulktickets/disable", // NOTE: No disable route exists — will 404
   CANCEL_BULK_TICKET: BASE_URL + "/eventbulktickets/cancelBukTicket",
-  DOWNLOAD_BULK_TICKET_REPORT: BASE_URL + "/eventbulktickets/downloadBulkTicketReport",
-  GET_BULK_TICKETS_PAGINATED: BASE_URL + "/eventsbulktickets/getallpaginatedData",
+  DOWNLOAD_BULK_TICKET_REPORT: BASE_URL + "/eventbulktickets/exportBulkTicketBookingIds",
+  GET_BULK_TICKETS_PAGINATED: BASE_URL + "/eventbulktickets/getallpaginatedData", // NOTE: No paginated route exists — will 404
   
   // Common ticket operations
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
-  SEARCH_TICKETS: BASE_URL + "/eventstickets/searchTickets",
-  SEARCH_BULK_TICKETS: BASE_URL + "/eventsbulktickets/searchBulkTickets",
+  SEARCH_TICKETS: BASE_URL + "/eventstickets/getTicketsByFilter",
+  SEARCH_BULK_TICKETS: BASE_URL + "/eventbulktickets/getBulkTicketsByFilter",
 }
 
 // Customer API
@@ -259,8 +259,7 @@ export const promocodeEndPoint = {
   GET_ALL_PAGINATED_PROMOCODES_DATA: BASE_URL + "/promocode/getallpaginatedData",
   CREATE_PROMOCODE: BASE_URL + "/promocode/create",
   GET_PROMOCODE_BY_ID: BASE_URL + "/promocode/getById",
-  UPDATE_PROMOCODE: BASE_URL + "/promocode/update", // Note: This endpoint might need to be verified
-  DELETE_PROMOCODE: BASE_URL + "/promocode/delete", // Note: This endpoint might need to be verified
+  UPDATE_PROMOCODE: BASE_URL + "/promocode/update", // NOTE: No update route exists in backend yet — will 404
   ENABLE_PROMOCODE: BASE_URL + "/promocode/enablePromocode",
   DISABLE_PROMOCODE: BASE_URL + "/promocode/disablePromocode",
   SEARCH_PROMOCODE: BASE_URL + "/promocode/searchKeyword",
@@ -293,13 +292,13 @@ export const scannerUserEndpoint = {
   UPDATE_PASSWORD: BASE_URL + "/scanneruser/updatePassword",
 }
 
-// Leads Endpoints
+// Leads Endpoints — backend only has /insert and /getAllPaginated
 export const leadsEndpoint = {
   GET_ALL_PAGINATED: BASE_URL + "/webiste/leads/getAllPaginated",
-  CREATE: BASE_URL + "/webiste/leads/create",
-  UPDATE: BASE_URL + "/webiste/leads/update",
-  DELETE: BASE_URL + "/webiste/leads/delete",
-  GET_BY_ID: BASE_URL + "/webiste/leads/getById",
+  CREATE: BASE_URL + "/webiste/leads/insert",
+  UPDATE: BASE_URL + "/webiste/leads/update", // NOTE: No update route exists — will 404
+  DELETE: BASE_URL + "/webiste/leads/delete", // NOTE: No delete route exists — will 404
+  GET_BY_ID: BASE_URL + "/webiste/leads/getById", // NOTE: No getById route exists — will 404
 }
 
 // Debug function to log all endpoints

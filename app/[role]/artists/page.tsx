@@ -140,14 +140,22 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
     
     if (!formData.name.trim()) {
       errors.name = "Artist name is required"
+    } else if (formData.name.trim().length < 5) {
+      errors.name = "Artist name must be at least 5 characters"
+    }
+    
+    if (!formData.description.trim()) {
+      errors.description = "Description is required (min 5 characters)"
+    } else if (formData.description.trim().length < 5) {
+      errors.description = "Description must be at least 5 characters"
     }
     
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = "Please enter a valid email address"
     }
     
-    if (formData.phoneNo && !/^\d{10,}$/.test(formData.phoneNo.replace(/\D/g, ''))) {
-      errors.phoneNo = "Please enter a valid phone number"
+    if (formData.phoneNo && !/^\d{10}$/.test(formData.phoneNo.replace(/\D/g, ''))) {
+      errors.phoneNo = "Phone number must be exactly 10 digits"
     }
 
     if (formData.priority < 0 || formData.priority > 10) {
@@ -267,7 +275,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       formDataToSend.append("Name", formData.name)
       if (formData.email) formDataToSend.append("Email", formData.email)
       if (formData.phoneNo) formDataToSend.append("PhoneNo", formData.phoneNo)
-      if (formData.description) formDataToSend.append("Description", formData.description)
+      formDataToSend.append("Description", formData.description || "")
       
       // Add priority from form data
       formDataToSend.append("Priority", formData.priority.toString())
@@ -599,7 +607,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               <PlusCircle className="mr-2 h-4 w-4" /> Add 
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Artist</DialogTitle>
               <DialogDescription>Add a new artist to the system.</DialogDescription>
@@ -935,7 +943,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Artist</DialogTitle>
             <DialogDescription>Update the artist information and manage images.</DialogDescription>

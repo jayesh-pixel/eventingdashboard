@@ -191,6 +191,15 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       return
     }
 
+    if (formData.tourName.trim().length < 5) {
+      toast({
+        title: "Error",
+        description: "Tour name must be at least 5 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()
@@ -207,9 +216,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       // Create FormData for multipart/form-data request
       const formDataToSend = new FormData()
       formDataToSend.append("Name", formData.tourName)
-      if (formData.tourDescription) {
-        formDataToSend.append("Description", formData.tourDescription)
-      }
+      formDataToSend.append("Description", formData.tourDescription || "")
       
       // Add images if selected
       formData.imageFiles.forEach((file) => {

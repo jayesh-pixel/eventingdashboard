@@ -43,10 +43,7 @@ export default function LeadsPage() {
         page: page.toString(), 
         limit: itemsPerPage.toString() 
       }
-      
-      if (search.trim()) {
-        requestBody.search = search.trim()
-      }
+      // NOTE: Backend getAllPaginated does NOT support search — search is done client-side
 
       console.log('Making API request to:', leadsEndpoint.GET_ALL_PAGINATED)
       console.log('Request body:', requestBody)
@@ -79,10 +76,22 @@ export default function LeadsPage() {
         console.log('Response data structure:', responseData)
         console.log('Number of leads:', leadsData.length)
 
-        setLeads(leadsData)
+        // Backend doesn't support search — filter client-side
+        let filteredLeads = leadsData
+        if (search.trim()) {
+          const term = search.trim().toLowerCase()
+          filteredLeads = leadsData.filter((lead: any) =>
+            (lead.FullName || "").toLowerCase().includes(term) ||
+            (lead.Email || "").toLowerCase().includes(term) ||
+            (lead.CompanyName || "").toLowerCase().includes(term) ||
+            (lead.City || "").toLowerCase().includes(term)
+          )
+        }
+
+        setLeads(filteredLeads)
         setTotalPages(totalPages)
         setCurrentPage(currentPage)
-        setTotalLeads(totalLeads)
+        setTotalLeads(search.trim() ? filteredLeads.length : totalLeads)
       } else {
         throw new Error(response.error || 'Failed to fetch leads')
       }

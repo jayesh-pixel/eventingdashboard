@@ -310,18 +310,16 @@ export default function GenresPage({ params }: GenresPageProps) {
       // Create FormData for multipart/form-data request
       const formDataToSend = new FormData()
       formDataToSend.append("Name", formData.genreName)
-      if (formData.genreDescription) {
-        formDataToSend.append("Description", formData.genreDescription)
-      }
+      formDataToSend.append("Description", formData.genreDescription || "")
       
-      // Add all selected images to the payload
+      // Add all selected images to the payload (optional)
       if (selectedImages.length > 0) {
         selectedImages.forEach((image) => {
           formDataToSend.append("Images", image)
         })
       }
-      
-      // Add single image if selected (from the old input)
+
+      // Add single image if selected (from the old input) (optional)
       if (formData.genreImage) {
         formDataToSend.append("Images", formData.genreImage)
       }
@@ -718,7 +716,7 @@ export default function GenresPage({ params }: GenresPageProps) {
               <PlusCircle className="mr-2 h-4 w-4" /> Add
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Create New Genre</DialogTitle>
               <DialogDescription>Add a new music genre to the system.</DialogDescription>
@@ -747,7 +745,7 @@ export default function GenresPage({ params }: GenresPageProps) {
                 <Label>Add Images</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                    Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                   </p>
                   <Input
                     type="file"
@@ -923,7 +921,7 @@ Actions
 
       {/* Edit Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Genre</DialogTitle>
             <DialogDescription>Update the genre information.</DialogDescription>
@@ -979,7 +977,7 @@ Actions
               <Label>Add New Images</Label>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                  Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                 </p>
                 <Input
                   type="file"

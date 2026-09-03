@@ -331,11 +331,21 @@ export default function TicketsPage() {
     return String(raw)
   }
 
-  // Map backend promoter record into our Promoter shape
+  // Build a name lookup from the event's embedded promoter references.  The event
+  // stores only promoter_id + PromoterName, but the hydrated GET_EVENT_PROMOTERS
+  // records use _id + FullName, so we keep both maps to resolve names correctly.
+  const [eventPromoterNameMap, setEventPromoterNameMap] = React.useState<Map<string, string>>(new Map())
+
   const mapToPromoter = (p: any): Promoter => {
+    const id = p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? ""
     return {
-      _id: p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? "",
-      FullName: p?.FullName ?? p?.PromoterName ?? p?.name ?? "Unknown Promoter",
+      _id: id,
+      FullName:
+        p?.FullName ??
+        p?.PromoterName ??
+        p?.name ??
+        eventPromoterNameMap.get(id) ??
+        "Unknown Promoter",
       Username: p?.Username ?? p?.username ?? p?.FullName ?? "",
       Email: p?.Email ?? p?.email ?? "",
       Phone1: p?.Phone1 ?? p?.phone ?? p?.Phone ?? "",
@@ -350,6 +360,19 @@ export default function TicketsPage() {
       ...(Array.isArray(event?.EventPromoters) ? event.EventPromoters : []),
       ...(Array.isArray(event?.Promoters) ? event.Promoters : []),
     ]
+
+    // Populate a name map from embedded promoter references.  These references
+    // only carry promoter_id + PromoterName, which is the only place the assigned
+    // name is guaranteed to exist for organizers viewing their own events.
+    const newNameMap = new Map<string, string>()
+    sources.forEach((p) => {
+      const id = p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? ""
+      const name = p?.PromoterName ?? p?.FullName ?? p?.name ?? ""
+      if (id && name) {
+        newNameMap.set(id, name)
+      }
+    })
+    setEventPromoterNameMap(newNameMap)
 
     const uniquePromoters = new Map<string, Promoter>()
     sources.map(mapToPromoter).forEach((promoter) => {
@@ -1852,7 +1875,7 @@ export default function TicketsPage() {
           </div>
         </div>
         {/* Add Ticket button - Hidden for Organizers when viewing Bulk Tickets tab */}
-        {!(activeTab === "bulk" && getNumericRole(role) === 2) && (
+        {!(activeTab === "bulk" && getNumericRole(role) === 3) && (
           <Button 
             onClick={handleOpenCreateModal} 
             disabled={eventLoading || eventDateTimes.length === 0}
@@ -1926,7 +1949,7 @@ export default function TicketsPage() {
             Normal Tickets
           </TabsTrigger>
           {/* Bulk Tickets tab - Visible to SuperAdmins and Organizers */}
-          {(getNumericRole(role) === 1 || getNumericRole(role) === 2) && (
+          {(getNumericRole(role) === 1 || getNumericRole(role) === 3) && (
             <TabsTrigger value="bulk" className="flex items-center gap-2">
               <Ticket className="h-4 w-4" />
               Bulk Tickets
@@ -2127,7 +2150,7 @@ export default function TicketsPage() {
         </TabsContent>
 
         {/* Bulk Tickets Tab - Visible to SuperAdmins and Organizers */}
-        {(getNumericRole(role) === 1 || getNumericRole(role) === 2) && (
+        {(getNumericRole(role) === 1 || getNumericRole(role) === 3) && (
           <TabsContent value="bulk" className="space-y-4">
             <Card>
               <CardHeader>

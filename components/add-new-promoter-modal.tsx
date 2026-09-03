@@ -137,7 +137,7 @@ const AddNewPromoterModal = ({
     try {
       setSubmitting(true)
       const authToken = getValidToken()
-      
+
       if (!authToken) {
         toast({
           title: "Error",
@@ -147,25 +147,22 @@ const AddNewPromoterModal = ({
         return
       }
 
-      // The /events/addpromoter endpoint accepts a single promoter_id (string),
-      // not an array. Send one request per selected promoter and collect results.
-      const results = await Promise.all(
-        selectedPromoterIds.map((promoterId) =>
-          fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${authToken}`,
-            },
-            body: JSON.stringify({
-              event_id: eventId,
-              promoter_id: promoterId,
-            }),
-          }).then((res) => handleApiResponse(res))
-        )
-      )
+      // Backend expects { event_id, promoterIds: [array] } — single API call, not per-promoter
+      const response = await fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          event_id: eventId,
+          promoterIds: selectedPromoterIds,
+        }),
+      })
 
-      // Use the last successful result's EventPromoter, or merge all returned promoters
+      const result = await handleApiResponse(response)
+      const results = [result]
+
       const mergedPromoters = results
         .map((r) => r?.data?.EventPromoter)
         .filter(Boolean)

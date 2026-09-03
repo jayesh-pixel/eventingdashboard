@@ -15,7 +15,7 @@ import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
-import { SendDefaultPasswordMail } from "@/lib/api-constants"
+import { SendDefaultPasswordMail, getNumericAdminRole } from "@/lib/api-constants"
 import {
   Pagination,
   PaginationContent,
@@ -95,11 +95,13 @@ interface PromotersApiResponse {
 const statusColors = {
   0: "bg-gray-100 text-gray-800",    // Inactive
   1: "bg-green-100 text-green-800",  // Active
+  2: "bg-gray-100 text-gray-800",    // Inactive (backend Status.Inactive = 2)
 }
 
 const statusLabels = {
   0: "Inactive",
   1: "Active",
+  2: "Inactive",
 }
 
 export default function PromotersPage({ params }: PromotersPageProps) {
@@ -133,6 +135,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   // CRUD dialogs
   const [showCreateDialog, setShowCreateDialog] = React.useState(false)
   const [showEditDialog, setShowEditDialog] = React.useState(false)
+  // Scope actions to the logged-in user when in the organizer panel.
+  const isCurrentUserPromoter = (promoter: Promoter) => {
+    if (role !== "organizer") return true
+    return !user?.user_id || promoter._id === user.user_id
+  }
   const [showStatusDialog, setShowStatusDialog] = React.useState(false)
   const [showPasswordResetDialog, setShowPasswordResetDialog] = React.useState(false)
   const [submitting, setSubmitting] = React.useState(false)
@@ -198,10 +205,17 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         ? promoterEndpoint.SEARCH_PROMOTER_PAGINATED 
         : promoterEndpoint.GET_ALL_PROMOTER_DATA_PAGINATED_URL
 
-      const requestBody = {
+      const requestBody: any = {
         page: page.toString(),
         limit: itemsPerPage.toString(),
         ...(searchKeyword && { search_keyword: searchKeyword })
+      }
+
+      // For organizer panel, only show promoters created by the logged-in user.
+      // Backend does not appear to support a created-by filter, so we add the
+      // current user id and then filter client-side as a fallback.
+      if (role === "organizer" && user?.user_id) {
+        requestBody.createduser_id = user.user_id
       }
 
       const response = await fetch(endpoint, {
@@ -225,6 +239,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       }
 
       const result: PromotersApiResponse = await handleApiResponse(response)      // Handle paginated response structure
+      let fetched: Promoter[] = []
+      let pageMeta = { totalPages: 1, totalPromoters: 0, currentPage: page }
+
       if (result.data && typeof result.data === 'object' && 'PromoterData' in result.data) {
         const paginatedData = result.data as {
           PromoterData: Promoter[]  // Changed from PromotersData to PromoterData
@@ -234,17 +251,38 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           hasNextPage: boolean
           hasPreviousPage: boolean
         }
-        setPromoters(paginatedData.PromoterData || [])  // Changed from PromotersData to PromoterData
-        setTotalPages(paginatedData.totalPages || 1)
-        setTotalPromoters(paginatedData.totalPromoters || 0)
-        setCurrentPage(paginatedData.currentPage || page)
+        fetched = paginatedData.PromoterData || []
+        pageMeta = {
+          totalPages: paginatedData.totalPages || 1,
+          totalPromoters: paginatedData.totalPromoters || 0,
+          currentPage: paginatedData.currentPage || page,
+        }
       } else {
         // Fallback for non-paginated response
-        setPromoters(Array.isArray(result.data) ? result.data : [])
-        setTotalPages(1)
-        setTotalPromoters(Array.isArray(result.data) ? result.data.length : 0)
-        setCurrentPage(1)
+        fetched = Array.isArray(result.data) ? result.data : []
+        pageMeta = {
+          totalPages: 1,
+          totalPromoters: fetched.length,
+          currentPage: 1,
+        }
       }
+
+      // Organizer panel: only show promoters created by the current user when the
+      // backend does not filter them for us.  We keep the page metadata from the
+      // original request to avoid confusing pagination jumps.
+      if (role === "organizer" && user?.user_id) {
+        const ownPromoters = fetched.filter((p) =>
+          p._id === user.user_id ||
+          p.createduser_id === user.user_id ||
+          p.CreatedBy?.toString() === user.user_id
+        )
+        fetched = ownPromoters
+      }
+
+      setPromoters(fetched)
+      setTotalPages(pageMeta.totalPages)
+      setTotalPromoters(pageMeta.totalPromoters)
+      setCurrentPage(pageMeta.currentPage)
 
     } catch (error) {
       console.error("Error fetching promoters:", error)
@@ -338,6 +376,16 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         })
         return
       }
+    }
+
+    // Backend validation requires these address fields
+    if (!formData.Country?.trim() || !formData.State?.trim() || !formData.City?.trim()) {
+      toast({
+        title: "Error",
+        description: "Country, State, and City are required fields",
+        variant: "destructive",
+      })
+      return
     }
 
     setSubmitting(true)
@@ -437,7 +485,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         FullName: formData.FullName,
         Username: formData.Username,
         SendMailFlag: sendAccountInfo ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
-        CreatedBy: 1,
+        CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user?.user_id || "",
       }
 
@@ -454,36 +502,22 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         payload.Phone1 = formData.Phone1.trim()
       }
       
-      if (formData.Country && formData.Country.trim()) {
-        payload.Country = formData.Country.trim()
-      }
-      
-      if (formData.CountryIsoCode && formData.CountryIsoCode.trim()) {
-        payload.CountryIsoCode = formData.CountryIsoCode.trim()
-      }
-      
-      if (formData.State && formData.State.trim()) {
-        payload.State = formData.State.trim()
-      }
-      
-      if (formData.City && formData.City.trim()) {
-        payload.City = formData.City.trim()
+      // Backend validation requires these fields — always send them
+      payload.Country = (formData.Country || "").trim()
+      payload.CountryIsoCode = (formData.CountryIsoCode || "IN").trim()
+      payload.State = (formData.State || "").trim()
+      payload.City = (formData.City || "").trim()
+
+      // Add StateIsoCode — required by backend validation
+      const stateIsoCode = formData.StateIsoCode || getStateIsoCode(formData.State, formData.CountryIsoCode || 'IN')
+      if (stateIsoCode) {
+        payload.StateIsoCode = stateIsoCode
       }
 
-      // Add StateIsoCode if state is provided
-      if (formData.State && formData.State.trim()) {
-        const stateIsoCode = formData.StateIsoCode || getStateIsoCode(formData.State, formData.CountryIsoCode || 'IN')
-        if (stateIsoCode) {
-          payload.StateIsoCode = stateIsoCode
-        }
-      }
-
-      // Add CityIsoCode if city is provided
-      if (formData.City && formData.City.trim()) {
-        const cityIsoCode = formData.CityIsoCode || getCityIsoCode(formData.City, formData.CountryIsoCode || 'IN')
-        if (cityIsoCode) {
-          payload.CityIsoCode = cityIsoCode
-        }
+      // Add CityIsoCode — required by backend validation
+      const cityIsoCode = formData.CityIsoCode || getCityIsoCode(formData.City, formData.CountryIsoCode || 'IN')
+      if (cityIsoCode) {
+        payload.CityIsoCode = cityIsoCode
       }
 
       const response = await fetch(promoterEndpoint.REGISTER_PROMOTER_URL, {
@@ -672,7 +706,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify({
           promoter_id: promoterId,
           new_password: newPassword,
-          CreatedBy: 1,
+          CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
           createduser_id: user?.user_id || "",
         }),
       })
@@ -697,10 +731,26 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     }
   }
   const openCreateDialog = () => {
+    if (role === "organizer") {
+      toast({
+        title: "Not allowed",
+        description: "Organizers cannot create new promoters.",
+        variant: "destructive",
+      })
+      return
+    }
     resetForm()
     setShowCreateDialog(true)
   }
     const openEditDialog = (promoter: Promoter) => {
+    if (role === "organizer" && !isCurrentUserPromoter(promoter)) {
+      toast({
+        title: "Not allowed",
+        description: "You can only edit your own promoter profile.",
+        variant: "destructive",
+      })
+      return
+    }
     setSelectedPromoter(promoter)
     setFormData({
       FullName: promoter.FullName,
@@ -725,12 +775,28 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     setShowEditDialog(true)
   }
   const openStatusDialog = (promoter: Promoter, action: 'enable' | 'disable') => {
+    if (role === "organizer" && !isCurrentUserPromoter(promoter)) {
+      toast({
+        title: "Not allowed",
+        description: "You can only change status for your own promoter profile.",
+        variant: "destructive",
+      })
+      return
+    }
     setSelectedPromoter(promoter)
     setStatusAction(action)
     setShowStatusDialog(true)
   }
 
   const openPasswordResetDialog = (promoter: Promoter) => {
+    if (role === "organizer" && !isCurrentUserPromoter(promoter)) {
+      toast({
+        title: "Not allowed",
+        description: "You can only reset your own promoter password.",
+        variant: "destructive",
+      })
+      return
+    }
     setSelectedPromoter(promoter)
     setNewPassword("")
     setShowPasswordResetDialog(true)
@@ -918,11 +984,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openEditDialog(promoter)}>
+                          <DropdownMenuItem onClick={() => openEditDialog(promoter)} disabled={!isCurrentUserPromoter(promoter)}>
                             <Edit className="mr-2 h-4 w-4" />
                             Edit Profile
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => openPasswordResetDialog(promoter)}>
+                          <DropdownMenuItem onClick={() => openPasswordResetDialog(promoter)} disabled={!isCurrentUserPromoter(promoter)}>
                             <KeyRound className="mr-2 h-4 w-4" />
                             Reset Password
                           </DropdownMenuItem>
@@ -931,6 +997,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                             <DropdownMenuItem 
                               onClick={() => openStatusDialog(promoter, 'disable')}
                               className="text-red-600"
+                              disabled={!isCurrentUserPromoter(promoter)}
                             >
                               <UserX className="mr-2 h-4 w-4" />
                               Disable Account
@@ -939,6 +1006,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                             <DropdownMenuItem 
                               onClick={() => openStatusDialog(promoter, 'enable')}
                               className="text-green-600"
+                              disabled={!isCurrentUserPromoter(promoter)}
                             >
                               <UserCheck className="mr-2 h-4 w-4" />
                               Enable Account
@@ -1279,7 +1347,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       {/* Edit Promoter Dialog */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Promoter</DialogTitle>
             <DialogDescription>

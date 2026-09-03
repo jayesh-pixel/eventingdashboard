@@ -321,6 +321,24 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    if (formData.venueName.trim().length < 3) {
+      toast({
+        title: "Error",
+        description: "Venue name must be at least 3 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.venueDescription.trim().length < 5) {
+      toast({
+        title: "Error",
+        description: "Description must be at least 5 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (selectedImages.length === 0) {
       toast({
         title: "Error",
@@ -352,7 +370,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       formDataPayload.append('Country', 'India')
       formDataPayload.append('CountryIsoCode', 'IN')
       formDataPayload.append('StateIsoCode', selectedState?.iso2 || '')
-      formDataPayload.append('CityIsoCode', selectedCity?.id?.toString() || '')
+      // Backend expects CityIsoCode as a 2-20 char string; city API only returns id+name,
+      // so we derive a code from the city name (first 3 chars uppercased)
+      const cityCode = (selectedCity?.name || formData.city || '').replace(/\s/g, '').substring(0, 3).toUpperCase() || 'OTH'
+      formDataPayload.append('CityIsoCode', cityCode)
       formDataPayload.append('Map_Location', formData.mapLocation)
       formDataPayload.append('Priority', formData.priority.toString())
 
@@ -428,7 +449,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         Country: "India",
         CountryIsoCode: "IN",
         StateIsoCode: selectedState?.iso2 || "",
-        CityIsoCode: selectedCity?.id?.toString() || "",
+        CityIsoCode: (selectedCity?.name || formData.city || "").replace(/\s/g, "").substring(0, 3).toUpperCase() || "OTH",
         Map_Location: formData.mapLocation,
         Priority: formData.priority,
       }

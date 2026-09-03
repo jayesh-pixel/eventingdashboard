@@ -40,7 +40,7 @@ import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
-import { SendDefaultPasswordMail } from "@/lib/api-constants"
+import { SendDefaultPasswordMail, getNumericAdminRole } from "@/lib/api-constants"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
@@ -599,7 +599,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         CityIsoCode: formData.CityIsoCode,
         SendMailFlag: formData.sendEmailNotification ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
         createduser_id: user?.user_id || "",
-        CreatedBy: 1,
+        CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
       }
 
       // Remove undefined fields
@@ -837,7 +837,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         body: JSON.stringify({
           organizer_id: selectedOrganizerForReset._id,
           new_password: newPassword,
-          CreatedBy: 1,
+          CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
           createduser_id: user.user_id,
         }),
       })
@@ -907,7 +907,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     switch (status) {
       case 1:
         return { text: "Active", variant: "default" as const }
-      case 0:
+      case 2:
         return { text: "Inactive", variant: "secondary" as const }
       default:
         return { text: "Unknown", variant: "destructive" as const }
@@ -1086,7 +1086,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   // Debug: Log the organizer status
                   console.log(`Organizer ${org.Username} - status:`, org.status, 'type:', typeof org.status)
                   
-                  // status === 1 means Active, status === 0 or 2 means Disabled
+                  // status === 1 means Active, status === 2 means Inactive (disabled)
                   const isDisabled = org.status !== 1
                   
                   return (
@@ -1120,7 +1120,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                               <BarChart3 className="mr-2 h-4 w-4" /> Sales
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleDisable(org._id)}>
-                              {org.status === 0 ? (
+                              {org.status === 2 ? (
                                 <>
                                   <UserCheck className="mr-2 h-4 w-4" /> Enable Organizer
                                 </>

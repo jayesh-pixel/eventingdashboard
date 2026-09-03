@@ -187,9 +187,9 @@ export default function CustomersPage({ params }: CustomersPageProps) {
       <Badge variant="secondary">Inactive</Badge>
     )
   }
-  // Get registration type
+  // Get registration type — backend: CustomerType = { WebsiteRegistration: 1, AdminPanelRegistration: 2 }
   const getRegistrationType = (type: number) => {
-    return type === 1 ? "Website" : "Mobile"
+    return type === 1 ? "Website" : "Admin Panel"
   }
   
   const handleViewBookings = (customerId: string, customerName: string) => {
