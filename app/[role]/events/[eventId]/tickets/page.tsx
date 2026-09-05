@@ -302,6 +302,7 @@ export default function TicketsPage() {
         month: "short",
         day: "numeric",
         year: "numeric",
+        timeZone: "Asia/Kolkata",
       })
     } catch (error) {
       return "N/A"
@@ -336,17 +337,18 @@ export default function TicketsPage() {
   // records use _id + FullName, so we keep both maps to resolve names correctly.
   const [eventPromoterNameMap, setEventPromoterNameMap] = React.useState<Map<string, string>>(new Map())
 
-  const mapToPromoter = (p: any): Promoter => {
+  const mapToPromoter = (p: any, nameMap?: Map<string, string>): Promoter => {
     const id = p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? ""
+    const fallbackMap = nameMap ?? eventPromoterNameMap
     return {
       _id: id,
       FullName:
         p?.FullName ??
         p?.PromoterName ??
         p?.name ??
-        eventPromoterNameMap.get(id) ??
+        fallbackMap.get(id) ??
         "Unknown Promoter",
-      Username: p?.Username ?? p?.username ?? p?.FullName ?? "",
+      Username: p?.Username ?? p?.username ?? p?.FullName ?? p?.PromoterName ?? fallbackMap.get(id) ?? "",
       Email: p?.Email ?? p?.email ?? "",
       Phone1: p?.Phone1 ?? p?.phone ?? p?.Phone ?? "",
       Status: normalizeStatus(p?.Status ?? p?.status ?? p?.PromoterStatus ?? p?.is_active),
@@ -375,7 +377,7 @@ export default function TicketsPage() {
     setEventPromoterNameMap(newNameMap)
 
     const uniquePromoters = new Map<string, Promoter>()
-    sources.map(mapToPromoter).forEach((promoter) => {
+    sources.map((p) => mapToPromoter(p, newNameMap)).forEach((promoter) => {
       if (promoter._id && !uniquePromoters.has(promoter._id)) {
         uniquePromoters.set(promoter._id, promoter)
       }
@@ -904,14 +906,22 @@ export default function TicketsPage() {
       const { ticketId, currentStatus, isNormal } = pendingStatusChange
       const newStatus = currentStatus === 1 ? 0 : 1
       
-      // Use the correct API endpoints
+      // Use the correct API endpoints (bulk ticket enable/disable not available in backend)
       const endpoint = isNormal
         ? (newStatus === 1 
           ? `${BASE_URL}/eventstickets/enableEventTicket`
           : `${BASE_URL}/eventstickets/disableEventTicket`)
-        : (newStatus === 1 
-          ? ticketEndPoint.ENABLE_BULK_TICKET 
-          : ticketEndPoint.DISABLE_BULK_TICKET)
+        : null // Bulk ticket enable/disable not supported by backend
+
+      if (!endpoint) {
+        toast({
+          title: "Not Supported",
+          description: "Bulk ticket enable/disable is not available.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -965,7 +975,17 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      const endpoint = isNormal ? ticketEndPoint.DELETE_TICKET : ticketEndPoint.DELETE_BULK_TICKET
+      // Delete endpoints not available in backend for normal or bulk tickets
+      toast({
+        title: "Not Supported",
+        description: "Ticket deletion is not available. Use cancel/disable instead.",
+        variant: "destructive",
+      })
+      setLoading(false)
+      return
+
+      // eslint-disable-next-line no-unreachable
+      const endpoint = isNormal ? "" : ""
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -975,7 +995,7 @@ export default function TicketsPage() {
         },        body: JSON.stringify({
           _id: ticketId,
           AdminRole: getNumericRole(role),
-          user_id: user.user_id,
+          user_id: user?.user_id || "",
         }),
       })
 
@@ -1210,8 +1230,8 @@ export default function TicketsPage() {
           EventTicketVisibility: normalFormData.VisibilityLevel.toString(),
         }
         
-        // Only send Description if it has a value
-        if (normalFormData.TicketDescription?.trim()) {
+        // Only send Description if it has at least 3 chars (Joi min(3))
+        if (normalFormData.TicketDescription && normalFormData.TicketDescription.trim().length >= 3) {
           payload.Description = normalFormData.TicketDescription.trim()
         }
         
@@ -1229,7 +1249,7 @@ export default function TicketsPage() {
           EventDateTime_id: bulkFormData.EventDateTime_id,
           Quantity: bulkFormData.TotalQuantity.toString(),
           Price: bulkFormData.TicketPrice.toString(),
-          CreatedBy: 1,
+          CreatedBy: getNumericRole(user?.AdminRole || "superadmin"),
           createduser_id: user.user_id
         }
       }
@@ -1375,7 +1395,17 @@ export default function TicketsPage() {
       const isNormal = selectedTicketType === 'normal'
       const endpoint = isNormal
         ? ticketEndPoint.UPDATE_TICKET
-        : ticketEndPoint.UPDATE_BULK_TICKET
+        : null // Bulk ticket update not supported by backend
+
+      if (!endpoint) {
+        toast({
+          title: "Not Supported",
+          description: "Bulk ticket editing is not available.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
 
       let payload: any
       
@@ -1389,14 +1419,18 @@ export default function TicketsPage() {
           // Editable fields
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
-          Description: editFormData.Description || normalTicket.Description || '',
-          // Keep existing non-editable values
-          EventTicketVisibility: normalTicket.EventTicketVisibility,
+          // Only send Description if it has at least 3 chars (Joi min(3))
+          ...(editFormData.Description && editFormData.Description.trim().length >= 3
+            ? { Description: editFormData.Description.trim() }
+            : {}),
+          // Use edited visibility value if changed, otherwise keep existing
+          EventTicketVisibility: Number((editFormData as any).EventTicketVisibility || (editFormData as any).Visibility || normalTicket.EventTicketVisibility),
           BookingMaxLimit: normalTicket.BookingMaxLimit
         }
-        
+
         // Handle promoters - can be updated only if visibility is set to "Promoters" (3)
-        if (normalTicket.EventTicketVisibility === '3' || normalTicket.EventTicketVisibility === 3) {
+        const currentVisibility = (editFormData as any).EventTicketVisibility || (editFormData as any).Visibility || normalTicket.EventTicketVisibility
+        if (currentVisibility === '3' || currentVisibility === 3) {
           // Use selected promoters if any, otherwise keep existing ones
           if (selectedPromoters.length > 0) {
             payload.EventPromoters = selectedPromoters.map(promoterId => ({ promoter_id: promoterId }))
@@ -1930,7 +1964,8 @@ export default function TicketsPage() {
                         day: 'numeric',
                         year: 'numeric',
                         hour: '2-digit',
-                        minute: '2-digit'
+                        minute: '2-digit',
+                        timeZone: 'Asia/Kolkata'
                       })}
                     </SelectItem>
                   ))}
@@ -2217,7 +2252,7 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {eventDateTimes.length > 0 ? (
-                                `${new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString()} ${new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - ${new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`
+                                `${new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} ${new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} - ${new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}`
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -2368,7 +2403,14 @@ export default function TicketsPage() {
                     // Multi-day event: allow Multiple Day or Season Pass
                     <RadioGroup
                       value={normalFormData.TicketType.toString()}
-                      onValueChange={(value) => setNormalFormData(prev => ({ ...prev, TicketType: parseInt(value) }))}
+                      onValueChange={(value) => {
+                        const ticketType = parseInt(value)
+                        setNormalFormData(prev => ({ ...prev, TicketType: ticketType }))
+                        // Season Pass should cover all event dates
+                        if (ticketType === 3) {
+                          setSelectedEventDateTimes(eventDateTimes.map(dt => dt._id))
+                        }
+                      }}
                       className="grid grid-cols-1 sm:grid-cols-2 gap-2"
                     >
                       <div className="flex items-center space-x-2">
@@ -2530,7 +2572,7 @@ export default function TicketsPage() {
                                 htmlFor={`datetime-${dateTime._id}`}
                                 className="text-sm cursor-pointer flex-1"
                               >
-                                {new Date(dateTime.EventStartDateTime).toLocaleDateString()} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                {new Date(dateTime.EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
                               </label>
                             </div>
                           ))}
@@ -2561,7 +2603,7 @@ export default function TicketsPage() {
                       </div>
                     ) : (
                       <div className="p-3 bg-muted rounded-md text-sm">
-                        {new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString()} - {new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                        {new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
                       </div>
                     )}
                   </div>
@@ -2686,7 +2728,7 @@ export default function TicketsPage() {
                     <SelectContent>
                       {eventDateTimes.map((dateTime) => (
                         <SelectItem key={dateTime._id} value={dateTime._id}>
-                          {new Date(dateTime.EventStartDateTime).toLocaleDateString()} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          {new Date(dateTime.EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2778,19 +2820,23 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Visibility (Read Only)</Label>
-                    <Input
+                    <Label>Visibility</Label>
+                    <Select
                       value={(() => {
-                        // Check for Visibility, VisibilityLevel, or EventTicketVisibility
-                        const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
-                        if (visibility === "1") return "All"
-                        if (visibility === "2") return "All Customers"
-                        if (visibility === "3") return "Promoters"
-                        return "Unknown"
+                        const v = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                        return v
                       })()}
-                      disabled
-                      className="bg-muted"
-                    />
+                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, EventTicketVisibility: value, Visibility: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select visibility" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">All</SelectItem>
+                        <SelectItem value="2">All Customers</SelectItem>
+                        <SelectItem value="3">Promoters</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -2910,7 +2956,7 @@ export default function TicketsPage() {
                                         }}
                                       />
                                       <div className="flex-1">
-                                        <div className="font-medium">{promoter.FullName}</div>
+                                        <div className="font-medium">{promoter.FullName || promoter.Username || 'Unknown Promoter'}</div>
                                         <div className="text-sm text-muted-foreground">
                                           {promoter.Email || 'No email'} • {promoter.Phone1 || 'No phone'}
                                         </div>
@@ -3067,7 +3113,7 @@ export default function TicketsPage() {
                       onCheckedChange={() => handlePromoterSelection(promoter._id)}
                     />
                     <div className="flex-1">
-                      <div className="font-medium">{promoter.Username || promoter.FullName || 'No username'}</div>
+                      <div className="font-medium">{promoter.FullName || promoter.Username || 'Unknown Promoter'}</div>
                       <div className="text-sm text-muted-foreground">{promoter.Phone1 || 'No phone'}</div>
                     </div>
                     <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>

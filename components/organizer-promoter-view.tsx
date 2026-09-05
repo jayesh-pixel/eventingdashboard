@@ -68,7 +68,7 @@ const OrganizerPromoterView = ({
                     </Avatar>
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{promoter.PromoterName || "Unknown Promoter"}</p>
+                    <p>{promoter.PromoterName || promoter.FullName || "Unknown Promoter"}</p>
                   </TooltipContent>
                 </Tooltip>
               )
@@ -88,7 +88,7 @@ const OrganizerPromoterView = ({
                 <p className="font-medium">Additional promoters:</p>
                 {promoters.slice(4).map((promoter: PromoterData, index: number) => (
                   <p key={index} className="text-sm">
-                    {promoter.PromoterName || "Unknown Promoter"}
+                    {promoter.PromoterName || promoter.FullName || "Unknown Promoter"}
                   </p>
                 ))}
               </div>

@@ -90,7 +90,8 @@ export function formatDate(dateString: string): string {
         return date.toLocaleDateString('en-IN', {
           year: 'numeric',
           month: 'short',
-          day: 'numeric'
+          day: 'numeric',
+          timeZone: 'Asia/Kolkata'
         })
       }
       
@@ -122,7 +123,8 @@ export function formatDate(dateString: string): string {
     return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      timeZone: 'Asia/Kolkata'
     })
   } catch {
     return "N/A"

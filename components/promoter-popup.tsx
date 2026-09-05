@@ -19,6 +19,9 @@ interface PromoterData {
   promoter_id?: string
   PromoterName?: string
   promoterName?: string
+  FullName?: string
+  fullName?: string
+  Username?: string
   email?: string
   phone?: string
   address?: string
@@ -64,13 +67,13 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
 
           <div className="space-y-2 py-2">
             {promoters.map((promoter, index) => {
-              const promoterName = promoter.PromoterName || promoter.promoterName || "Unknown Promoter"
+              const promoterName = promoter.PromoterName || promoter.promoterName || promoter.FullName || promoter.fullName || "Unknown Promoter"
 
               return (
                 <div key={promoter.promoter_id || index} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold text-xs">
-                      {promoterName.split(' ').map(word => word.charAt(0)).join('').toUpperCase().slice(0, 2)}
+                      {promoterName.split(' ').map((word: string) => word.charAt(0)).join('').toUpperCase().slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
                   <span className="font-medium text-sm">{promoterName}</span>

@@ -98,7 +98,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                           </Avatar>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{promoter.PromoterName || "Unknown Promoter"}</p>
+                          <p>{promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
                         </TooltipContent>
                       </Tooltip>
                     )
@@ -189,7 +189,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                         </Avatar>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{promoter.PromoterName || "Unknown Promoter"}</p>
+                        <p>{promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
                       </TooltipContent>
                     </Tooltip>
                   )

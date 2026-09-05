@@ -5,12 +5,13 @@ const EVENT_TICKETS_BOOKING_BASE = BASE_URL + "/eventticketsbooking"
 export const authEndpoints = {
   LOGIN_API: BASE_URL + "/superadmin/login",
   SUPER_ADMIN_DATA: BASE_URL + "/superadmin/getAll",
-  FORGOT_PASSWORD_API: BASE_URL + "/getpasswordresetlink",
+  FORGOT_PASSWORD_API: BASE_URL + "/superadmin/getpasswordresetlink",
 }
 
 export const dashboard = {
   ADMIN_PROFILE_API: BASE_URL + "/superadmin/getById",
   ADMIN_PROFILE_UPDATE_API: BASE_URL + "/superadmin/updateProfile",
+  SUPERADMIN_CHANGE_PASSWORD: BASE_URL + "/superadmin/changepassword",
 }
 
 // Artist Creation
@@ -81,6 +82,7 @@ export const eventTourEndPoint = {
   EVENT_TOUR_IMAGE_REMOVE: BASE_URL + "/eventtour/deleteEventTour/image",
   EVENT_TOUR_ENABLE: BASE_URL + "/eventtour/enable",
   EVENT_TOUR_DISABLE: BASE_URL + "/eventtour/disable",
+  GET_ACTIVE_EVENT_TOURS: BASE_URL + "/eventtour/getActiveEventTours",
 }
 
 // Organizer API Endpoints
@@ -92,7 +94,6 @@ export const organizerEndpoint = {
   GET_ORGANIZER_DATA_BY_ID_URL: BASE_URL + "/organizer/getById",
   UPDATE_ORGANIZER_PROFILE: BASE_URL + "/organizer/updateProfile",
   UPDATE_ORGANIZER_DATA_URL: BASE_URL + "/events/organizer/update",
-  DELETE_ORGANIZER_DATA_URL: BASE_URL + "/organizer/delete",
   PROFILE_CHANGE_PASSWORD: BASE_URL + "/organizer/changepassword",
   UPDATE_PASSWORD: BASE_URL + "/organizer/updatepassword",
   SEARCH_ORGANIZER_BY_ORGANIZER_NAME: BASE_URL + "/organizer/getOrganizerDataBySearchKeyword",
@@ -105,7 +106,7 @@ export const organizerEndpoint = {
   GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS_BY_ORGANIZER: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
   GET_ALL_REJECTED_EVENTS_DATA_BY_ORGANIZER: BASE_URL + "/events/getRejectedEvents",
   ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/organizer/getpasswordresetlink",
-  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/updatepassword",
+  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/resetPassword",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
@@ -123,15 +124,14 @@ export const organizerEndpoint = {
   DOWNLOAD_EXCEL_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
-    EVENT_TICKETS_BOOKING_BASE + "/getEventTransactionExcelReportforSuperAdminOrganizer",  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
+    EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
+  DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
   ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",
   ORGANIZER_TOTAL_SALES_DATA_URL: BASE_URL + "/organizer/totalSalesData",
-  GET_ALL_SALES_PAGINATED: BASE_URL + "/organizer/getSalesPaginated",
-  TOTAL_DATA: BASE_URL + "/organizer/getTotalData",
   GET_ALL_ORGANIZER_PAYMENTS: BASE_URL + "/organizer/getAllEventsPayment",
   ADD_PAYMENT: BASE_URL + "/organizer/addPayment",
-  DELETE_PAYMENT: BASE_URL + "/organizer/deletePayment",
+  DELETE_PAYMENT: BASE_URL + "/organizer/deleteEventPayment",
   ENABLE_ORGANIZER_URL: BASE_URL + "/organizer/enable",
   DISABLE_ORGANIZER_URL: BASE_URL + "/organizer/disable",
 }
@@ -210,6 +210,8 @@ export const eventEndPoint = {
   GET_PAGINATED_DRAFT_EVENTS: BASE_URL + "/events/getPaginatedDraftEvents",
   GET_PAGINATED_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getPaginatedSuperAdminSelfCreatedEvents",
   GET_PAGINATED_REJECTED_EVENTS: BASE_URL + "/events/getPaginatedRejectedEvents",
+  GET_VENUE_CITIES_AND_PROMOTER_DATA: BASE_URL + "/events/getVenueCitiesandPromoterDataforEvents",
+  GET_EVENTS_REPORTS_FOR_PROMOTERS: BASE_URL + "/events/getEventsReportsForPromoters",
 }
 
 // Ticket Management API Endpoints
@@ -220,24 +222,19 @@ export const ticketEndPoint = {
   GET_ALL_EVENT_TICKETS: BASE_URL + "/eventstickets/getAllEventTickets",
   GET_TICKET_BY_ID: BASE_URL + "/eventstickets/getEventTicketDetailsById",
   UPDATE_TICKET: BASE_URL + "/eventstickets/updateEventTicketById",
-  DELETE_TICKET: BASE_URL + "/eventstickets/delete", // NOTE: No delete route exists in backend yet — will 404
   ENABLE_TICKET: BASE_URL + "/eventstickets/enableEventTicket",
   DISABLE_TICKET: BASE_URL + "/eventstickets/disableEventTicket",
   UPDATE_AVAILABILITY_TO_SOLD_OUT: BASE_URL + "/eventstickets/updateAvailabilityToSoldOut",
   UPDATE_AVAILABILITY_TO_AVAILABLE: BASE_URL + "/eventstickets/updateAvailabilityToAvailable",
-  GET_TICKETS_PAGINATED: BASE_URL + "/eventstickets/getallpaginatedData", // NOTE: No paginated route exists in backend — will 404
+  GET_PROMOTER_SEASON_PASS: BASE_URL + "/eventstickets/getPromoterSeasonPass",
+  RENDER_TICKET: BASE_URL + "/eventstickets/render_ticket", // GET /:Booking_id
+  DOWNLOAD_TICKET_PDF: BASE_URL + "/eventstickets/download-ticket-pdf", // GET /:Booking_id
   
   // Bulk Tickets — backend only has: createBulkTicketForEvent, getBulkTicketsOfEvent, cancelBukTicket, exportBulkTicketBookingIds, getBulkTicketsByFilter
   CREATE_BULK_TICKET: BASE_URL + "/eventbulktickets/createBulkTicketForEvent",
   GET_ALL_BULK_TICKETS_BY_EVENT: BASE_URL + "/eventbulktickets/getBulkTicketsOfEvent",
-  GET_BULK_TICKET_BY_ID: BASE_URL + "/eventbulktickets/getbyId", // NOTE: No getbyId route exists — will 404
-  UPDATE_BULK_TICKET: BASE_URL + "/eventbulktickets/update", // NOTE: No update route exists — will 404
-  DELETE_BULK_TICKET: BASE_URL + "/eventbulktickets/delete", // NOTE: No delete route exists — will 404
-  ENABLE_BULK_TICKET: BASE_URL + "/eventbulktickets/enable", // NOTE: No enable route exists — will 404
-  DISABLE_BULK_TICKET: BASE_URL + "/eventbulktickets/disable", // NOTE: No disable route exists — will 404
   CANCEL_BULK_TICKET: BASE_URL + "/eventbulktickets/cancelBukTicket",
   DOWNLOAD_BULK_TICKET_REPORT: BASE_URL + "/eventbulktickets/exportBulkTicketBookingIds",
-  GET_BULK_TICKETS_PAGINATED: BASE_URL + "/eventbulktickets/getallpaginatedData", // NOTE: No paginated route exists — will 404
   
   // Common ticket operations
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
@@ -258,8 +255,8 @@ export const websiteCustomer = {
 export const promocodeEndPoint = {
   GET_ALL_PAGINATED_PROMOCODES_DATA: BASE_URL + "/promocode/getallpaginatedData",
   CREATE_PROMOCODE: BASE_URL + "/promocode/create",
+  UPDATE_PROMOCODE: BASE_URL + "/promocode/update",
   GET_PROMOCODE_BY_ID: BASE_URL + "/promocode/getById",
-  UPDATE_PROMOCODE: BASE_URL + "/promocode/update", // NOTE: No update route exists in backend yet — will 404
   ENABLE_PROMOCODE: BASE_URL + "/promocode/enablePromocode",
   DISABLE_PROMOCODE: BASE_URL + "/promocode/disablePromocode",
   SEARCH_PROMOCODE: BASE_URL + "/promocode/searchKeyword",
@@ -290,15 +287,14 @@ export const scannerUserEndpoint = {
   ENABLE: BASE_URL + "/scanneruser/enable",
   DISABLE: BASE_URL + "/scanneruser/disable",
   UPDATE_PASSWORD: BASE_URL + "/scanneruser/updatePassword",
+  GET_EVENTS_BY_ID: BASE_URL + "/scanneruser/getEventsbyId",
+  SCAN_QR_CODE: BASE_URL + "/scanneruser/scanQrCode",
 }
 
 // Leads Endpoints — backend only has /insert and /getAllPaginated
 export const leadsEndpoint = {
   GET_ALL_PAGINATED: BASE_URL + "/webiste/leads/getAllPaginated",
   CREATE: BASE_URL + "/webiste/leads/insert",
-  UPDATE: BASE_URL + "/webiste/leads/update", // NOTE: No update route exists — will 404
-  DELETE: BASE_URL + "/webiste/leads/delete", // NOTE: No delete route exists — will 404
-  GET_BY_ID: BASE_URL + "/webiste/leads/getById", // NOTE: No getById route exists — will 404
 }
 
 // Debug function to log all endpoints

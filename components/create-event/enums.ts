@@ -21,10 +21,10 @@ export const EventStatus = {
   Completed: 5,
 } as const
 
-// Convenience Fee Unit Enum
+// Convenience Fee Unit Enum (matches backend: Amount=1, Percentage=2)
 export const ConvinienceFeeUnit = {
-  Percentage: 1,
-  Fixed: 2,
+  Amount: 1,
+  Percentage: 2,
 } as const
 
 // Event Venue To Be Announced Enum

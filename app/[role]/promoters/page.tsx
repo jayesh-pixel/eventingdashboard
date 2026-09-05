@@ -352,6 +352,26 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
+    // Backend validation requires FullName min 5 chars
+    if (formData.FullName.trim().length < 5) {
+      toast({
+        title: "Error",
+        description: "Full Name must be at least 5 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Backend validation requires Username min 5 chars
+    if (formData.Username.trim().length < 5) {
+      toast({
+        title: "Error",
+        description: "Username must be at least 5 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
     // Validate phone number only if provided (must be exactly 10 digits)
     if (formData.Phone1 && formData.Phone1.trim()) {
       const phoneRegex = /^\d{10}$/
@@ -383,6 +403,24 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       toast({
         title: "Error",
         description: "Country, State, and City are required fields",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Backend validation requires Password (min 5, max 10 chars)
+    if (!formData.Password || !formData.Password.trim()) {
+      toast({
+        title: "Error",
+        description: "Password is required (5-10 characters). Click Generate Password for a random one.",
+        variant: "destructive",
+      })
+      return
+    }
+    if (formData.Password.trim().length < 5 || formData.Password.trim().length > 10) {
+      toast({
+        title: "Error",
+        description: "Password must be 5-10 characters long",
         variant: "destructive",
       })
       return
@@ -484,7 +522,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       const payload: any = {
         FullName: formData.FullName,
         Username: formData.Username,
-        SendMailFlag: sendAccountInfo ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
+        Password: formData.Password.trim(),
+        // Promoter backend expects SendMailFlag: 1 (yes) / 0 (no)
+        SendMailFlag: sendAccountInfo ? 1 : 0,
         CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user?.user_id || "",
       }
@@ -492,10 +532,6 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       // Add optional fields only if they have values
       if (formData.Email && formData.Email.trim()) {
         payload.Email = formData.Email.trim()
-      }
-      
-      if (formData.Password && formData.Password.trim()) {
-        payload.Password = formData.Password.trim()
       }
       
       if (formData.Phone1 && formData.Phone1.trim()) {

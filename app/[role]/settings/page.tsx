@@ -46,7 +46,7 @@ import { AddressSelector } from "@/components/address-selector"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api-client"
-import { dashboard, promoterEndPointPannel, authEndpoints, organizerEndpoint } from "@/lib/api-endpoints"
+import { dashboard, promoterEndPointPannel, organizerEndpoint } from "@/lib/api-endpoints"
 import { Loader2, Eye, EyeOff, Upload } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 
@@ -250,7 +250,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       let endpoint = ""
         switch (role) {
         case "superadmin":
-          endpoint = authEndpoints.FORGOT_PASSWORD_API // Update with correct endpoint
+          endpoint = dashboard.SUPERADMIN_CHANGE_PASSWORD
           break
         case "promoter":
           endpoint = promoterEndPointPannel.PROMOTER_CHANGE_PASSWORD_IN_PROFILE
@@ -454,9 +454,8 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   return (    <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
 
-      {/* Profile Information Card - Only for superadmin */}
-      {role === "superadmin" && (
-        <Card>
+      {/* Profile Information Card - Available for all roles */}
+      <Card>
           <CardHeader>
             <CardTitle>Personal data</CardTitle>
             <CardDescription>Update your personal information and profile picture.</CardDescription>
@@ -571,7 +570,6 @@ export default function SettingsPage({ params }: SettingsPageProps) {
             </div>
           </CardContent>
         </Card>
-      )}
 
       {/* Password Change Card */}
       <Card>

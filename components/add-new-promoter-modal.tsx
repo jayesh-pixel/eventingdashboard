@@ -25,6 +25,7 @@ import type { UserRole } from "@/lib/navigation"
 interface PromoterData {
   _id: string
   Username: string
+  FullName?: string
   PromoterName?: string
   email?: string
 }
@@ -147,7 +148,7 @@ const AddNewPromoterModal = ({
         return
       }
 
-      // Backend expects { event_id, promoterIds: [array] } — single API call, not per-promoter
+      // Backend expects { event_id, promoterIds: [string] } — single request with all promoter IDs
       const response = await fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
         method: "POST",
         headers: {
@@ -161,14 +162,8 @@ const AddNewPromoterModal = ({
       })
 
       const result = await handleApiResponse(response)
-      const results = [result]
-
-      const mergedPromoters = results
-        .map((r) => r?.data?.EventPromoter)
-        .filter(Boolean)
-        .flat()
-      const lastPromoter = results[results.length - 1]?.data?.EventPromoter
-      onPromoterUpdate(mergedPromoters.length > 0 ? mergedPromoters : lastPromoter)
+      const mergedPromoters = result?.data?.EventPromoter || []
+      onPromoterUpdate(mergedPromoters)
       onOpenChange(false)
       toast({
         title: "Success",
@@ -200,7 +195,7 @@ const AddNewPromoterModal = ({
   // Filter promoters based on search term
   const filteredPromoters = apiAllPromoterData.filter((promoter) => {
     if (!searchTerm) return true
-    const name = (promoter.PromoterName || promoter.Username || "").toLowerCase()
+    const name = (promoter.FullName || promoter.PromoterName || promoter.Username || "").toLowerCase()
     const email = (promoter.email || "").toLowerCase()
     const search = searchTerm.toLowerCase()
     return name.includes(search) || email.includes(search)
@@ -266,7 +261,7 @@ const AddNewPromoterModal = ({
                                   </Avatar>
                                   <div className="flex-1">
                                     <p className="text-sm font-medium">
-                                      {currentPromoter.PromoterName || fullPromoterData?.PromoterName || fullPromoterData?.Username || "Unknown Promoter"}
+                                      {currentPromoter.PromoterName || fullPromoterData?.FullName || fullPromoterData?.PromoterName || fullPromoterData?.Username || "Unknown Promoter"}
                                     </p>
                                     {fullPromoterData?.email && (
                                       <p className="text-xs text-muted-foreground">
@@ -342,7 +337,7 @@ const AddNewPromoterModal = ({
                                       ? 'bg-primary/10 text-primary' 
                                       : 'bg-muted'
                                   }`}>
-                                    {(promoter.PromoterName || promoter.Username)?.charAt(0).toUpperCase() || "P"}
+                                    {(promoter.FullName || promoter.PromoterName || promoter.Username)?.charAt(0).toUpperCase() || "P"}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div className="flex-1">
@@ -350,7 +345,7 @@ const AddNewPromoterModal = ({
                                     htmlFor={promoter._id}
                                     className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
                                   >
-                                    {promoter.PromoterName || promoter.Username}
+                                    {promoter.FullName || promoter.PromoterName || promoter.Username}
                                     {isCurrentlyAssigned && (
                                       <Badge variant="secondary" className="text-xs">
                                         Assigned

@@ -239,20 +239,20 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       errors.CompanyName = formData.OwnerType === "ownClub" ? "Club name is required" : "Company name is required"
     }
     
-    // Full Name validation
+    // Full Name validation (backend requires min 5 chars)
     if (!formData.FullName.trim()) {
       errors.FullName = "Full name is required"
-    } else if (formData.FullName.trim().length < 3) {
-      errors.FullName = "Full name must be at least 3 characters"
+    } else if (formData.FullName.trim().length < 5) {
+      errors.FullName = "Full name must be at least 5 characters"
     } else if (formData.FullName.trim().length > 50) {
       errors.FullName = "Full name must not exceed 50 characters"
     }
     
-    // Username validation
+    // Username validation (backend requires min 5 chars)
     if (!formData.Username.trim()) {
       errors.Username = "Username is required"
-    } else if (formData.Username.trim().length < 3) {
-      errors.Username = "Username must be at least 3 characters"
+    } else if (formData.Username.trim().length < 5) {
+      errors.Username = "Username must be at least 5 characters"
     } else if (formData.Username.trim().length > 50) {
       errors.Username = "Username must not exceed 50 characters"
     }

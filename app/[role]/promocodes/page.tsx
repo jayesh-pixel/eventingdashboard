@@ -37,7 +37,7 @@ import { useToast } from "@/hooks/use-toast"
 import { promocodeEndPoint, eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
-import { Promocode, PromocodesApiResponse, PromocodeStatus } from "@/lib/types"
+import { Promocode, PromocodesApiResponse, PromocodeStatus, PromocodeType } from "@/lib/types"
 import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 
@@ -596,9 +596,6 @@ export default function PromocodesPage() {
         requestData.Events = selectedEvents.filter(Boolean).map((id) => ({ event_id: id }))
       }
 
-      // Backend does not expose a dedicated update route for promocode.
-      // The closest available mutation is enable/disable status toggle.
-      // Until the backend exposes /promocode/update, this call will likely 404.
       const response = await fetch(promocodeEndPoint.UPDATE_PROMOCODE, {
         method: "POST",
         headers: {

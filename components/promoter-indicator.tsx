@@ -10,6 +10,9 @@ interface PromoterIndicatorProps {
     promoter_id?: string
     PromoterName?: string
     promoterName?: string
+    FullName?: string
+    fullName?: string
+    Username?: string
   } | null
   onClick: () => void
   size?: "sm" | "md" | "lg"
@@ -66,7 +69,7 @@ export default function PromoterIndicator({
     )
   }
 
-  const promoterName = promoterData.PromoterName || promoterData.promoterName || "Unknown Promoter"
+  const promoterName = promoterData.PromoterName || promoterData.promoterName || promoterData.FullName || promoterData.fullName || "Unknown Promoter"
 
   return (
     <button

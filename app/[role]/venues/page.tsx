@@ -1117,10 +1117,39 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               {selectedVenue.Map_Location && (
                 <div className="space-y-3">
                   <Label className="text-lg font-medium">Location</Label>
-                  <div 
-                    className="w-full h-64 border rounded-lg overflow-hidden"
-                    dangerouslySetInnerHTML={{ __html: selectedVenue.Map_Location }}
-                  />
+                  {(() => {
+                    const mapValue = selectedVenue.Map_Location
+                    // Extract src from iframe embed code
+                    const iframeMatch = mapValue.match(/<iframe[^>]+src="([^"]+)"/i)
+                    if (iframeMatch) {
+                      return (
+                        <iframe
+                          src={iframeMatch[1]}
+                          className="w-full h-64 border-0 rounded-lg"
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title="Venue map"
+                        />
+                      )
+                    }
+                    // If it's a bare URL, use it directly
+                    if (/^https?:\/\//.test(mapValue.trim())) {
+                      return (
+                        <iframe
+                          src={mapValue.trim()}
+                          className="w-full h-64 border-0 rounded-lg"
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                          title="Venue map"
+                        />
+                      )
+                    }
+                    return (
+                      <div className="w-full h-64 border rounded-lg flex items-center justify-center text-muted-foreground text-sm">
+                        Invalid map embed code
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>

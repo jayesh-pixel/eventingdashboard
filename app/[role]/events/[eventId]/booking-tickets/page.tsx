@@ -81,6 +81,7 @@ interface TicketData {
   MaxQuantityAllowedPerOrder: number;
   AvailableQuantity: number;
   BookingMaxLimit?: number; // (optional) some APIs return this field
+  TicketType?: number; // from backend
 }
 
 // -----------------------------------------------------------------------------
@@ -97,15 +98,15 @@ const formatDateBlock = (iso: string) => {
   if (!iso) return null;
   const d = new Date(iso);
   return {
-    day: d.toLocaleDateString("en-US", { weekday: "long" }),
-    month: d.toLocaleDateString("en-US", { month: "short" }),
-    date: d.getDate(),
-    year: d.getFullYear(),
+    day: d.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" }),
+    month: d.toLocaleDateString("en-US", { month: "short", timeZone: "Asia/Kolkata" }),
+    date: d.toLocaleDateString("en-US", { day: "numeric", timeZone: "Asia/Kolkata" }),
+    year: d.toLocaleDateString("en-US", { year: "numeric", timeZone: "Asia/Kolkata" }),
     time: d.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
-      timeZone: "UTC",
+      timeZone: "Asia/Kolkata",
     }),
   } as const;
 };
@@ -296,11 +297,11 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       if (!user || !token || !selectedDateId) return;
       const selectedTicket = tickets.find((t) => counts[t._id] > 0);
       if (!selectedTicket) return;
-console.log
-      const payload = {
+
+      const payload: any = {
         promoter_id: user.user_id,
         event_id: eventId,
-        EventTicketType: TicketType.SingleDay,
+        EventTicketType: String(selectedTicket.TicketType || TicketType.SingleDay),
         EventDateTime_id: selectedDateId,
         EventTicket_id: selectedTicket._id,
         CustomerName: customer.FullName,
@@ -308,10 +309,26 @@ console.log
         isWhatsAppNumberisSame: customer.isWhatsApp,
         Email: customer.Email,
         TicketQuantity: totalTickets,
-        ...(customer.isWhatsApp === 0 && { WhatsAppNumber: customer.WhatsAppNo }),
-        ...(customer.noteDescription && { PromoterNote: customer.noteDescription }),
-        ...(customer.Age && { CustomerAge: parseInt(customer.Age, 10) }),
-      };
+      }
+
+      // Only send WhatsAppNumber if it's a valid 10-digit number
+      const whatsappNum = customer.isWhatsApp === 1 ? customer.PhoneNo : (customer.WhatsAppNo || customer.PhoneNo)
+      if (whatsappNum && /^\d{10}$/.test(whatsappNum)) {
+        payload.WhatsAppNumber = whatsappNum
+      }
+
+      // Only send PromoterNote if it has at least 3 chars (Joi min(3))
+      if (customer.noteDescription && customer.noteDescription.trim().length >= 3) {
+        payload.PromoterNote = customer.noteDescription.trim()
+      }
+
+      // Only send CustomerAge if it's a positive integer (Joi positive())
+      if (customer.Age) {
+        const age = parseInt(customer.Age, 10)
+        if (age > 0) {
+          payload.CustomerAge = age
+        }
+      }
 
       const res = await fetch(promoterEndPointPannel.BOOKING_TICKET_BY_PROMOTER, {
         method: "POST",

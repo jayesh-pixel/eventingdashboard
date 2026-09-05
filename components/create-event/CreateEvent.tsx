@@ -469,15 +469,15 @@ export default function CreateEvent({
         eventVisibility: existingEventData.EventVisibility ? existingEventData.EventVisibility.toString() : "1",
         eventType: existingEventData.EventType ? existingEventData.EventType.toString() : "1",
         bookingphonenumber: existingEventData.BookingPhoneNumber || existingEventData.bookingPhoneNumber || "",
-        whatsappnumber: existingEventData.WhatsappNumber || existingEventData.whatsappNumber || "",
+        whatsappnumber: existingEventData.WhatsAppPhoneNumber || existingEventData.WhatsappNumber || existingEventData.whatsappNumber || "",
         locationType: existingEventData.OnlineEventFlag === 1 ? "online" : 
-                     existingEventData.locationType === "tba" ? "tba" : "venue",
+                     (existingEventData.VenueToBeAnnounced === 1 || existingEventData.locationType === "tba") ? "tba" : "venue",
         venue_id: existingEventData.venue_id || existingEventData.VenueId || "",
         onlineEventUrl: existingEventData.Online_Event_Link || existingEventData.onlineEventLink || "",
-        stateIsoCode: existingEventData.StateIsoCode || existingEventData.stateIsoCode || "",
-        stateName: existingEventData.StateName || existingEventData.stateName || "",
-        cityIsoCode: existingEventData.CityIsoCode || existingEventData.cityIsoCode || "",
-        cityName: existingEventData.CityName || existingEventData.cityName || "",
+        stateIsoCode: existingEventData.VenueToBeAnnouncedStateIsoCode || existingEventData.StateIsoCode || existingEventData.stateIsoCode || "",
+        stateName: existingEventData.VenueToBeAnnouncedState || existingEventData.StateName || existingEventData.stateName || "",
+        cityIsoCode: existingEventData.VenueToBeAnnouncedCityIsoCode || existingEventData.CityIsoCode || existingEventData.cityIsoCode || "",
+        cityName: existingEventData.VenueToBeAnnouncedCity || existingEventData.CityName || existingEventData.cityName || "",
         
         // Multi-select fields - transform existing data to proper format
         organizers: transformExistingData(existingEventData.EventOrganizers || existingEventData.eventOrganizers, organizers, 'organizer'),
@@ -1330,9 +1330,9 @@ export default function CreateEvent({
         })
       }
 
-      // Add venue layout image if applicable
+      // Add venue layout image if applicable (backend expects field name "VenueLayout")
       if (venueLayoutImage && values.locationType === "venue") {
-        submitData.append("VenueLayoutImage", venueLayoutImage, `layout.${venueLayoutImage.name.split('.').pop()}`)
+        submitData.append("VenueLayout", venueLayoutImage, `layout.${venueLayoutImage.name.split('.').pop()}`)
       }
 
       // Add form data using the exact field names required by the API
@@ -1370,7 +1370,7 @@ export default function CreateEvent({
       }
 
       if (values.eventType === "3" && values.whatsappnumber && values.whatsappnumber.trim && values.whatsappnumber.trim()) {
-        submitData.append("WhatsappNumber", values.whatsappnumber.trim())
+        submitData.append("WhatsAppPhoneNumber", values.whatsappnumber.trim())
       }
 
       // Add location-specific data with correct field names
@@ -2154,24 +2154,28 @@ export default function CreateEvent({
                           />
                           <Label>Booking</Label>
                         </div>
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventType"
-                            value="2"
-                            className="w-4 h-4"
-                          />
-                          <Label>Registration</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Field
-                            type="radio"
-                            name="eventType"
-                            value="3"
-                            className="w-4 h-4"
-                          />
-                          <Label>Free</Label>
-                        </div>
+                        {role === "superadmin" && (
+                          <>
+                            <div className="flex items-center space-x-2">
+                              <Field
+                                type="radio"
+                                name="eventType"
+                                value="2"
+                                className="w-4 h-4"
+                              />
+                              <Label>Registration</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Field
+                                type="radio"
+                                name="eventType"
+                                value="3"
+                                className="w-4 h-4"
+                              />
+                              <Label>Free</Label>
+                            </div>
+                          </>
+                        )}
                       </div>
                       {touched.eventType && errors.eventType && (
                         <p className="text-sm text-red-600">{errors.eventType}</p>
@@ -2575,7 +2579,7 @@ export default function CreateEvent({
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value={ConvinienceFeeUnit.Percentage.toString()}>Percentage</SelectItem>
-                            <SelectItem value={ConvinienceFeeUnit.Fixed.toString()}>Fixed Amount</SelectItem>
+                            <SelectItem value={ConvinienceFeeUnit.Amount.toString()}>Fixed Amount</SelectItem>
                           </SelectContent>
                         </UISelect>
                       </div>
