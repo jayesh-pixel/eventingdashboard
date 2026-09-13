@@ -294,6 +294,15 @@ export default function GenresPage({ params }: GenresPageProps) {
       return
     }
 
+    if (selectedImages.length === 0 && !formData.genreImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload at least one genre image before creating it.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()
@@ -370,7 +379,19 @@ export default function GenresPage({ params }: GenresPageProps) {
         variant: "destructive",
       })
       return
-    }    setLoading(true)
+    }
+
+    const hasExistingImage = !!selectedGenre.Images && selectedGenre.Images.length > 0
+    if (selectedImages.length === 0 && !formData.genreImage && !hasExistingImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload a genre image before saving this genre.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
     try {
       const authToken = getValidToken()
       

@@ -576,6 +576,9 @@ export default function EventsPage({ params }: EventsPageProps) {
           case "rejected":
             apiEndpoint = eventEndPoint.GET_PAGINATED_REJECTED_EVENTS
             break
+          case "completed":
+            apiEndpoint = eventEndPoint.GET_PAGINATED_COMPLETED_EVENTS
+            break
           default:
             apiEndpoint = eventEndPoint.GET_ALL_EVENTS_PAGINATED
         }
@@ -1237,6 +1240,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         return "outline"
       case "Rejected":
         return "destructive"
+      case "Completed":
+        return "secondary"
       default:
         return "default"
     }
@@ -1577,6 +1582,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                 {activeTab === "review" && "Events To Be Reviewed"}
                 {activeTab === "self" && "My Events"}
                 {activeTab === "rejected" && "Rejected Events"}
+                {activeTab === "completed" && "Completed Events"}
               </CardTitle>
               <CardDescription className="text-sm text-muted-foreground">
                 {currentEvents.length} event{currentEvents.length !== 1 ? 's' : ''} found
@@ -1621,6 +1627,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             {activeTab === "review" && "No events pending review."}
                             {activeTab === "self" && "No events created by you."}
                             {activeTab === "rejected" && "No rejected events found."}
+                            {activeTab === "completed" && "No completed events found."}
                           </p>
                         </div>
                         <Button variant="outline" onClick={() => getAllEventData(activeTab)} disabled={loading} className="text-sm">
@@ -1750,8 +1757,8 @@ export default function EventsPage({ params }: EventsPageProps) {
                                 </DropdownMenuItem>
                               )}
                               
-                              {/* Enable/Disable Event - Only for SuperAdmin. Hide in 'To Be Reviewed' tab */}
-                              {(role as UserRole) === "superadmin" && activeTab !== "review" && (
+                              {/* Enable/Disable Event - Only for SuperAdmin. Hide in 'To Be Reviewed' and 'Completed' tabs */}
+                              {(role as UserRole) === "superadmin" && activeTab !== "review" && activeTab !== "completed" && (
                                 isEventDisabled(event) ? (
                                   <DropdownMenuItem 
                                     className="text-green-600 hover:text-green-700 hover:bg-green-50"
@@ -2368,7 +2375,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         </CardContent>
       </Card>      {/* Enhanced Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 lg:w-auto lg:inline-flex bg-gradient-to-r from-muted/50 to-muted/30 dark:from-muted/20 dark:to-muted/10 border border-border/30 rounded-lg">
           {(role as UserRole) !== "promoter" && (
             <TabsTrigger 
               value="all" 
@@ -2415,6 +2422,14 @@ export default function EventsPage({ params }: EventsPageProps) {
               className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
             >
               Rejected
+            </TabsTrigger>
+          )}
+          {(role as UserRole) !== "promoter" && (
+            <TabsTrigger 
+              value="completed" 
+              className="text-xs sm:text-sm font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all duration-200"
+            >
+              Completed
             </TabsTrigger>
           )}
         </TabsList>        <TabsContent value={activeTab} className="mt-4 sm:mt-6">

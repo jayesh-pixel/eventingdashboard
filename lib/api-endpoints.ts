@@ -65,8 +65,6 @@ export const venueEndPoint = {
   VENUE_DELETE_URL: BASE_URL + "/venue/delete",
   VENUE_SEARCH_BY_NAME: BASE_URL + "/venue/getVenueDataBySearchKeyword",
   VENUE_SEARCH_PAGINATED: BASE_URL + "/venue/getPaginatedSearch",
-  // Real API URLs based on your working endpoint
-  VENUE_GET_ALL_PAGINATED_REAL: BASE_URL + "/venue/getAllPaginatedData",
 }
 
 // Event Tour API
@@ -106,7 +104,6 @@ export const organizerEndpoint = {
   GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS_BY_ORGANIZER: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
   GET_ALL_REJECTED_EVENTS_DATA_BY_ORGANIZER: BASE_URL + "/events/getRejectedEvents",
   ORGANIZER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/organizer/getpasswordresetlink",
-  ORGANIZER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/organizer/resetPassword",
   FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryBookingsDatabyFilterforSuperAdminOrganizer",
   GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID:
@@ -122,8 +119,6 @@ export const organizerEndpoint = {
   DOWNLOAD_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     EVENT_TICKETS_BOOKING_BASE + "/downloadPromoterLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXCEL_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
-    EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
-  DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
@@ -201,6 +196,7 @@ export const eventEndPoint = {
   GET_ALL_DRAFT_EVENTS_DATA: BASE_URL + "/events/getDraftEvents",
   GET_ALL_TBREVIVE_EVENTS_DATA: BASE_URL + "/events/getReviewEvents",  GET_ALL_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getSuperAdminSelfCreatedEvents",
   GET_ALL_REJECTED_EVENTS_DATA: BASE_URL + "/events/getRejectedEvents",
+  GET_ALL_COMPLETED_EVENTS_DATA: BASE_URL + "/events/getCompletedEvents",
   ENABLE_EVENT: BASE_URL + "/events/enableEvent",
   DISABLE_EVENT: BASE_URL + "/events/disableEvent",
   GET_EVENT_PROMOTERS: BASE_URL + "/events/getEventPromoters",
@@ -210,6 +206,7 @@ export const eventEndPoint = {
   GET_PAGINATED_DRAFT_EVENTS: BASE_URL + "/events/getPaginatedDraftEvents",
   GET_PAGINATED_SUPER_ADMIN_SELF_CREATED_EVENTS: BASE_URL + "/events/getPaginatedSuperAdminSelfCreatedEvents",
   GET_PAGINATED_REJECTED_EVENTS: BASE_URL + "/events/getPaginatedRejectedEvents",
+  GET_PAGINATED_COMPLETED_EVENTS: BASE_URL + "/events/getPaginatedCompletedEvents",
   GET_VENUE_CITIES_AND_PROMOTER_DATA: BASE_URL + "/events/getVenueCitiesandPromoterDataforEvents",
   GET_EVENTS_REPORTS_FOR_PROMOTERS: BASE_URL + "/events/getEventsReportsForPromoters",
 }
@@ -227,8 +224,6 @@ export const ticketEndPoint = {
   UPDATE_AVAILABILITY_TO_SOLD_OUT: BASE_URL + "/eventstickets/updateAvailabilityToSoldOut",
   UPDATE_AVAILABILITY_TO_AVAILABLE: BASE_URL + "/eventstickets/updateAvailabilityToAvailable",
   GET_PROMOTER_SEASON_PASS: BASE_URL + "/eventstickets/getPromoterSeasonPass",
-  RENDER_TICKET: BASE_URL + "/eventstickets/render_ticket", // GET /:Booking_id
-  DOWNLOAD_TICKET_PDF: BASE_URL + "/eventstickets/download-ticket-pdf", // GET /:Booking_id
   
   // Bulk Tickets — backend only has: createBulkTicketForEvent, getBulkTicketsOfEvent, cancelBukTicket, exportBulkTicketBookingIds, getBulkTicketsByFilter
   CREATE_BULK_TICKET: BASE_URL + "/eventbulktickets/createBulkTicketForEvent",
@@ -255,7 +250,6 @@ export const websiteCustomer = {
 export const promocodeEndPoint = {
   GET_ALL_PAGINATED_PROMOCODES_DATA: BASE_URL + "/promocode/getallpaginatedData",
   CREATE_PROMOCODE: BASE_URL + "/promocode/create",
-  UPDATE_PROMOCODE: BASE_URL + "/promocode/update",
   GET_PROMOCODE_BY_ID: BASE_URL + "/promocode/getById",
   ENABLE_PROMOCODE: BASE_URL + "/promocode/enablePromocode",
   DISABLE_PROMOCODE: BASE_URL + "/promocode/disablePromocode",
@@ -295,6 +289,13 @@ export const scannerUserEndpoint = {
 export const leadsEndpoint = {
   GET_ALL_PAGINATED: BASE_URL + "/webiste/leads/getAllPaginated",
   CREATE: BASE_URL + "/webiste/leads/insert",
+}
+
+// SMTP Endpoints
+export const smtpEndpoints = {
+  REGISTER: BASE_URL + "/smtp/register",
+  GET: BASE_URL + "/smtp/get",
+  UPDATE_BY_ID: BASE_URL + "/smtp/updatebyId",
 }
 
 // Debug function to log all endpoints

@@ -73,11 +73,7 @@ export default function PromocodesPage() {
   const [apiError, setApiError] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [selectedPromocode, setSelectedPromocode] = useState<Promocode | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [isFetchingEditDetails, setIsFetchingEditDetails] = useState(false)
 
   // Events state for selection (Specific Events)
   const [events, setEvents] = useState<any[]>([])
@@ -98,7 +94,6 @@ export default function PromocodesPage() {
     PromocodeValidFor: "1" // 1 = Public, 2 = Private
   })
 
-  const formIsEditMode = isEditDialogOpen
   
   const itemsPerPage = 10
 
@@ -181,10 +176,10 @@ export default function PromocodesPage() {
 
   // Load events when dialog opens and Specific Events is selected
   useEffect(() => {
-    if ((isCreateDialogOpen || isEditDialogOpen) && formData.CanBeUsed === "2") {
+    if (isCreateDialogOpen && formData.CanBeUsed === "2") {
       fetchEvents()
     }
-  }, [isCreateDialogOpen, isEditDialogOpen, formData.CanBeUsed, fetchEvents])
+  }, [isCreateDialogOpen, formData.CanBeUsed, fetchEvents])
 
 
   // Debounce search term
@@ -435,229 +430,16 @@ export default function PromocodesPage() {
       CanBeUsed: "1",
       PromocodeValidFor: "1"
     })
-    setSelectedPromocode(null)
     setSelectedEvents([])
     setEventSearchTerm("")
   }
 
-  // Extract selected event ids from a promocode's Events array
+  // Extract selected event ids from a promocode's Events array (used for display)
   const getSelectedEventIdsFromPromocode = (promocode: Promocode): string[] => {
     if (!Array.isArray(promocode?.Events)) return []
     return promocode.Events
       .map((e) => e?.event_id)
       .filter((id): id is string => typeof id === "string" && id.trim().length > 0)
-  }
-
-  const openEditDialog = async (promocode: Promocode) => {
-    setSelectedPromocode(promocode)
-    setIsFetchingEditDetails(true)
-    setIsEditDialogOpen(true)
-
-    try {
-      const token = getValidToken()
-      if (!token) throw new Error("Authentication required")
-
-      const response = await fetch(promocodeEndPoint.GET_PROMOCODE_BY_ID, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ Promocode_id: promocode._id }),
-      })
-
-      const result = await handleApiResponse(response)
-      const detail: Promocode = result.data ?? result
-
-      const existingEventIds = getSelectedEventIdsFromPromocode(detail)
-
-      setFormData({
-        PromoCodeName: detail.PromoCodeName || "",
-        TermsCondition: detail.TermsCondition || "",
-        PromocodeType: String(detail.PromocodeType ?? PromocodeType.FixedAmount),
-        Value: detail.Value != null ? String(detail.Value) : "",
-        MinCheckoutAmount: detail.MinCheckoutAmount != null ? String(detail.MinCheckoutAmount) : "",
-        ExpiryDate: detail.ExpiryDate
-          ? new Date(detail.ExpiryDate).toISOString().split("T")[0]
-          : "",
-        OneTimeUseFlag: detail.OneTimeUseFlag === 1,
-        PromocodeValidFor: detail.PromocodeValidFor != null ? String(detail.PromocodeValidFor) : "1",
-        CanBeUsed: detail.CanBeUsed != null ? String(detail.CanBeUsed) : (existingEventIds.length ? "2" : "1"),
-      })
-
-      if (existingEventIds.length > 0) {
-        // Make sure the full event list is available for re-selection
-        await fetchEvents()
-        setSelectedEvents(existingEventIds)
-      } else {
-        setSelectedEvents([])
-      }
-    } catch (error: any) {
-      console.error("Error loading promocode details:", error)
-      toast({
-        title: "Error",
-        description: getApiErrorMessage(error, "Failed to load promocode details"),
-        variant: "destructive",
-      })
-      setIsEditDialogOpen(false)
-      resetForm()
-    } finally {
-      setIsFetchingEditDetails(false)
-    }
-  }
-
-  const handleUpdatePromocode = async () => {
-    if (!selectedPromocode) return
-
-    if (!formData.PromoCodeName.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Promocode name is required (6-12 characters)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (formData.PromoCodeName.trim().length < 6 || formData.PromoCodeName.trim().length > 12) {
-      toast({
-        title: "Validation Error",
-        description: "Promocode name must be 6-12 characters long",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!formData.TermsCondition.trim() || formData.TermsCondition.trim().length < 5) {
-      toast({
-        title: "Validation Error",
-        description: "Terms & Conditions are required (min 5 characters)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const valueNumber = parseDecimal(formData.Value)
-    if (!formData.Value || !Number.isFinite(valueNumber) || valueNumber <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Value must be greater than 0",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const minCheckoutNumber = parseDecimal(formData.MinCheckoutAmount)
-    if (!formData.MinCheckoutAmount || !Number.isFinite(minCheckoutNumber) || minCheckoutNumber <= 0) {
-      toast({
-        title: "Validation Error",
-        description: "Minimum checkout amount must be greater than 0",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!formData.ExpiryDate) {
-      toast({
-        title: "Validation Error",
-        description: "Expiry date is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (formData.CanBeUsed === "2" && selectedEvents.length === 0) {
-      toast({
-        title: "Validation Error",
-        description: "Please select at least one event",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const token = getValidToken()
-      if (!token) throw new Error("Authentication required")
-
-      const requestData: any = {
-        Promocode_id: selectedPromocode._id,
-        PromoCodeName: formData.PromoCodeName.trim(),
-        TermsCondition: formData.TermsCondition.trim(),
-        PromocodeType: Number(formData.PromocodeType),
-        Value: valueNumber,
-        MinCheckoutAmount: minCheckoutNumber,
-        ExpiryDate: formData.ExpiryDate,
-        OneTimeUseFlag: formData.OneTimeUseFlag ? 1 : 0,
-        PromocodeValidFor: Number(formData.PromocodeValidFor),
-        CanBeUsed: Number(formData.CanBeUsed),
-      }
-
-      if (formData.CanBeUsed === "2") {
-        requestData.Events = selectedEvents.filter(Boolean).map((id) => ({ event_id: id }))
-      }
-
-      const response = await fetch(promocodeEndPoint.UPDATE_PROMOCODE, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(requestData),
-      })
-
-      const result = await handleApiResponse(response)
-
-      toast({
-        title: "Success",
-        description: result.message || "Promocode updated successfully",
-      })
-      setIsEditDialogOpen(false)
-      resetForm()
-      await fetchPromocodes(currentPage, debouncedSearchTerm, statusFilter)
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: getApiErrorMessage(error, "Failed to update promocode"),
-        variant: "destructive",
-      })
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleDelete = (promocode: Promocode) => {
-    setSelectedPromocode(promocode)
-    setIsDeleteDialogOpen(true)
-  }
-
-  const handleDeletePromocode = async () => {
-    if (!selectedPromocode) return
-
-    setSubmitting(true)
-    try {
-      const token = getValidToken()
-      if (!token) {
-        throw new Error("Authentication required")
-      }
-
-      // Note: Delete endpoint might need to be verified with backend team
-      // For now, we'll show a message that this functionality needs backend support
-      toast({
-        title: "Feature Not Available",
-        description: "Delete promocode endpoint needs to be implemented in the backend",
-        variant: "destructive",
-      })
-      setIsDeleteDialogOpen(false)
-      setSelectedPromocode(null)
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to delete promocode",
-        variant: "destructive",
-      })
-    } finally {
-      setSubmitting(false)
-    }
   }
 
   const handleToggleStatus = async (promocode: Promocode) => {
@@ -708,10 +490,9 @@ export default function PromocodesPage() {
           <h1 className="text-3xl font-bold">Promocodes</h1>
           <p className="text-muted-foreground">Manage discount codes and promotional offers</p>
         </div>
-        <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
+        <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
           if (!open) {
             setIsCreateDialogOpen(false)
-            setIsEditDialogOpen(false)
             resetForm()
           }
         }}>
@@ -723,11 +504,9 @@ export default function PromocodesPage() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader className="flex-shrink-0">
-              <DialogTitle>{formIsEditMode ? "Edit Promocode" : "Create New Promocode"}</DialogTitle>
+              <DialogTitle>Create New Promocode</DialogTitle>
               <DialogDescription>
-                {formIsEditMode
-                  ? "Update the promotional code details"
-                  : "Create a new promotional code for your events"}
+                Create a new promotional code for your events
               </DialogDescription>
             </DialogHeader>
             <div className="flex-1 overflow-y-auto py-4">
@@ -938,24 +717,20 @@ export default function PromocodesPage() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (formIsEditMode) {
-                    setIsEditDialogOpen(false)
-                  } else {
-                    setIsCreateDialogOpen(false)
-                  }
+                  setIsCreateDialogOpen(false)
                   resetForm()
                 }}
               >
                 Cancel
               </Button>
               <Button
-                onClick={formIsEditMode ? handleUpdatePromocode : handleCreatePromocode}
-                disabled={submitting || isFetchingEditDetails}
+                onClick={handleCreatePromocode}
+                disabled={submitting}
               >
-                {(submitting || isFetchingEditDetails) && (
+                {submitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                {formIsEditMode ? "Update Promocode" : "Create Promocode"}
+                Create Promocode
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1071,17 +846,6 @@ export default function PromocodesPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => openEditDialog(promocode)}
-                            disabled={submitting || isFetchingEditDetails}
-                          >
-                            {isFetchingEditDetails && selectedPromocode?._id === promocode._id && (
-                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            )}
-                            Edit
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
                             onClick={() => handleToggleStatus(promocode)}
                             disabled={submitting}
                             className={promocode.status === PromocodeStatus.Active ? "text-orange-600" : "text-green-600"}
@@ -1142,36 +906,6 @@ export default function PromocodesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Promocode</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete the promocode "{selectedPromocode?.PromoCodeName}"? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setIsDeleteDialogOpen(false)
-                setSelectedPromocode(null)
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeletePromocode} 
-              disabled={submitting}
-            >
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

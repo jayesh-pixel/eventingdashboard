@@ -427,6 +427,16 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    const hasExistingImage = !!selectedVenue.Images && selectedVenue.Images.length > 0
+    if (selectedImages.length === 0 && !hasExistingImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload at least one venue image before saving this venue.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()

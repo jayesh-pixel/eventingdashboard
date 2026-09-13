@@ -476,6 +476,15 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       return
     }
 
+    if (selectedImages.length === 0 && !formData.categoryImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload at least one category image before creating it.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (formData.categoryPriority < 0 || formData.categoryPriority > 10) {
       toast({
         title: "Error",
@@ -555,6 +564,16 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       toast({
         title: "Error",
         description: "Category name is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const hasExistingImage = !!selectedCategory.Images && selectedCategory.Images.length > 0
+    if (selectedImages.length === 0 && !formData.categoryImage && !hasExistingImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload at least one category image before saving this category.",
         variant: "destructive",
       })
       return

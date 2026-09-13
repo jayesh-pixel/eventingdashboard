@@ -906,14 +906,8 @@ export default function TicketsPage() {
       const { ticketId, currentStatus, isNormal } = pendingStatusChange
       const newStatus = currentStatus === 1 ? 0 : 1
       
-      // Use the correct API endpoints (bulk ticket enable/disable not available in backend)
-      const endpoint = isNormal
-        ? (newStatus === 1 
-          ? `${BASE_URL}/eventstickets/enableEventTicket`
-          : `${BASE_URL}/eventstickets/disableEventTicket`)
-        : null // Bulk ticket enable/disable not supported by backend
-
-      if (!endpoint) {
+      // Only normal tickets support enable/disable (bulk tickets don't have this endpoint)
+      if (!isNormal) {
         toast({
           title: "Not Supported",
           description: "Bulk ticket enable/disable is not available.",
@@ -922,6 +916,10 @@ export default function TicketsPage() {
         setLoading(false)
         return
       }
+
+      const endpoint = newStatus === 1 
+        ? `${BASE_URL}/eventstickets/enableEventTicket`
+        : `${BASE_URL}/eventstickets/disableEventTicket`
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -969,59 +967,6 @@ export default function TicketsPage() {
     }
   }
 
-  const handleDeleteTicket = async (ticketId: string, isNormal: boolean) => {
-    try {
-      setLoading(true)
-      const authToken = getValidToken()
-      if (!user || !authToken) return
-
-      // Delete endpoints not available in backend for normal or bulk tickets
-      toast({
-        title: "Not Supported",
-        description: "Ticket deletion is not available. Use cancel/disable instead.",
-        variant: "destructive",
-      })
-      setLoading(false)
-      return
-
-      // eslint-disable-next-line no-unreachable
-      const endpoint = isNormal ? "" : ""
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },        body: JSON.stringify({
-          _id: ticketId,
-          AdminRole: getNumericRole(role),
-          user_id: user?.user_id || "",
-        }),
-      })
-
-      if (response.ok) {
-        toast({
-          title: "Success",
-          description: "Ticket deleted successfully",
-        })
-        // Refresh only the current tab's tickets
-        if (activeTab === "normal") {
-          fetchNormalTickets()
-        } else {
-          fetchBulkTickets()
-        }
-      }
-    } catch (error) {
-      console.error("Error deleting ticket:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete ticket",
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
   const handleToggleAvailability = async (ticketId: string, currentIsSoldOut: boolean) => {
     try {
       console.log(`Toggling availability for ticket ${ticketId}, currently soldOut: ${currentIsSoldOut}`)
@@ -1393,11 +1338,9 @@ export default function TicketsPage() {
       if (!user || !authToken || !selectedTicket) return
 
       const isNormal = selectedTicketType === 'normal'
-      const endpoint = isNormal
-        ? ticketEndPoint.UPDATE_TICKET
-        : null // Bulk ticket update not supported by backend
 
-      if (!endpoint) {
+      // Bulk ticket update not supported by backend
+      if (!isNormal) {
         toast({
           title: "Not Supported",
           description: "Bulk ticket editing is not available.",
@@ -1406,6 +1349,8 @@ export default function TicketsPage() {
         setLoading(false)
         return
       }
+
+      const endpoint = ticketEndPoint.UPDATE_TICKET
 
       let payload: any
       
@@ -1442,16 +1387,6 @@ export default function TicketsPage() {
           if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
             payload.EventPromoters = normalTicket.EventPromoters
           }
-        }
-      } else {
-        // For bulk tickets - only send editable fields (Price and Quantity)
-        payload = {
-          _id: selectedTicket._id,
-          AdminRole: getNumericRole(role),
-          user_id: user.user_id,
-          // Only include the editable fields
-          BulkTicketPrice: parseFloat(editFormData.BulkTicketPrice || editFormData.Price || (selectedTicket as ExtendedBulkTicket).BulkTicketPrice),
-          BulkTicketQuantity: parseInt(editFormData.BulkTicketQuantity || editFormData.Quantity || (selectedTicket as ExtendedBulkTicket).BulkTicketQuantity)
         }
       }
 
@@ -2288,43 +2223,6 @@ export default function TicketsPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                  <DropdownMenuItem
-                                    onClick={() => {
-                                      const batchId = ticket.BatchId || ticket._id || ''
-                                      // Check multiple possible field names for bulk ticket status
-                                      // Status field: 1 = Active, 0 = Disabled
-                                      const statusValue = extendedTicket.Status ?? 
-                                                         extendedTicket.BulkTicketStatus ?? 
-                                                         ticket.Status ?? 
-                                                         1 // Default to active if not found
-                                      const isActive = statusValue === 1
-                                      const ticketName = extendedTicket.TicketName || ticket.BulkTicketName || 'bulk ticket'
-                                      // Pass the current status (1 if active, 0 if disabled) so the function can toggle it correctly
-                                      if (batchId) handleToggleStatus(batchId, isActive ? 1 : 0, false, ticketName)
-                                    }}
-                                    className={(() => {
-                                      // Check multiple possible field names for bulk ticket status
-                                      // Status field: 1 = Active, 0 = Disabled
-                                      const statusValue = extendedTicket.Status ?? 
-                                                         extendedTicket.BulkTicketStatus ?? 
-                                                         ticket.Status ?? 
-                                                         1 // Default to active if not found
-                                      const isActive = statusValue === 1
-                                      return isActive ? "text-destructive" : "text-green-600"
-                                    })()}
-                                  >
-                                    <X className="mr-2 h-4 w-4" />
-                                    {(() => {
-                                      // Check multiple possible field names for bulk ticket status
-                                      // Status field: 1 = Active, 0 = Disabled
-                                      const statusValue = extendedTicket.Status ?? 
-                                                         extendedTicket.BulkTicketStatus ?? 
-                                                         ticket.Status ?? 
-                                                         1 // Default to active if not found
-                                      const isActive = statusValue === 1
-                                      return isActive ? "Disable" : "Enable"
-                                    })()}
-                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
                                       const batchId = ticket.BatchId || ticket._id || ''

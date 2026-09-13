@@ -268,6 +268,15 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   const createArtist = async () => {
     if (!validateForm()) return
 
+    if (!selectedImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload an artist image before creating the artist.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setLoading(true)
       const authToken = getValidToken()      // Create FormData for multipart/form-data request
@@ -327,6 +336,16 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
 
   const updateArtist = async () => {
     if (!validateForm() || !selectedArtist) return
+
+    const hasExistingImage = !!selectedArtist.Images && selectedArtist.Images.length > 0
+    if (!selectedImage && !hasExistingImage) {
+      toast({
+        title: "Image Required",
+        description: "Please upload an artist image before saving this artist.",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
       setLoading(true)

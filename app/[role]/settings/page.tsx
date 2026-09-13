@@ -46,7 +46,8 @@ import { AddressSelector } from "@/components/address-selector"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api-client"
-import { dashboard, promoterEndPointPannel, organizerEndpoint } from "@/lib/api-endpoints"
+import { dashboard, promoterEndPointPannel, organizerEndpoint, smtpEndpoints } from "@/lib/api-endpoints"
+import { getValidToken } from "@/lib/token-utils"
 import { Loader2, Eye, EyeOff, Upload } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 
@@ -131,7 +132,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
     port: "",
     username: "",
     password: "",
+    encryption: "TLS",
   })
+  const [smtpId, setSmtpId] = useState<string | null>(null)
   const [smtpLoading, setSmtpLoading] = useState(false)
 
   // Load user profile data
@@ -187,6 +190,82 @@ export default function SettingsPage({ params }: SettingsPageProps) {
 
     fetchProfile()
   }, [user?.user_id, role])
+
+  // Fetch SMTP settings (superadmin only)
+  const fetchSmtpSettings = async () => {
+    if (role !== "superadmin") return
+    setSmtpLoading(true)
+    try {
+      const response = await apiClient.get(smtpEndpoints.GET)
+      if (response.success && response.data) {
+        const data = response.data as any
+        setSmtpId(data._id ?? null)
+        setSmtpForm({
+          host: data.Host || "",
+          port: data.Port != null ? String(data.Port) : "",
+          username: data.Username || "",
+          password: data.Password || "",
+          encryption: data.Encryption || "TLS",
+        })
+      }
+    } catch (error) {
+      // 404 means no SMTP configured yet — leave form empty so user can register
+      console.error("Failed to fetch SMTP settings:", error)
+      setSmtpId(null)
+    } finally {
+      setSmtpLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (role === "superadmin") {
+      fetchSmtpSettings()
+    }
+  }, [role])
+
+  // Save (register or update) SMTP settings
+  const handleSaveSmtp = async () => {
+    if (!smtpForm.host.trim() || !smtpForm.port.trim() || !smtpForm.username.trim() || !smtpForm.password.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill in all SMTP fields.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setSmtpLoading(true)
+    try {
+      const payload = {
+        Host: smtpForm.host.trim(),
+        Port: smtpForm.port.trim(),
+        Username: smtpForm.username.trim(),
+        Password: smtpForm.password.trim(),
+        Encryption: smtpForm.encryption,
+        ...(smtpId ? { smtp_id: smtpId } : {}),
+      }
+
+      const endpoint = smtpId ? smtpEndpoints.UPDATE_BY_ID : smtpEndpoints.REGISTER
+      const response = await apiClient.post(endpoint, payload)
+
+      if (response.success) {
+        const data = response.data as any
+        if (data?._id) setSmtpId(data._id)
+        toast({
+          title: "Success",
+          description: smtpId ? "SMTP settings updated successfully." : "SMTP settings saved successfully.",
+        })
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to save SMTP settings.",
+        variant: "destructive",
+      })
+    } finally {
+      setSmtpLoading(false)
+    }
+  }
   // Handle password change
   const handlePasswordChange = async () => {
     if (!user?.user_id) {
@@ -701,9 +780,18 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, password: e.target.value }))}
               />
             </div>
-            <Button disabled={smtpLoading}>
+            <div className="space-y-2">
+              <Label htmlFor="smtp-encryption">Encryption</Label>
+              <Input
+                id="smtp-encryption"
+                placeholder="TLS / SSL / NONE"
+                value={smtpForm.encryption}
+                onChange={(e) => setSmtpForm(prev => ({ ...prev, encryption: e.target.value }))}
+              />
+            </div>
+            <Button onClick={handleSaveSmtp} disabled={smtpLoading}>
               {smtpLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save SMTP Settings
+              {smtpId ? "Update SMTP Settings" : "Save SMTP Settings"}
             </Button>
           </CardContent>
         </Card>
