@@ -828,9 +828,9 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
               {/* Image Upload Section */}
               <div className="space-y-2">
-                <Label htmlFor="venueImages">Venue Images</Label>
+                <Label htmlFor="venueImages">Venue Images *</Label>
                 <div className="text-xs text-muted-foreground mb-2">
-                  <div>• Only PNG or JPG files allowed</div>
+                  <div>• Required. Only PNG or JPG files allowed</div>
                   <div>• Maximum size: 500 KB</div>
                   <div>• Dimensions: 1024x812 pixels</div>
                 </div>

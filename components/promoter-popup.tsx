@@ -67,7 +67,7 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
 
           <div className="space-y-2 py-2">
             {promoters.map((promoter, index) => {
-              const promoterName = promoter.PromoterName || promoter.promoterName || promoter.FullName || promoter.fullName || "Unknown Promoter"
+              const promoterName = promoter.Username || promoter.PromoterName || promoter.promoterName || promoter.FullName || promoter.fullName || "Unknown Promoter"
 
               return (
                 <div key={promoter.promoter_id || index} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50">
@@ -95,7 +95,7 @@ export default function PromoterPopup({ isOpen, onClose, promoterData, eventId }
 
   // Single promoter with detailed view
   const promoter = promoters[0]
-  const promoterName = promoter.PromoterName || promoter.promoterName || "Unknown Promoter"
+  const promoterName = promoter.Username || promoter.PromoterName || promoter.promoterName || promoter.FullName || promoter.fullName || "Unknown Promoter"
   const promoterId = promoter.promoter_id
 
   const copyPromoterId = () => {

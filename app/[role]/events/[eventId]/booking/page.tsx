@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table"
 import { ArrowLeft, Download, Filter, Loader2, Search } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
+import { formatEventDate, parseEventDateTime } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
@@ -151,6 +152,15 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(amount)
+  }
+
+  // Companion to toDateInputValue for event date/times, whose wall clock lives
+  // in the UTC fields of the Date returned by parseEventDateTime.
+  const toEventDateInputValue = (date: Date) => {
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(date.getUTCDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
   }
 
   const toDateInputValue = (date: Date) => {
@@ -328,7 +338,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           booking.created_at
         ),
         promoterId,
-        promoterName: getStringValue(booking.PromoterName, booking.promoterName, booking.promoter_name) || "-",
+        promoterName: getStringValue(booking.Username, booking.username, booking.PromoterName, booking.promoterName, booking.promoter_name) || "-",
         city: getStringValue(booking.EventCityName, booking.city, booking.event_city, booking.CityName) || "-",
         venue: getStringValue(booking.EventVenueName, booking.venue, booking.event_venue, booking.VenueName) || "-",
         source: channel,
@@ -341,7 +351,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         TicketDate: ticketDate,
         EventCityName: getStringValue(booking.EventCityName, booking.city),
         EventVenueName: getStringValue(booking.EventVenueName, booking.venue),
-        PromoterName: getStringValue(booking.PromoterName, booking.promoterName),
+        PromoterName: getStringValue(booking.Username, booking.username, booking.PromoterName, booking.promoterName),
         TicketQuantity: quantity,
         TicketName: ticketName,
         EventTicketType: getStringValue(booking.EventTicketType, booking.ticketType),
@@ -390,16 +400,18 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
     if (Array.isArray(rawDates)) {
       rawDates.forEach((dateItem) => {
-        const start = parseDate(dateItem?.EventStartDateTime || dateItem?.startDate || dateItem?.TicketDate)
-        const end = parseDate(dateItem?.EventEndDateTime || dateItem?.endDate || dateItem?.EventStartDateTime)
+        // Event date/times are stored as wall-clock values tagged +00:00, so they
+        // are read back as entered instead of being shifted into the local zone.
+        const start = parseEventDateTime(dateItem?.EventStartDateTime || dateItem?.startDate || dateItem?.TicketDate)
+        const end = parseEventDateTime(dateItem?.EventEndDateTime || dateItem?.endDate || dateItem?.EventStartDateTime)
         if (!start) return
 
-        const startDate = toDateInputValue(start)
-        const endDate = toDateInputValue(end || start)
+        const startDate = toEventDateInputValue(start)
+        const endDate = toEventDateInputValue(end || start)
         const id = `${startDate}|${endDate}`
         options.set(id, {
           id,
-          label: formatDate(start),
+          label: formatEventDate(start, { day: "numeric", month: "long", year: "numeric" }, "en-GB"),
           startDate,
           endDate,
         })

@@ -130,3 +130,99 @@ export function formatDate(dateString: string): string {
     return "N/A"
   }
 }
+
+/**
+ * Event date/time helpers
+ * ------------------------------------------------------------------
+ * The API stores an event's date/time exactly as the organizer typed it and
+ * serialises it with a +00:00 offset, so 6:00 PM comes back as
+ * "2025-01-31T18:00:00.000Z". Those strings are wall-clock values, not real
+ * UTC instants: formatting them in "Asia/Kolkata" shifts them by +5:30 and the
+ * ticket screens end up showing 11:30 PM for an event created at 6:00 PM.
+ *
+ * parseEventDateTime returns a Date whose UTC fields hold the stored wall clock,
+ * and the formatters below always render it in UTC, so what was entered on the
+ * create-event screen is what every screen displays.
+ */
+export function parseEventDateTime(value?: string | number | Date | null): Date | null {
+  if (value === null || value === undefined || value === "") return null
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value
+  }
+
+  if (typeof value === "number") {
+    const parsed = new Date(value)
+    return Number.isNaN(parsed.getTime()) ? null : parsed
+  }
+
+  if (typeof value !== "string") return null
+
+  const raw = value.trim()
+  if (!raw || raw === "Invalid Date") return null
+
+  // ISO-like "YYYY-MM-DD[THH:mm:ss]" with or without a trailing zone marker.
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?/)
+  if (iso) {
+    return new Date(
+      Date.UTC(
+        Number(iso[1]),
+        Number(iso[2]) - 1,
+        Number(iso[3]),
+        Number(iso[4] || 0),
+        Number(iso[5] || 0),
+        Number(iso[6] || 0)
+      )
+    )
+  }
+
+  // Legacy "DD-MM-YYYY HH:mm:ss" shape returned by a few endpoints.
+  const ddmmyyyy = raw.match(/^(\d{2})-(\d{2})-(\d{4})(?:[T ](\d{2}):(\d{2})(?::(\d{2}))?)?$/)
+  if (ddmmyyyy) {
+    return new Date(
+      Date.UTC(
+        Number(ddmmyyyy[3]),
+        Number(ddmmyyyy[2]) - 1,
+        Number(ddmmyyyy[1]),
+        Number(ddmmyyyy[4] || 0),
+        Number(ddmmyyyy[5] || 0),
+        Number(ddmmyyyy[6] || 0)
+      )
+    )
+  }
+
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+/** Format an event date without shifting it into another timezone. */
+export function formatEventDate(
+  value?: string | number | Date | null,
+  options: Intl.DateTimeFormatOptions = { day: "numeric", month: "short", year: "numeric" },
+  locale: string | string[] = "en-IN"
+): string {
+  const parsed = parseEventDateTime(value)
+  if (!parsed) return "N/A"
+  return parsed.toLocaleDateString(locale, { ...options, timeZone: "UTC" })
+}
+
+/** Format an event time without shifting it into another timezone. */
+export function formatEventTime(
+  value?: string | number | Date | null,
+  options: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", hour12: true },
+  locale: string | string[] = "en-IN"
+): string {
+  const parsed = parseEventDateTime(value)
+  if (!parsed) return "N/A"
+  return parsed.toLocaleTimeString(locale, { ...options, timeZone: "UTC" })
+}
+
+/** "12 Feb 2025, 06:00 PM" style label for an event date/time. */
+export function formatEventDateTime(
+  value?: string | number | Date | null,
+  locale: string | string[] = "en-IN"
+): string {
+  const parsed = parseEventDateTime(value)
+  if (!parsed) return "N/A"
+  return `${formatEventDate(parsed, undefined, locale)}, ${formatEventTime(parsed, undefined, locale)}`
+}

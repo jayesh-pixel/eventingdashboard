@@ -857,10 +857,10 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 />
               </div>
            <div className="space-y-2">
-                <Label>Add Images</Label>
+                <Label>Add Images *</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
+                    Required. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
                   </p>
                   <Input
                     type="file"

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
+import { formatEventDate } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { promoterEndpoint, promoterEndPointPannel, eventEndPoint, organizerEndpoint } from "@/lib/api-endpoints"
 import {
@@ -984,7 +985,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell>{item.ticketName || item.ticketType || "N/A"}</TableCell>
                             <TableCell className="text-center">{(item.quantitySold || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-right">₹{(item.ticketPrice || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-center">{item.ticketDate ? new Date(item.ticketDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell className="text-center">{formatEventDate(item.ticketDate, undefined, [])}</TableCell>
                             <TableCell className="text-right">₹{(item.totalRevenue || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-center">
                               <Badge variant={item.bookingType === "Promoter" ? "default" : item.bookingType === "Online" ? "secondary" : "outline"}>
@@ -1000,7 +1001,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell>{item.email || "N/A"}</TableCell>
                             <TableCell>{item.bookingDate && item.bookingDate !== "N/A" ? new Date(item.bookingDate).toLocaleString() : "N/A"}</TableCell>
                             <TableCell>{item.eventName || "N/A"}</TableCell>
-                            <TableCell>{item.ticketDate && item.ticketDate !== "N/A" ? new Date(item.ticketDate).toLocaleDateString() : "N/A"}</TableCell>
+                            <TableCell>{item.ticketDate && item.ticketDate !== "N/A" ? formatEventDate(item.ticketDate, undefined, []) : "N/A"}</TableCell>
                             <TableCell>{item.source || "Online"}</TableCell>
                             <TableCell>{item.city || "N/A"}</TableCell>
                             <TableCell>{item.venue || "N/A"}</TableCell>
@@ -1112,7 +1113,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                   <div>
                     <Label className="text-sm font-medium">Ticket Date</Label>
                     <div className="p-2 bg-muted rounded text-sm">
-                      {selectedTransaction.ticketDate ? new Date(selectedTransaction.ticketDate).toLocaleDateString() : "N/A"}
+                      {formatEventDate(selectedTransaction.ticketDate, undefined, [])}
                     </div>
                   </div>
                   <div>

@@ -13,6 +13,7 @@ declare global {
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { formatEventDate, formatEventTime, parseEventDateTime } from "@/lib/utils";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // UI Components (shadcn/ui) & Icons
@@ -87,28 +88,38 @@ interface TicketData {
 // -----------------------------------------------------------------------------
 // Utility helpers
 // -----------------------------------------------------------------------------
+// The API returns event date/times as wall-clock values tagged +00:00, so they
+// are rendered as stored rather than converted into another timezone.
 const formatTimeInIST = (iso: string) =>
-  new Date(iso).toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Asia/Kolkata",
-  });
+  formatEventTime(iso, { hour: "2-digit", minute: "2-digit" }, "en-IN");
 
 const formatDateBlock = (iso: string) => {
   if (!iso) return null;
-  const d = new Date(iso);
+  const d = parseEventDateTime(iso);
+  if (!d) return null;
   return {
-    day: d.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" }),
-    month: d.toLocaleDateString("en-US", { month: "short", timeZone: "Asia/Kolkata" }),
-    date: d.toLocaleDateString("en-US", { day: "numeric", timeZone: "Asia/Kolkata" }),
-    year: d.toLocaleDateString("en-US", { year: "numeric", timeZone: "Asia/Kolkata" }),
-    time: d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-      timeZone: "Asia/Kolkata",
-    }),
+    day: formatEventDate(d, { weekday: "long" }, "en-US"),
+    month: formatEventDate(d, { month: "short" }, "en-US"),
+    date: formatEventDate(d, { day: "numeric" }, "en-US"),
+    year: formatEventDate(d, { year: "numeric" }, "en-US"),
+    time: formatEventTime(d, { hour: "2-digit", minute: "2-digit", hour12: true }, "en-US"),
   } as const;
+};
+
+// Season passes span every date of the event, so label them with the range
+// rather than a single date.
+const formatDateRange = (list: { EventStartDateTime: string }[]) => {
+  if (list.length === 0) return "N/A";
+  const asDay = (iso: string) =>
+    formatEventDate(iso, { day: "2-digit", month: "short", year: "numeric" }, "en-IN");
+  const sorted = [...list].sort(
+    (a, b) =>
+      (parseEventDateTime(a.EventStartDateTime)?.getTime() ?? 0) -
+      (parseEventDateTime(b.EventStartDateTime)?.getTime() ?? 0)
+  );
+  const first = asDay(sorted[0].EventStartDateTime);
+  const last = asDay(sorted[sorted.length - 1].EventStartDateTime);
+  return first === last ? first : `${first} - ${last}`;
 };
 
 // -----------------------------------------------------------------------------
@@ -135,6 +146,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   const [selectedDateId, setSelectedDateId] = React.useState<string | null>(null);
   const [dates, setDates] = React.useState<EventDateTime[]>([]);
   const [tickets, setTickets] = React.useState<TicketData[]>([]);
+  const [seasonPasses, setSeasonPasses] = React.useState<TicketData[]>([]);
   const [counts, setCounts] = React.useState<Record<string, number>>({});
   const [showCount, setShowCount] = React.useState<Record<string, boolean>>({});
   const [customerFormPage, setCustomerFormPage] = React.useState(false);
@@ -154,9 +166,21 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   });
   const [formErrors, setFormErrors] = React.useState<Record<string, string>>({});
 
+  // A season pass is valid for every date of the event, so it is not tied to the
+  // date the user picked. Keep both lists in one array for totals/selection.
+  const isMultiDayEvent = dates.length > 1;
+  const selectableTickets = React.useMemo(
+    () => [...seasonPasses, ...tickets],
+    [seasonPasses, tickets]
+  );
+  const isSeasonPassTicket = React.useCallback(
+    (id: string) => seasonPasses.some((sp) => sp._id === id),
+    [seasonPasses]
+  );
+
   // Derived totals -------------------------------------------------------------
   const totalTickets = Object.values(counts).reduce((s, n) => s + n, 0);
-  const totalPrice = tickets.reduce((s, t) => s + (counts[t._id] || 0) * t.Price, 0);
+  const totalPrice = selectableTickets.reduce((s, t) => s + (counts[t._id] || 0) * t.Price, 0);
   const isAnyCountActive = Object.keys(showCount).some((id) => showCount[id] && counts[id] > 0);
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -185,6 +209,37 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
             ? data.data.EventDateTimeData
             : data?.data?.EventDateTime ?? [];
         setDates(list);
+
+        // Multi-day event -> the event can also sell a Season Pass that covers
+        // every date, so fetch those alongside the per-date tickets.
+        if (list.length > 1) {
+          const spToken = getValidToken();
+          if (user && spToken) {
+            try {
+              const spRes = await fetch(promoterEndPointPannel.GET_PROMOTER_SEASON_PASS, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${spToken}`,
+                },
+                body: JSON.stringify({ event_id: eventId, promoter_id: user.user_id }),
+              });
+              if (spRes.ok) {
+                const spData = await spRes.json();
+                setSeasonPasses(Array.isArray(spData?.data) ? spData.data : []);
+              } else {
+                // 404 simply means this event has no season pass configured.
+                setSeasonPasses([]);
+              }
+            } catch {
+              // Season passes are optional; never block the per-date tickets.
+              setSeasonPasses([]);
+            }
+          }
+        } else {
+          setSeasonPasses([]);
+        }
+
         // If only one date, auto-select it and fetch tickets
         if (list.length === 1) {
           setSelectedDateId(list[0]._id);
@@ -203,6 +258,9 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
             if (res2.ok) {
               const data2 = await res2.json();
               setTickets(data2.data ?? []);
+            } else {
+              // 404 = no tickets assigned to this promoter for this date.
+              setTickets([]);
             }
           }
         }
@@ -237,6 +295,13 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         body: JSON.stringify(payload),
       });
 
+      // 404 is the documented "No Tickets Found for the Promoter" response,
+      // i.e. this promoter has no single-day ticket for this date. That is an
+      // empty result, not an error - a season pass may still be on offer.
+      if (res.status === 404) {
+        setTickets([]);
+        return;
+      }
       if (!res.ok) throw new Error("Failed to fetch ticket data");
       const data = await res.json();
       setTickets(data.data ?? []);
@@ -261,6 +326,55 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     });
   };
   const handleShowCount = (id: string) => setShowCount({ [id]: true });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // Shared ticket row renderer (used for per-date tickets and for season passes)
+  // ────────────────────────────────────────────────────────────────────────────
+  const renderTicketRow = (t: TicketData, seasonPass = false) => {
+    const count = counts[t._id] || 0;
+    const selected = showCount[t._id];
+    // Availability / per-order cap can be absent from the response; only apply
+    // a limit we actually know about instead of comparing against undefined.
+    const hasAvailability = typeof t.AvailableQuantity === "number";
+    const soldOut = hasAvailability && t.AvailableQuantity === 0;
+    const maxAllowed = t.BookingMaxLimit ?? t.MaxQuantityAllowedPerOrder;
+    const atLimit =
+      (typeof maxAllowed === "number" && count >= maxAllowed) ||
+      (hasAvailability && count >= t.AvailableQuantity);
+    return (
+      <Card key={t._id} className={`border-2 transition-all ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"} ${soldOut ? "opacity-60" : ""}`}>
+        <CardContent className="p-4 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
+          <div className="flex-1 space-y-1 min-w-0 pr-2">
+            <p className="font-bold truncate">{t.Name}</p>
+            {t.Description && <p className="text-xs text-muted-foreground leading-tight">{t.Description}</p>}
+            {seasonPass && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <CalendarDays className="h-3 w-3" />
+                Valid for all {dates.length} days · {formatDateRange(dates)}
+              </p>
+            )}
+            {hasAvailability && (
+              <div className="flex gap-4 text-xs mt-1">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full"></span>Available: {t.AvailableQuantity}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-row lg:flex-col items-center gap-3 lg:gap-2">
+            <p className="text-lg font-bold text-primary flex items-center"><IndianRupee className="h-4 w-4" />{t.Price}</p>
+            {selected ? (
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => handleDecrease(t._id)} className="h-8 w-8 p-0"><Minus className="h-3 w-3" /></Button>
+                <span className="w-8 text-center font-bold text-primary">{count}</span>
+                <Button size="sm" variant="outline" onClick={() => handleIncrease(t._id)} disabled={atLimit} className="h-8 w-8 p-0"><Plus className="h-3 w-3" /></Button>
+              </div>
+            ) : (
+              <Button onClick={() => handleShowCount(t._id)} disabled={isAnyCountActive || soldOut} className="px-4" >{soldOut ? "Sold Out" : "Select"}</Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   // ────────────────────────────────────────────────────────────────────────────
   // Customer‑form & validation
@@ -294,15 +408,23 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     try {
       setLoading(true);
       const token = getValidToken();
-      if (!user || !token || !selectedDateId) return;
-      const selectedTicket = tickets.find((t) => counts[t._id] > 0);
+      if (!user || !token) return;
+      const selectedTicket = selectableTickets.find((t) => counts[t._id] > 0);
       if (!selectedTicket) return;
+
+      // A season pass covers every date, so no date has to be picked for it;
+      // book it against the first date of the event.
+      const isSeasonPass = isSeasonPassTicket(selectedTicket._id);
+      const bookingDateId = isSeasonPass ? selectedDateId ?? dates[0]?._id : selectedDateId;
+      if (!bookingDateId) return;
 
       const payload: any = {
         promoter_id: user.user_id,
         event_id: eventId,
-        EventTicketType: String(selectedTicket.TicketType || TicketType.SingleDay),
-        EventDateTime_id: selectedDateId,
+        EventTicketType: String(
+          selectedTicket.TicketType || (isSeasonPass ? TicketType.SeasonPass : TicketType.SingleDay)
+        ),
+        EventDateTime_id: bookingDateId,
         EventTicket_id: selectedTicket._id,
         CustomerName: customer.FullName,
         PhoneNumber: customer.PhoneNo,
@@ -380,7 +502,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       }
 
       // Store booking details for success page
-      const selectedDate = dates.find((d) => d._id === selectedDateId);
+      const selectedDate = dates.find((d) => d._id === bookingDateId);
       setBookingResult({
         bookingId: bookingData?.data?.Booking_id || bookingData?.data?.booking_id || bookingData?.data?._id || "N/A",
         customerName: customer.FullName,
@@ -390,8 +512,16 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         quantity: totalTickets,
         totalPrice: totalPrice,
         ticketPrice: selectedTicket?.Price || 0,
-        eventDate: selectedDate ? new Date(selectedDate.EventStartDateTime).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) : "N/A",
-        eventTime: selectedDate ? formatTimeInIST(selectedDate.EventStartDateTime) + " - " + formatTimeInIST(selectedDate.EventEndDateTime) : "N/A",
+        eventDate: isSeasonPass
+          ? formatDateRange(dates)
+          : selectedDate
+          ? formatEventDate(selectedDate.EventStartDateTime, { day: "2-digit", month: "short", year: "numeric" }, "en-IN")
+          : "N/A",
+        eventTime: isSeasonPass
+          ? `All ${dates.length} days`
+          : selectedDate
+          ? formatTimeInIST(selectedDate.EventStartDateTime) + " - " + formatTimeInIST(selectedDate.EventEndDateTime)
+          : "N/A",
         bookingDate: new Date().toLocaleString("en-IN"),
         status: "Confirmed",
       });
@@ -574,11 +704,20 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 <CardDescription>Review your selection before confirming</CardDescription>
               </CardHeader>
               <CardContent className="p-4 space-y-4">
-                {tickets.filter((t) => counts[t._id] > 0).map((t) => (
+                {selectableTickets.filter((t) => counts[t._id] > 0).map((t) => (
                   <div key={t._id} className="flex justify-between items-center bg-muted/20 p-3 rounded-xl border">
                     <div className="space-y-1">
-                      <p className="font-semibold">{t.Name}</p>
-                      <p className="text-xs text-muted-foreground">{formatTimeInIST(t.EventStartDateTime)} – {formatTimeInIST(t.EventEndDateTime)}</p>
+                      <p className="font-semibold">
+                        {t.Name}
+                        {isSeasonPassTicket(t._id) && (
+                          <Badge variant="secondary" className="ml-2 align-middle text-[10px]">Season Pass</Badge>
+                        )}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isSeasonPassTicket(t._id)
+                          ? `Valid for all ${dates.length} days · ${formatDateRange(dates)}`
+                          : `${formatTimeInIST(t.EventStartDateTime)} – ${formatTimeInIST(t.EventEndDateTime)}`}
+                      </p>
                       <p className="text-xs text-muted-foreground">Qty: {counts[t._id]}</p>
                     </div>
                     <p className="text-lg font-bold text-primary">₹{counts[t._id] * t.Price}</p>
@@ -685,9 +824,14 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 <CardTitle className="text-xl">Booking Summary</CardTitle>
               </CardHeader>
               <CardContent className="p-4 space-y-3 text-sm">
-                {tickets.filter((t) => counts[t._id] > 0).map((t) => (
+                {selectableTickets.filter((t) => counts[t._id] > 0).map((t) => (
                   <div key={t._id} className="flex justify-between items-center">
-                    <span className="truncate flex-1 pr-2">{t.Name} × {counts[t._id]}</span>
+                    <span className="truncate flex-1 pr-2">
+                      {t.Name} × {counts[t._id]}
+                      {isSeasonPassTicket(t._id) && (
+                        <Badge variant="secondary" className="ml-2 align-middle text-[10px]">Season Pass</Badge>
+                      )}
+                    </span>
                     <span className="font-semibold">₹{counts[t._id] * t.Price}</span>
                   </div>
                 ))}
@@ -766,47 +910,39 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           </Card>
         )}
 
+        {/* Season Pass selection – multi-day events only. A season pass covers
+            every date, so it is offered independently of the date picker. */}
+        {isMultiDayEvent && seasonPasses.length > 0 && (
+          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
+            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <CalendarDays className="h-5 w-5 text-primary" /> Season Pass
+                <Badge variant="secondary" className="ml-1">All {dates.length} days</Badge>
+              </CardTitle>
+              <CardDescription>
+                One pass valid for every day of this event – no date selection needed
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              {seasonPasses.map((sp) => renderTicketRow(sp, true))}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Ticket selection */}
         {selectedDateId && (
           <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-              <CardTitle className="flex items-center gap-2 text-xl"><Users className="h-5 w-5 text-primary" /> Available Tickets</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl">
+                <Users className="h-5 w-5 text-primary" />
+                {isMultiDayEvent && seasonPasses.length > 0 ? "Single Day Tickets" : "Available Tickets"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-4 space-y-3">
               {tickets.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No tickets available for this date</p>
               ) : (
-                tickets.map((t) => {
-                  const count = counts[t._id] || 0;
-                  const selected = showCount[t._id];
-                  const soldOut = t.AvailableQuantity === 0;
-                  const maxAllowed = t.BookingMaxLimit ?? t.MaxQuantityAllowedPerOrder;
-                  return (
-                    <Card key={t._id} className={`border-2 transition-all ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"} ${soldOut ? "opacity-60" : ""}`}>
-                      <CardContent className="p-4 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-                        <div className="flex-1 space-y-1 min-w-0 pr-2">
-                          <p className="font-bold truncate">{t.Name}</p>
-                          {t.Description && <p className="text-xs text-muted-foreground leading-tight">{t.Description}</p>}
-                          <div className="flex gap-4 text-xs mt-1">
-                            <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full"></span>Available: {t.AvailableQuantity}</span>
-                          </div>
-                        </div>
-                        <div className="flex flex-row lg:flex-col items-center gap-3 lg:gap-2">
-                          <p className="text-lg font-bold text-primary flex items-center"><IndianRupee className="h-4 w-4" />{t.Price}</p>
-                          {selected ? (
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline" onClick={() => handleDecrease(t._id)} className="h-8 w-8 p-0"><Minus className="h-3 w-3" /></Button>
-                              <span className="w-8 text-center font-bold text-primary">{count}</span>
-                              <Button size="sm" variant="outline" onClick={() => handleIncrease(t._id)} disabled={count >= maxAllowed || count >= t.AvailableQuantity} className="h-8 w-8 p-0"><Plus className="h-3 w-3" /></Button>
-                            </div>
-                          ) : (
-                            <Button onClick={() => handleShowCount(t._id)} disabled={isAnyCountActive || soldOut} className="px-4" >{soldOut ? "Sold Out" : "Select"}</Button>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
+                tickets.map((t) => renderTicketRow(t))
               )}
             </CardContent>
           </Card>

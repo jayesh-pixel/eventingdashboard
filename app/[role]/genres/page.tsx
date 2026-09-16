@@ -763,10 +763,10 @@ export default function GenresPage({ params }: GenresPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Add Images</Label>
+                <Label>Add Images *</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                    Required. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                   </p>
                   <Input
                     type="file"
@@ -995,10 +995,10 @@ Actions
             
             {/* New Images Section */}
             <div className="space-y-2">
-              <Label>Add New Images</Label>
+              <Label>Add New Images *</Label>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                  Required if the genre does not already have an image. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                 </p>
                 <Input
                   type="file"

@@ -536,8 +536,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       {/* Profile Information Card - Available for all roles */}
       <Card>
           <CardHeader>
-            <CardTitle>Personal data</CardTitle>
-            <CardDescription>Update your personal information and profile picture.</CardDescription>
+            <CardTitle>Profile</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             {/* Profile Image */}

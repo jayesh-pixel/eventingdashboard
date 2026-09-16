@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { X, UserPlus, Loader2, Users, Search } from "lucide-react"
+import { UserPlus, Loader2, Users, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -195,7 +195,7 @@ const AddNewPromoterModal = ({
   // Filter promoters based on search term
   const filteredPromoters = apiAllPromoterData.filter((promoter) => {
     if (!searchTerm) return true
-    const name = (promoter.FullName || promoter.PromoterName || promoter.Username || "").toLowerCase()
+    const name = (promoter.Username || promoter.FullName || promoter.PromoterName || "").toLowerCase()
     const email = (promoter.email || "").toLowerCase()
     const search = searchTerm.toLowerCase()
     return name.includes(search) || email.includes(search)
@@ -203,7 +203,7 @@ const AddNewPromoterModal = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-hidden">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
@@ -212,15 +212,16 @@ const AddNewPromoterModal = ({
           <DialogDescription>
             Select promoters to associate with this event
           </DialogDescription>
-        </DialogHeader>        {loading ? (
+        </DialogHeader>
+        {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
             <span className="ml-2">Loading promoters...</span>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="flex flex-col gap-4 overflow-hidden">
             {/* Summary */}
-            <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg flex-shrink-0">
               <span className="text-sm font-medium">Selected Promoters:</span>
               <Badge variant="secondary">
                 {getSelectedPromotersCount()} selected
@@ -228,8 +229,7 @@ const AddNewPromoterModal = ({
             </div>
 
             {/* Scrollable Content */}
-            <div className="max-h-[50vh] overflow-hidden">
-              <ScrollArea className="h-[50vh]">
+            <ScrollArea className="h-[55vh]">
                 <div className="space-y-4 pr-4">
                   {/* Currently Assigned Promoters Section */}
                   {openModalPromoterData && openModalPromoterData.length > 0 && (
@@ -254,17 +254,17 @@ const AddNewPromoterModal = ({
                                 <div className="flex items-center space-x-3">
                                   <Avatar className="h-8 w-8">
                                     <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                                      {currentPromoter.PromoterName 
-                                        ? currentPromoter.PromoterName.charAt(0).toUpperCase() 
+                                      {currentPromoter.Username || currentPromoter.PromoterName 
+                                        ? (currentPromoter.Username || currentPromoter.PromoterName).charAt(0).toUpperCase() 
                                         : "P"}
                                     </AvatarFallback>
                                   </Avatar>
-                                  <div className="flex-1">
-                                    <p className="text-sm font-medium">
-                                      {currentPromoter.PromoterName || fullPromoterData?.FullName || fullPromoterData?.PromoterName || fullPromoterData?.Username || "Unknown Promoter"}
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate">
+                                      {fullPromoterData?.Username || currentPromoter.Username || currentPromoter.PromoterName || fullPromoterData?.FullName || fullPromoterData?.PromoterName || "Unknown Promoter"}
                                     </p>
                                     {fullPromoterData?.email && (
-                                      <p className="text-xs text-muted-foreground">
+                                      <p className="text-xs text-muted-foreground truncate">
                                         {fullPromoterData.email}
                                       </p>
                                     )}
@@ -337,23 +337,23 @@ const AddNewPromoterModal = ({
                                       ? 'bg-primary/10 text-primary' 
                                       : 'bg-muted'
                                   }`}>
-                                    {(promoter.FullName || promoter.PromoterName || promoter.Username)?.charAt(0).toUpperCase() || "P"}
+                                    {(promoter.Username || promoter.FullName || promoter.PromoterName)?.charAt(0).toUpperCase() || "P"}
                                   </AvatarFallback>
                                 </Avatar>
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                   <label
                                     htmlFor={promoter._id}
                                     className="text-sm font-medium leading-none cursor-pointer flex items-center gap-2"
                                   >
-                                    {promoter.FullName || promoter.PromoterName || promoter.Username}
+                                    <span className="truncate">{promoter.Username || promoter.FullName || promoter.PromoterName}</span>
                                     {isCurrentlyAssigned && (
-                                      <Badge variant="secondary" className="text-xs">
+                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
                                         Assigned
                                       </Badge>
                                     )}
                                   </label>
                                   {promoter.email && (
-                                    <p className="text-xs text-muted-foreground mt-1">
+                                    <p className="text-xs text-muted-foreground mt-1 truncate">
                                       {promoter.email}
                                     </p>
                                   )}
@@ -367,8 +367,8 @@ const AddNewPromoterModal = ({
                   </div>
                 </div>
               </ScrollArea>
-            </div>            {/* Actions */}
-            <div className="flex justify-between items-center pt-4 border-t border-border/20 flex-shrink-0">
+            {/* Actions */}
+            <div className="flex flex-wrap justify-between items-center gap-2 pt-3 border-t border-border/20 flex-shrink-0">
               <div className="flex gap-2">
                 {/* Quick Action Buttons */}
                 {openModalPromoterData && openModalPromoterData.length > 0 && (

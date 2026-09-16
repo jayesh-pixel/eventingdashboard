@@ -26,7 +26,6 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
 import { getNavItemsForRole, type UserRole, type NavItem as NavItemType } from "@/lib/navigation"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { AuthGuard } from "@/components/auth-guard"
 import { useAuth } from "@/lib/auth-context"
 import { Logo } from "@/components/logo"
@@ -209,7 +208,6 @@ const AdminLayout = ({ children, params }: AdminLayoutProps) => {
             <div className="w-full flex-1" />
 
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               {/* <Button variant="ghost" size="icon" className="rounded-full">
                 <Bell className="h-5 w-5" />
                 <span className="sr-only">Toggle notifications</span>

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
+import { formatEventDate, formatEventTime } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -79,7 +80,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericRole } from "@/lib/role-mapping"
-import { eventEndPoint, ticketEndPoint } from "@/lib/api-endpoints"
+import { eventEndPoint, promoterEndpoint, ticketEndPoint } from "@/lib/api-endpoints"
 import { NormalTicket, BulkTicket, Event } from "@/lib/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
@@ -274,40 +275,10 @@ export default function TicketsPage() {
   const [editFormData, setEditFormData] = React.useState<any>({})
 
   // Helper functions
-  const formatDate = (dateString: string) => {
-    if (!dateString) return "N/A"
-    try {
-      let date: Date
-      
-      // Check for DD-MM-YYYY HH:mm:ss format (like "31-01-2025 18:44:41")
-      const ddmmyyyy = dateString.match(/^(\d{2})-(\d{2})-(\d{4})[ T](\d{2}):(\d{2}):(\d{2})$/)
-      if (ddmmyyyy) {
-        // new Date(year, monthIndex, day, hour, minute, second)
-        date = new Date(
-          Number(ddmmyyyy[3]),     // year
-          Number(ddmmyyyy[2]) - 1, // month (0-indexed)
-          Number(ddmmyyyy[1]),     // day
-          Number(ddmmyyyy[4]),     // hour
-          Number(ddmmyyyy[5]),     // minute
-          Number(ddmmyyyy[6])      // second
-        )
-      } else {
-        // Try ISO or other standard formats
-        date = new Date(dateString)
-      }
-      
-      // Check if the date is valid
-      if (isNaN(date.getTime())) return "N/A"
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        timeZone: "Asia/Kolkata",
-      })
-    } catch (error) {
-      return "N/A"
-    }
-  }
+  // Event date/times come back as wall-clock values tagged +00:00, so format
+  // them with the shared helper instead of converting into another timezone.
+  const formatDate = (dateString: string) =>
+    formatEventDate(dateString, { month: "short", day: "numeric", year: "numeric" }, "en-US")
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -337,22 +308,100 @@ export default function TicketsPage() {
   // records use _id + FullName, so we keep both maps to resolve names correctly.
   const [eventPromoterNameMap, setEventPromoterNameMap] = React.useState<Map<string, string>>(new Map())
 
+  // GET_EVENT_PROMOTERS rows sometimes wrap the promoter document under
+  // PromoterData/promoter/Promoter instead of returning it flat, so always read
+  // both levels; otherwise every field comes back empty and the row renders as
+  // "Unknown Promoter" / "No phone" / "Inactive".
+  const unwrapPromoter = (p: any): any =>
+    p?.PromoterData ?? p?.promoterData ?? p?.promoter ?? p?.Promoter ?? p
+
+  const pickField = (p: any, keys: string[]): any => {
+    const nested = unwrapPromoter(p)
+    for (const key of keys) {
+      const value = p?.[key] ?? (nested !== p ? nested?.[key] : undefined)
+      if (typeof value === "string" ? value.trim().length > 0 : value !== undefined && value !== null) {
+        return typeof value === "string" ? value.trim() : value
+      }
+    }
+    return undefined
+  }
+
+  const pickPromoterName = (p: any): string =>
+    pickField(p, [
+      "Username",
+      "username",
+      "PromoterUsername",
+      "promoterUsername",
+      "PromoterName",
+      "promoterName",
+      "FullName",
+      "fullName",
+      "CompanyName",
+      "name",
+    ]) ?? ""
+
   const mapToPromoter = (p: any, nameMap?: Map<string, string>): Promoter => {
-    const id = p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? ""
-    const fallbackMap = nameMap ?? eventPromoterNameMap
+    // promoter_id is the promoter's real id; _id on these records is often the
+    // join-row id (event<->promoter link), which the backend does NOT accept
+    // when saving a ticket's EventPromoters — it 404s with
+    // "Event Assigned Promoters Not Found". Only fall back to _id for records
+    // that have no promoter_id at all (e.g. the raw promoter directory, where
+    // _id IS the promoter's real id).
+    const id = p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?._id ?? p?.id ?? ""
+    // Guard against non-Map values (e.g. Array.map's index argument) being passed in.
+    const fallbackMap = nameMap instanceof Map ? nameMap : eventPromoterNameMap
+    const name = pickPromoterName(p) || fallbackMap.get(id) || ""
     return {
       _id: id,
-      FullName:
-        p?.FullName ??
-        p?.PromoterName ??
-        p?.name ??
-        fallbackMap.get(id) ??
-        "Unknown Promoter",
-      Username: p?.Username ?? p?.username ?? p?.FullName ?? p?.PromoterName ?? fallbackMap.get(id) ?? "",
-      Email: p?.Email ?? p?.email ?? "",
-      Phone1: p?.Phone1 ?? p?.phone ?? p?.Phone ?? "",
-      Status: normalizeStatus(p?.Status ?? p?.status ?? p?.PromoterStatus ?? p?.is_active),
+      FullName: name || "Unknown Promoter",
+      Username: name,
+      Email: pickField(p, ["Email", "email"]) ?? "",
+      Phone1: pickField(p, ["Phone1", "phone1", "Phone", "phone", "PhoneNumber", "MobileNumber"]) ?? "",
+      Status: normalizeStatus(pickField(p, ["Status", "status", "PromoterStatus", "is_active", "IsActive"])),
     }
+  }
+
+  // GET_ALL_EVENT_TICKETS (the tickets list call) embeds EventPromotersData:
+  // [{ promoterName, promoter_id }] alongside the tickets themselves. It is the
+  // most reliable source of assigned-promoter names for this event, so patch
+  // any promoter still missing a name as soon as this comes back.
+  const applyPromoterNamesFromTicketsResponse = (list: any[]) => {
+    if (!Array.isArray(list) || list.length === 0) return
+
+    const nameById = new Map<string, string>()
+    list.forEach((p) => {
+      const id = p?.promoter_id ?? p?.Promoter_id ?? p?._id ?? p?.id
+      const name = pickPromoterName(p)
+      if (id && name) nameById.set(String(id), name)
+    })
+    if (nameById.size === 0) return
+
+    setEventPromoterNameMap((prev) => {
+      const next = new Map(prev)
+      nameById.forEach((name, id) => next.set(id, name))
+      return next
+    })
+
+    setPromoters((prev) => {
+      if (prev.length === 0) {
+        return Array.from(nameById.entries()).map(([id, name]) => ({
+          _id: id,
+          FullName: name,
+          Username: name,
+          Email: "",
+          Phone1: "",
+          Status: "Inactive",
+        }))
+      }
+      let changed = false
+      const next = prev.map((p) => {
+        const name = nameById.get(p._id)
+        if (!name || p.Username) return p
+        changed = true
+        return { ...p, FullName: name, Username: name }
+      })
+      return changed ? next : prev
+    })
   }
 
   const getAssignedPromotersFromEvent = (event: any): Promoter[] => {
@@ -368,8 +417,8 @@ export default function TicketsPage() {
     // name is guaranteed to exist for organizers viewing their own events.
     const newNameMap = new Map<string, string>()
     sources.forEach((p) => {
-      const id = p?._id ?? p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?.id ?? ""
-      const name = p?.PromoterName ?? p?.FullName ?? p?.name ?? ""
+      const id = p?.promoter_id ?? p?.Promoter_id ?? p?.promoterId ?? p?._id ?? p?.id ?? ""
+      const name = pickPromoterName(p)
       if (id && name) {
         newNameMap.set(id, name)
       }
@@ -396,6 +445,22 @@ export default function TicketsPage() {
     }
   }
   
+  // Field-by-field merge: the hydrated record wins, but only where it actually
+  // carries a value, so a nameless hydrated row never wipes out a seeded name.
+  const mergePromoter = (seeded: Promoter, hydrated: Promoter): Promoter => {
+    const name =
+      (hydrated.Username || (hydrated.FullName !== "Unknown Promoter" ? hydrated.FullName : "")) ||
+      (seeded.Username || (seeded.FullName !== "Unknown Promoter" ? seeded.FullName : ""))
+    return {
+      _id: hydrated._id || seeded._id,
+      FullName: name || "Unknown Promoter",
+      Username: name,
+      Email: hydrated.Email || seeded.Email,
+      Phone1: hydrated.Phone1 || seeded.Phone1,
+      Status: hydrated.Status || seeded.Status,
+    }
+  }
+
   // API Functions
   // `allowedIds`, when provided and non-empty, restricts the result to the event's
   // assigned promoters so the ticket selector never lists unassigned promoters.
@@ -423,7 +488,13 @@ export default function TicketsPage() {
           const list = Array.isArray(data.data)
             ? data.data
             : data.data?.EventPromoters || data.data?.PromoterData || data.data?.promoters || []
-          const normalized: Promoter[] = list.map(mapToPromoter)
+          // Note: pass an arrow wrapper — list.map(mapToPromoter) would pass the
+          // array index as the second arg (nameMap), breaking fallbackMap.get().
+          const normalized: Promoter[] = list.map((p: any) => mapToPromoter(p))
+          if (normalized.some((p) => !p.Username)) {
+            // Keeps the payload shape visible when a promoter still has no name.
+            console.warn("GET_EVENT_PROMOTERS returned records without a usable name:", list)
+          }
 
           // Match hydrated records against the event's assigned promoter IDs.
           // A promoter may be referenced by different id fields (_id vs promoter_id),
@@ -464,7 +535,7 @@ export default function TicketsPage() {
             const seen = new Set<string>()
             prev.forEach((seeded) => {
               const hydrated = allIdsOf(seeded).map((id) => hydratedById.get(id)).find(Boolean)
-              const resolved = hydrated ?? seeded
+              const resolved = hydrated ? mergePromoter(seeded, hydrated) : seeded
               allIdsOf(resolved).forEach((id) => seen.add(id))
               merged.push(resolved)
             })
@@ -487,6 +558,69 @@ export default function TicketsPage() {
       })
     }
   }
+
+  // Last resort for names: neither the event record nor GET_EVENT_PROMOTERS
+  // returned a usable name, so look the ids up in the promoter directory.
+  const directoryLookupRef = React.useRef(false)
+
+  const fillNamesFromPromoterDirectory = async () => {
+    try {
+      const authToken = getValidToken()
+      if (!authToken) return
+
+      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${authToken}` },
+      })
+      if (!response.ok) return
+
+      const data = await response.json()
+      const all: any[] = Array.isArray(data?.data)
+        ? data.data
+        : Array.isArray(data?.data?.PromoterData)
+        ? data.data.PromoterData
+        : Array.isArray(data)
+        ? data
+        : []
+
+      const byId = new Map<string, any>()
+      all.forEach((p) => {
+        const id = p?._id ?? p?.promoter_id ?? p?.id
+        if (id) byId.set(String(id), p)
+      })
+      if (byId.size === 0) return
+
+      setPromoters((prev) => {
+        let changed = false
+        const next = prev.map((p) => {
+          if (p.Username) return p
+          const match = byId.get(p._id)
+          const name = match ? pickPromoterName(match) : ""
+          if (!name) return p
+          changed = true
+          return {
+            ...p,
+            FullName: name,
+            Username: name,
+            Email: p.Email || (pickField(match, ["Email", "email"]) ?? ""),
+            Phone1: p.Phone1 || (pickField(match, ["Phone1", "phone1", "Phone", "phone"]) ?? ""),
+            Status: normalizeStatus(pickField(match, ["Status", "status", "is_active", "IsActive"])),
+          }
+        })
+        return changed ? next : prev
+      })
+    } catch (error) {
+      console.warn("Promoter directory lookup failed:", error)
+    }
+  }
+
+  React.useEffect(() => {
+    if (directoryLookupRef.current) return
+    if (promoters.length === 0 || !promoters.some((p) => !p.Username)) return
+    directoryLookupRef.current = true
+    fillNamesFromPromoterDirectory()
+  }, [promoters])
+
   const fetchEventDateTimes = async () => {
     try {
       setEventLoading(true)
@@ -649,6 +783,7 @@ export default function TicketsPage() {
               console.log("First ticket availability (EventTicketAvailability):", normalData.data.EventTicketsData[0].EventTicketAvailability)
             }
             setNormalTickets(normalData.data.EventTicketsData || [])
+            applyPromoterNamesFromTicketsResponse(normalData.data.EventPromotersData)
           } else {
             console.log("Using old response structure - direct data")
             console.log("Direct data length:", normalData.data?.length || 0)
@@ -656,6 +791,7 @@ export default function TicketsPage() {
               console.log("First ticket sample:", JSON.stringify(normalData.data[0], null, 2))
             }
             setNormalTickets(normalData.data || [])
+            applyPromoterNamesFromTicketsResponse(normalData.data?.EventPromotersData)
           }
         } else {
           console.error("Normal tickets API returned error:", normalData)
@@ -1355,38 +1491,23 @@ export default function TicketsPage() {
       let payload: any
       
       if (isNormal) {
-        // Format payload for normal tickets - editable fields: Description, Price, Quantity, and Promoters (if visibility is Promoter)
+        // Format payload for normal tickets - editable fields are Description, Visibility, Price, and Quantity.
         const normalTicket = selectedTicket as ExtendedNormalTicket
-        
+
+        const currentVisibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+
         payload = {
           Event_id: eventId,
           eventTicket_id: normalTicket._id,
-          // Editable fields
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
-          // Only send Description if it has at least 3 chars (Joi min(3))
+          EventTicketVisibility: currentVisibility,
           ...(editFormData.Description && editFormData.Description.trim().length >= 3
             ? { Description: editFormData.Description.trim() }
             : {}),
-          // Use edited visibility value if changed, otherwise keep existing
-          EventTicketVisibility: Number((editFormData as any).EventTicketVisibility || (editFormData as any).Visibility || normalTicket.EventTicketVisibility),
-          BookingMaxLimit: normalTicket.BookingMaxLimit
-        }
-
-        // Handle promoters - can be updated only if visibility is set to "Promoters" (3)
-        const currentVisibility = (editFormData as any).EventTicketVisibility || (editFormData as any).Visibility || normalTicket.EventTicketVisibility
-        if (currentVisibility === '3' || currentVisibility === 3) {
-          // Use selected promoters if any, otherwise keep existing ones
-          if (selectedPromoters.length > 0) {
-            payload.EventPromoters = selectedPromoters.map(promoterId => ({ promoter_id: promoterId }))
-          } else if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
-            payload.EventPromoters = normalTicket.EventPromoters
-          }
-        } else {
-          // For non-promoter visibility, keep existing promoters if any
-          if (normalTicket.EventPromoters && normalTicket.EventPromoters.length > 0) {
-            payload.EventPromoters = normalTicket.EventPromoters
-          }
+          ...(currentVisibility === "3" && selectedPromoters.length > 0
+            ? { EventPromoters: selectedPromoters.map(promoterId => ({ promoter_id: promoterId })) }
+            : {}),
         }
       }
 
@@ -1473,7 +1594,6 @@ export default function TicketsPage() {
         setShowEditModal(false)
         setEditFormData({})
         setSelectedTicketType(null)
-        setSelectedPromoters([])
         setSelectedPromoters([])
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
@@ -1836,7 +1956,7 @@ export default function TicketsPage() {
                   Loading event details...
                 </span>
               ) : eventData ? (
-                `${eventData.eventName || eventData.EventName || 'Event'} - Manage event tickets and configure pricing`
+                `${eventData.eventName || eventData.EventName || 'Event'} - Manage  and configure pricing`
               ) : (
                 "Manage event tickets and configure pricing"
               )}
@@ -1894,14 +2014,13 @@ export default function TicketsPage() {
                   <SelectItem value="all">All Dates</SelectItem>
                   {eventDateTimes.map((dateTime) => (
                     <SelectItem key={dateTime._id} value={dateTime._id}>
-                      {new Date(dateTime.EventStartDateTime).toLocaleDateString('en-US', {
+                      {formatEventDate(dateTime.EventStartDateTime, {
                         month: 'short',
                         day: 'numeric',
                         year: 'numeric',
                         hour: '2-digit',
                         minute: '2-digit',
-                        timeZone: 'Asia/Kolkata'
-                      })}
+                      }, 'en-US')}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -2187,7 +2306,7 @@ export default function TicketsPage() {
                             </TableCell>
                             <TableCell>
                               {eventDateTimes.length > 0 ? (
-                                `${new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} ${new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} - ${new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}`
+                                `${formatEventDate(eventDateTimes[0].EventStartDateTime, undefined, [])} ${formatEventTime(eventDateTimes[0].EventStartDateTime, { hour: '2-digit', minute: '2-digit' }, [])} - ${formatEventTime(eventDateTimes[0].EventEndDateTime, { hour: '2-digit', minute: '2-digit' }, [])}`
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -2470,7 +2589,7 @@ export default function TicketsPage() {
                                 htmlFor={`datetime-${dateTime._id}`}
                                 className="text-sm cursor-pointer flex-1"
                               >
-                                {new Date(dateTime.EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
+                                {formatEventDate(dateTime.EventStartDateTime, undefined, [])} - {formatEventTime(dateTime.EventStartDateTime, { hour: '2-digit', minute: '2-digit' }, [])} to {formatEventTime(dateTime.EventEndDateTime, { hour: '2-digit', minute: '2-digit' }, [])}
                               </label>
                             </div>
                           ))}
@@ -2501,7 +2620,7 @@ export default function TicketsPage() {
                       </div>
                     ) : (
                       <div className="p-3 bg-muted rounded-md text-sm">
-                        {new Date(eventDateTimes[0].EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(eventDateTimes[0].EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(eventDateTimes[0].EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
+                        {formatEventDate(eventDateTimes[0].EventStartDateTime, undefined, [])} - {formatEventTime(eventDateTimes[0].EventStartDateTime, { hour: '2-digit', minute: '2-digit' }, [])} to {formatEventTime(eventDateTimes[0].EventEndDateTime, { hour: '2-digit', minute: '2-digit' }, [])}
                       </div>
                     )}
                   </div>
@@ -2626,7 +2745,7 @@ export default function TicketsPage() {
                     <SelectContent>
                       {eventDateTimes.map((dateTime) => (
                         <SelectItem key={dateTime._id} value={dateTime._id}>
-                          {new Date(dateTime.EventStartDateTime).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} - {new Date(dateTime.EventStartDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})} to {new Date(dateTime.EventEndDateTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', timeZone: 'Asia/Kolkata'})}
+                          {formatEventDate(dateTime.EventStartDateTime, undefined, [])} - {formatEventTime(dateTime.EventStartDateTime, { hour: '2-digit', minute: '2-digit' }, [])} to {formatEventTime(dateTime.EventEndDateTime, { hour: '2-digit', minute: '2-digit' }, [])}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -2707,46 +2826,48 @@ export default function TicketsPage() {
               {selectedTicketType === 'normal' ? (
                 // Normal ticket edit form
                 <>
-                  {/* Read-only fields */}
-                  <div className="space-y-2">
-                    <Label>Ticket Name (Read Only)</Label>
-                    <Input
-                      value={editFormData.TicketName || editFormData.Name || ""}
-                      disabled
-                      className="bg-muted"
-                    />
+                  <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                    <div className="text-sm font-semibold">Ticket Details (Read Only)</div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Ticket Name</div>
+                        <div className="text-sm font-medium">{(selectedTicket as any)?.Name || (selectedTicket as any)?.TicketName || editFormData.TicketName || editFormData.Name || "N/A"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Ticket Type</div>
+                        <div className="text-sm font-medium">{getTicketTypeName(parseInt(editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || "1"))}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Booking Max Limit</div>
+                        <div className="text-sm font-medium">{editFormData.BookingMaxLimit || selectedTicket?.BookingMaxLimit || "N/A"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Current Price</div>
+                        <div className="text-sm font-medium">{formatCurrency(parseFloat((editFormData.TicketPrice || editFormData.Price || selectedTicket?.Price || 0).toString()))}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Current Quantity</div>
+                        <div className="text-sm font-medium">{editFormData.TicketQuantity || editFormData.Quantity || editFormData.MaxQuantity || selectedTicket?.Quantity || "N/A"}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Status</div>
+                        <div className="text-sm font-medium">{(() => {
+                          const statusValue = (selectedTicket as ExtendedNormalTicket)?.EventTicketStatus ?? (selectedTicket as ExtendedNormalTicket)?.Status ?? 1
+                          return statusValue === 1 ? "Active" : "Disabled"
+                        })()}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-xs text-muted-foreground">Assigned Promoters</div>
+                        <div className="text-sm font-medium">
+                          {selectedPromoters.length > 0
+                            ? selectedPromoters.map((id) => promoters.find((p) => p._id === id)?.Username || promoters.find((p) => p._id === id)?.FullName || "Unknown").join(", ")
+                            : "None"}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Visibility</Label>
-                    <Select
-                      value={(() => {
-                        const v = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
-                        return v
-                      })()}
-                      onValueChange={(value) => setEditFormData((prev: any) => ({ ...prev, EventTicketVisibility: value, Visibility: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select visibility" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">All</SelectItem>
-                        <SelectItem value="2">All Customers</SelectItem>
-                        <SelectItem value="3">Promoters</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Ticket Type (Read Only)</Label>
-                    <Input
-                      value={getTicketTypeName(parseInt(editFormData.TicketType?.toString() || editFormData.EventTicketType?.toString() || "1"))}
-                      disabled
-                      className="bg-muted"
-                    />
-                  </div>
-
-                  {/* Editable Description */}
+                  {/* Editable fields: description, visibility, price, and quantity */}
                   <div className="space-y-2">
                     <Label htmlFor="editDescription">Description</Label>
                     <Textarea
@@ -2757,6 +2878,103 @@ export default function TicketsPage() {
                       rows={3}
                       className="border-primary"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="editVisibility">Visibility</Label>
+                    <Select
+                      value={((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()}
+                      onValueChange={(value) => {
+                        setEditFormData((prev: any) => ({
+                          ...prev,
+                          Visibility: value,
+                          VisibilityLevel: parseInt(value),
+                          EventTicketVisibility: value,
+                        }))
+                        if (value === "3") {
+                          setPromoterSearchTerm("")
+                          setShowPromoterModal(true)
+                        } else {
+                          setSelectedPromoters([])
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(() => {
+                          const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
+                          if (eventVisibility === 2) {
+                            return <SelectItem value="3">Promoters</SelectItem>
+                          }
+                          return (
+                            <>
+                              <SelectItem value="1">All</SelectItem>
+                              <SelectItem value="2">All Customers</SelectItem>
+                              <SelectItem value="3">Promoters</SelectItem>
+                            </>
+                          )
+                        })()}
+                      </SelectContent>
+                    </Select>
+                    {((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString() === "3" && (
+                      <div className="space-y-3">
+                        <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                          💡 This ticket will only be visible to the promoters you select below.
+                        </p>
+                        <div className="space-y-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setPromoterSearchTerm("")
+                              setShowPromoterModal(true)
+                            }}
+                            className="w-full justify-start h-auto p-3 border-dashed"
+                          >
+                            <Users className="mr-2 h-4 w-4" />
+                            <div className="flex flex-col items-start">
+                              <span className="font-medium">
+                                {selectedPromoters.length > 0
+                                  ? `${selectedPromoters.length} Promoter(s) Selected`
+                                  : 'Choose Promoters'}
+                              </span>
+                              <span className="text-xs text-muted-foreground mt-1">
+                                {selectedPromoters.length > 0
+                                  ? 'Click to modify selection'
+                                  : `${filteredPromoters.length} promoters assigned to this event`}
+                              </span>
+                            </div>
+                          </Button>
+                        </div>
+                        {selectedPromoters.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Selected Promoters:</Label>
+                            <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg">
+                              {selectedPromoters.map(promoterId => {
+                                const promoter = promoters.find(p => p._id === promoterId)
+                                return promoter ? (
+                                  <Badge key={promoterId} variant="secondary" className="text-xs">
+                                    {promoter.FullName}
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        setSelectedPromoters(prev => prev.filter(id => id !== promoterId))
+                                      }}
+                                      className="ml-1 hover:bg-destructive/20 rounded-sm"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </Badge>
+                                ) : null
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Editable Price and Quantity */}
@@ -2786,116 +3004,8 @@ export default function TicketsPage() {
                       />
                     </div>
                   </div>
-
-                  {/* Promoter Selection - Only shown if visibility is "Promoters" */}
-                  {(() => {
-                    const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
-                    return visibility === "3" && (
-                    <div className="space-y-2">
-                      <Label>Selected Promoters (Searchable)</Label>
-                      <Popover open={editPromoterPopoverOpen} onOpenChange={setEditPromoterPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={editPromoterPopoverOpen}
-                            className="w-full justify-between border-primary"
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            {selectedPromoters.length > 0 
-                              ? `${selectedPromoters.length} promoter(s) selected`
-                              : 'Search and select promoters...'
-                            }
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-full p-0" align="start">
-                          <Command>
-                            <CommandInput 
-                              placeholder="Search promoters..." 
-                              value={editPromoterSearchTerm}
-                              onValueChange={setEditPromoterSearchTerm}
-                            />
-                            <CommandEmpty>
-                              {promoters.length === 0 
-                                ? "No promoters are currently assigned to this event. Please assign promoters to the event first."
-                                : "No promoters found matching your search"
-                              }
-                            </CommandEmpty>
-                            <CommandGroup className="max-h-[300px] overflow-y-auto">
-                              {promoters
-                                .filter(promoter => 
-                                  promoter.FullName?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase()) ||
-                                  promoter.Email?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase()) ||
-                                  promoter.Phone1?.toLowerCase().includes(editPromoterSearchTerm.toLowerCase())
-                                )
-                                .map((promoter) => (
-                                  <CommandItem
-                                    key={promoter._id}
-                                    value={promoter._id}
-                                    onSelect={() => {
-                                      setSelectedPromoters((prev) =>
-                                        prev.includes(promoter._id)
-                                          ? prev.filter((id) => id !== promoter._id)
-                                          : [...prev, promoter._id]
-                                      )
-                                    }}
-                                    className="cursor-pointer"
-                                  >
-                                    <div className="flex items-center space-x-3 flex-1">
-                                      <Checkbox
-                                        checked={selectedPromoters.includes(promoter._id)}
-                                        onCheckedChange={() => {
-                                          setSelectedPromoters((prev) =>
-                                            prev.includes(promoter._id)
-                                              ? prev.filter((id) => id !== promoter._id)
-                                              : [...prev, promoter._id]
-                                          )
-                                        }}
-                                      />
-                                      <div className="flex-1">
-                                        <div className="font-medium">{promoter.FullName || promoter.Username || 'Unknown Promoter'}</div>
-                                        <div className="text-sm text-muted-foreground">
-                                          {promoter.Email || 'No email'} • {promoter.Phone1 || 'No phone'}
-                                        </div>
-                                      </div>
-                                      <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>
-                                        {promoter.Status === "Active" ? "Active" : promoter.Status || "Inactive"}
-                                      </Badge>
-                                    </div>
-                                  </CommandItem>
-                                ))}
-                            </CommandGroup>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      {selectedPromoters.length > 0 && (
-                        <div className="text-sm text-muted-foreground mt-2 p-2 bg-muted/30 rounded-md">
-                          <span className="font-medium">Selected:</span> {selectedPromoters.map(id => {
-                            const promoter = promoters.find(p => p._id === id)
-                            return promoter?.FullName || 'Unknown'
-                          }).join(', ')}
-                        </div>
-                      )}
-                    </div>
-                    )
-                  })()}
-
-                  {/* Read-only Booking Max Limit */}
-                  <div className="space-y-2">
-                    <Label>Booking Max Limit (Read Only)</Label>
-                    <Input
-                      value={editFormData.BookingMaxLimit || ""}
-                      disabled
-                      className="bg-muted"
-                    />
-                  </div>
-
                   <div className="text-sm text-muted-foreground">
-                    * Description, Price, Quantity{(() => {
-                      const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
-                      return visibility === "3" ? ", and Promoters" : ""
-                    })()} can be edited
+                    * Description, Visibility, Price, and Total Quantity can be edited
                   </div>
                 </>
               ) : (
@@ -3011,12 +3121,11 @@ export default function TicketsPage() {
                       onCheckedChange={() => handlePromoterSelection(promoter._id)}
                     />
                     <div className="flex-1">
-                      <div className="font-medium">{promoter.FullName || promoter.Username || 'Unknown Promoter'}</div>
-                      <div className="text-sm text-muted-foreground">{promoter.Phone1 || 'No phone'}</div>
+                      <div className="font-medium">{promoter.Username || promoter.FullName || 'Unknown Promoter'}</div>
+                      {promoter.Phone1 && (
+                        <div className="text-sm text-muted-foreground">{promoter.Phone1}</div>
+                      )}
                     </div>
-                    <Badge variant={promoter.Status === "Active" ? "default" : "secondary"}>
-                      {promoter.Status === "Active" ? "Active" : promoter.Status || "Inactive"}
-                    </Badge>
                   </div>
                 ))
               )}

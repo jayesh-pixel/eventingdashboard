@@ -33,6 +33,7 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Search, AlertCircle, Loader2, UserCheck, UserX } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { scannerUserEndpoint } from "@/lib/api-endpoints"
+import { formatEventDate } from "@/lib/utils"
 import { eventEndPoint } from "@/lib/api-endpoints"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { ScannerUser, ScannerUsersApiResponse, ScannerUserType, ScannerUserStatus } from "@/lib/types"
@@ -627,7 +628,7 @@ export default function ScannerUsersPage() {
                                 <div className="text-xs text-muted-foreground mt-1">
                                   <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                                     <span>📍 {event.VenueName || 'Venue TBA'}</span>
-                                    <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                                    <span>📅 {event.arrangedEventDateTime?.[0] ? formatEventDate(event.arrangedEventDateTime[0].EventStartDateTime) : 'Date TBA'}</span>
                                   </div>
                                 </div>
                               </div>
@@ -914,7 +915,7 @@ export default function ScannerUsersPage() {
                               <div className="text-xs text-muted-foreground mt-1">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                                   <span>📍 {event.VenueName || 'Venue TBA'}</span>
-                                  <span>📅 {event.arrangedEventDateTime?.[0] ? new Date(event.arrangedEventDateTime[0].EventStartDateTime).toLocaleDateString() : 'Date TBA'}</span>
+                                  <span>📅 {event.arrangedEventDateTime?.[0] ? formatEventDate(event.arrangedEventDateTime[0].EventStartDateTime) : 'Date TBA'}</span>
                                 </div>
                               </div>
                             </div>

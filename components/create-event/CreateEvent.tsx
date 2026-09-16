@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { UserRole } from "@/lib/navigation"
-import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { 
@@ -337,24 +337,28 @@ export default function CreateEvent({
         return null
       }
 
-      // Parse the ISO string and extract date/time without timezone conversion
-      // The API already stores IST time in UTC format, so we just need to extract the values
+      // The API returns the date/time exactly as it was entered, tagged with a
+      // +00:00 offset ("2025-01-31T18:00:00.000Z" for a 6:00 PM event). Read the
+      // stored wall clock back without any timezone conversion, otherwise the
+      // form would re-open with a shifted time.
       const formatDateTimeFromISO = (isoString: string) => {
         try {
-          // Parse the ISO string: "2025-01-31T20:00:00.000Z"
-          // Extract date and time parts directly from the string without conversion
-          const dateTimePart = isoString.split('T')
-          if (dateTimePart.length !== 2) {
+          const dt = parseEventDateTime(isoString)
+          if (!dt) {
             console.error('Invalid ISO string format:', isoString)
             return null
           }
 
-          const datePart = dateTimePart[0] // "2025-01-31"
-          const timePart = dateTimePart[1].split('.')[0] // "20:00:00"
+          const yyyy = dt.getUTCFullYear()
+          const mm = String(dt.getUTCMonth() + 1).padStart(2, '0')
+          const dd = String(dt.getUTCDate()).padStart(2, '0')
+          const hh = String(dt.getUTCHours()).padStart(2, '0')
+          const min = String(dt.getUTCMinutes()).padStart(2, '0')
+          const ss = String(dt.getUTCSeconds()).padStart(2, '0')
 
           return {
-            date: datePart,
-            time: timePart
+            date: `${yyyy}-${mm}-${dd}`,
+            time: `${hh}:${min}:${ss}`
           }
         } catch (error) {
           console.error('Error parsing date:', error)
@@ -1449,16 +1453,14 @@ export default function CreateEvent({
               return
             }
             
-            // Convert back to datetime format for API - use local time construction
-            const startDateTimeString = `${event.EventStartDate}T${event.EventStartTime}`
-            const endDateTimeString = `${event.EventEndDate}T${event.EventEndTime}`
-            
-            // Create date objects and validate them
-            const startDateTime = new Date(startDateTimeString)
-            const endDateTime = new Date(endDateTimeString)
-            
-            // Check if the dates are valid
-            if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+            // Send the date/time exactly as it was entered. The backend appends a
+            // +00:00 offset to whatever it receives, and every screen renders that
+            // stored value without a timezone conversion, so the times shown for
+            // tickets and bookings match what was typed here.
+            const startLocal = new Date(`${event.EventStartDate}T${event.EventStartTime}`)
+            const endLocal   = new Date(`${event.EventEndDate}T${event.EventEndTime}`)
+
+            if (isNaN(startLocal.getTime()) || isNaN(endLocal.getTime())) {
               toast({
                 title: "Invalid Date/Time",
                 description: "The event date and time values are not valid",
@@ -1466,13 +1468,13 @@ export default function CreateEvent({
               })
               return
             }
-            
+
             // Add to EventDateTime array in the format expected by API
             eventDateTimeArray.push({
-              EventStartDate: event.EventStartDate, // Keep as YYYY-MM-DD format
-              EventEndDate: event.EventEndDate,     // Keep as YYYY-MM-DD format
-              EventStartTime: event.EventStartTime, // Keep as HH:MM format
-              EventEndTime: event.EventEndTime      // Keep as HH:MM format
+              EventStartDate: event.EventStartDate, // YYYY-MM-DD, as entered
+              EventEndDate:   event.EventEndDate,
+              EventStartTime: event.EventStartTime, // HH:mm:ss, as entered
+              EventEndTime:   event.EventEndTime
             })
           }
           

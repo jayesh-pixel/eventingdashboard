@@ -24,6 +24,7 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
+import { formatEventDate } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { promoterEndPointPannel } from "@/lib/api-endpoints"
 import { getValidToken } from "@/lib/token-utils"
@@ -443,14 +444,10 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       fetchSearchData()
     }  }, [debouncedSearchTerm, selectedBookingType, eventId, user])
 
-  const formatDate = (date: Date | string | number) => {
-    if (!date) return "N/A"
-    return new Date(date).toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    })
-  }
+  // Event date/times are stored as the entered wall clock tagged +00:00, so they
+  // are rendered as stored rather than converted into the browser's timezone.
+  const formatDate = (date: Date | string | number) =>
+    formatEventDate(date, { day: "numeric", month: "long", year: "numeric" }, "en-GB")
 
   const formatCurrency = (amount: number) => {
     return `₹${amount.toLocaleString()}`

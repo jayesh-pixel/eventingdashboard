@@ -69,7 +69,7 @@ export default function PromoterIndicator({
     )
   }
 
-  const promoterName = promoterData.PromoterName || promoterData.promoterName || promoterData.FullName || promoterData.fullName || "Unknown Promoter"
+  const promoterName = promoterData.Username || promoterData.PromoterName || promoterData.promoterName || promoterData.FullName || promoterData.fullName || "Unknown Promoter"
 
   return (
     <button

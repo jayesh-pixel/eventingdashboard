@@ -155,6 +155,7 @@ export const promoterEndPointPannel = {
 
   GET_ALL_EVENT_DATE_BY_EVENT_ID: BASE_URL + "/events/getbyId",
   GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/eventstickets/getPromoterTicketsbyEventDate",
+  GET_PROMOTER_SEASON_PASS: BASE_URL + "/eventstickets/getPromoterSeasonPass",
   BOOKING_TICKET_BY_PROMOTER: EVENT_TICKETS_BOOKING_BASE + "/BookEventTicketsByPromoter",
   PROMOTER_FORGOT_PASSWORD_SEND_EMAIL: BASE_URL + "/promoter/getpasswordresetlink",
   PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD: BASE_URL + "/promoter/updatepassword",
@@ -224,6 +225,10 @@ export const ticketEndPoint = {
   UPDATE_AVAILABILITY_TO_SOLD_OUT: BASE_URL + "/eventstickets/updateAvailabilityToSoldOut",
   UPDATE_AVAILABILITY_TO_AVAILABLE: BASE_URL + "/eventstickets/updateAvailabilityToAvailable",
   GET_PROMOTER_SEASON_PASS: BASE_URL + "/eventstickets/getPromoterSeasonPass",
+
+  // Season Pass / tickets for the public website (customer) flow
+  GET_WEBSITE_SEASON_PASS: BASE_URL + "/customer/eventtickets/getWebsiteSeasonPass",
+  GET_WEBSITE_TICKET_DATA_BY_EVENT_DATE: BASE_URL + "/customer/eventtickets/getWebsiteTicketsbyEventDate",
   
   // Bulk Tickets — backend only has: createBulkTicketForEvent, getBulkTicketsOfEvent, cancelBukTicket, exportBulkTicketBookingIds, getBulkTicketsByFilter
   CREATE_BULK_TICKET: BASE_URL + "/eventbulktickets/createBulkTicketForEvent",

@@ -372,6 +372,10 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
         throw new Error(data.message || "Failed to update artist")
       }
 
+      if (selectedImage) {
+        await uploadArtistImage(selectedArtist._id)
+      }
+
       toast({
         title: "Success",
         description: "Artist updated successfully!",
@@ -699,7 +703,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               
               {/* Image Upload Section */}
               <div className="space-y-2">
-                <Label htmlFor="artistImage">Artist Image</Label>
+                <Label htmlFor="artistImage">Artist Image *</Label>
                 <div className="space-y-3">
                   <div className="flex items-center justify-center w-full">
                     <label
@@ -734,7 +738,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                             <p className="mb-2 text-sm text-gray-500">
                               <span className="font-semibold">Click to upload</span> or drag and drop
                             </p>
-                            <p className="text-xs text-gray-500">PNG, JPG (640x480, max 500KB)</p>
+                            <p className="text-xs text-gray-500">Required. PNG, JPG (640x480, max 500KB)</p>
                           </>
                         )}
                       </div>
@@ -1042,9 +1046,9 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               
               {/* Image Upload */}
               <div className="space-y-2">
-                <Label>Upload New Image</Label>
+                <Label>Upload New Image *</Label>
                 <p className="text-sm text-muted-foreground">
-                  Dimensions: 640x480, Max size: 500KB, Format: JPG/PNG
+                  Required when replacing the artist image. Dimensions: 640x480, Max size: 500KB, Format: JPG/PNG
                 </p>
                 <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4">
                   <div className="flex flex-col items-center gap-2">

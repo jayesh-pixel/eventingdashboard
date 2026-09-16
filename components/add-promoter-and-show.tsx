@@ -93,12 +93,12 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                             onClick={() => handlerPromoter(promoters)}
                           >
                             <AvatarFallback className="text-xs bg-muted">
-                              {(promoter.PromoterName || (promoter as any).FullName) ? (promoter.PromoterName || (promoter as any).FullName).charAt(0).toUpperCase() : "P"}
+                              {(promoter.Username || promoter.PromoterName || (promoter as any).FullName) ? (promoter.Username || promoter.PromoterName || (promoter as any).FullName).charAt(0).toUpperCase() : "P"}
                             </AvatarFallback>
                           </Avatar>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>{promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
+                          <p>{promoter.Username || promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
                         </TooltipContent>
                       </Tooltip>
                     )
@@ -118,7 +118,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                       <p className="font-medium">Additional promoters:</p>
                       {promoters.slice(4).map((promoter: PromoterData, index: number) => (
                         <p key={index} className="text-sm">
-                          {promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
+                          {promoter.Username || promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
                         </p>
                       ))}
                     </div>
@@ -184,12 +184,12 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                       <TooltipTrigger asChild>
                         <Avatar className="h-6 w-6 border-2 border-background">
                           <AvatarFallback className="text-xs bg-muted">
-                            {promoter.PromoterName ? promoter.PromoterName.charAt(0).toUpperCase() : "P"}
+                            {promoter.Username || promoter.PromoterName ? (promoter.Username || promoter.PromoterName).charAt(0).toUpperCase() : "P"}
                           </AvatarFallback>
                         </Avatar>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>{promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
+                        <p>{promoter.Username || promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}</p>
                       </TooltipContent>
                     </Tooltip>
                   )
@@ -209,7 +209,7 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
                     <p className="font-medium">Additional promoters:</p>
                     {promoters.slice(4).map((promoter: PromoterData, index: number) => (
                       <p key={index} className="text-sm">
-                        {promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
+                        {promoter.Username || promoter.PromoterName || (promoter as any).FullName || "Unknown Promoter"}
                       </p>
                     ))}
                   </div>
