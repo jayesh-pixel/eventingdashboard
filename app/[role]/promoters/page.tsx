@@ -523,8 +523,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         FullName: formData.FullName,
         Username: formData.Username,
         Password: formData.Password.trim(),
-        // Promoter backend expects SendMailFlag: 1 (yes) / 0 (no)
-        SendMailFlag: sendAccountInfo ? 1 : 0,
+        SendMailFlag: sendAccountInfo ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
         CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user?.user_id || "",
       }
