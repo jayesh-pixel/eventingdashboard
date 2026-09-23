@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { MoreHorizontal, Eye } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 import type { Booking } from "@/lib/types"
+import { formatEventDateTime } from "@/lib/utils"
 
 export type BookingColumnKey =
   | "name"
@@ -65,6 +66,11 @@ interface BookingsTableProps {
   columns?: BookingColumnKey[]
 }
 
+const isBookingCancelled = (b: Booking) => {
+  const status = String(b.bookingStatus ?? (b as any).Status ?? "").trim().toLowerCase()
+  return status === "cancelled" || status === "canceled" || status === "2"
+}
+
 export function BookingsTable({
   bookings,
   role,
@@ -86,17 +92,10 @@ export function BookingsTable({
     (date: Date | string | number) => {
       if (typeof formatDateTime === "function") return formatDateTime(date)
 
-      if (!date) return "N/A"
-      const parsed = new Date(date)
-      if (Number.isNaN(parsed.getTime())) return "N/A"
-
-      return parsed.toLocaleString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      })
+      // Booking timestamps come back as "DD-MM-YYYY HH:mm:ss" from several
+      // endpoints, which new Date() rejects - callers that do not pass their own
+      // formatter used to get "N/A" for every row.
+      return formatEventDateTime(date)
     },
     [formatDateTime]
   )
@@ -362,7 +361,11 @@ export function BookingsTable({
             bookings.map((booking) => (
               <tr
                 key={booking._id}
-                className="hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-200 dark:border-gray-600"
+                className={`border-b border-gray-200 dark:border-gray-600 ${
+                  isBookingCancelled(booking)
+                    ? "bg-red-100 text-red-900 hover:bg-red-200 dark:bg-red-900/40 dark:text-red-200 dark:hover:bg-red-900/60"
+                    : "hover:bg-gray-50 dark:hover:bg-gray-700"
+                }`}
               >
                 {activeColumns.map((key) => (
                   <td key={key} className={`${COLUMN_DEFS[key].thClass} px-3 py-3`}>
@@ -501,8 +504,8 @@ export function BookingsTable({
             <div
               key={booking._id}
               className={`p-4 rounded-lg border ${
-                booking.bookingStatus === "Cancelled"
-                  ? "bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800"
+                isBookingCancelled(booking)
+                  ? "bg-red-100 border-red-300 dark:bg-red-950 dark:border-red-800"
                   : "bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700"
               }`}
             >

@@ -85,6 +85,11 @@ import { NormalTicket, BulkTicket, Event } from "@/lib/types"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
+// createBulkTicketForEvent rejects anything above 50 with "Only 50 bulk tickets can be
+// booked at one time". The form used to stop at 20, so a legitimate batch of 21-50 was
+// blocked here before the request was ever made.
+const MAX_BULK_TICKETS_PER_BATCH = 50
+
 // Extended interfaces to handle both old and new API response structures
 interface ExtendedNormalTicket extends NormalTicket {
   // New field names from backend response
@@ -273,6 +278,29 @@ export default function TicketsPage() {
   })
   
   const [editFormData, setEditFormData] = React.useState<any>({})
+
+  // Bulk create form: collect the reasons the submit is blocked so the button can
+  // explain itself instead of silently greying out. Price 0 is valid here —
+  // complimentary bulk tickets are a normal case.
+  const bulkFormIssues = React.useMemo(() => {
+    const issues: string[] = []
+    if (!bulkFormData.TicketName.trim()) issues.push("Ticket name")
+    if (!bulkFormData.CustomerName.trim()) issues.push("Customer name")
+    if (!bulkFormData.PhoneNumber.trim()) issues.push("Phone number")
+    if (!bulkFormData.Email.trim()) issues.push("Email")
+    if (!bulkFormData.EventDateTime_id) {
+      issues.push(eventDateTimes.length === 0 ? "Event date (none loaded for this event)" : "Event date")
+    }
+    if (!Number.isFinite(bulkFormData.TotalQuantity) || bulkFormData.TotalQuantity < 1) {
+      issues.push("Quantity (at least 1)")
+    } else if (bulkFormData.TotalQuantity > MAX_BULK_TICKETS_PER_BATCH) {
+      issues.push(`Quantity (${MAX_BULK_TICKETS_PER_BATCH} max)`)
+    }
+    if (!Number.isFinite(bulkFormData.TicketPrice) || bulkFormData.TicketPrice < 0) {
+      issues.push("Price (0 or more)")
+    }
+    return issues
+  }, [bulkFormData, eventDateTimes.length])
 
   // Helper functions
   // Event date/times come back as wall-clock values tagged +00:00, so format
@@ -886,13 +914,41 @@ export default function TicketsPage() {
     }
   }
 
+  // getBulkTicketsOfEvent answers 404 / { error: true, message: "...not found" } for an
+  // event that simply has no bulk tickets yet, so that case is an empty list, not a
+  // failure. Anything else is surfaced with the backend's own message.
+  const parseBulkTicketsResponse = async (response: Response): Promise<ExtendedBulkTicket[]> => {
+    let payload: any = null
+    try {
+      payload = await response.json()
+    } catch {
+      payload = null
+    }
+
+    const message: string = payload?.message || ""
+
+    if (!response.ok || payload?.error) {
+      if (response.status === 404 || /not\s*found/i.test(message)) {
+        console.log("No bulk tickets for this event yet:", message || response.status)
+        return []
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("Your session has expired. Please sign in again.")
+      }
+      throw new Error(message || `Failed to load bulk tickets (HTTP ${response.status})`)
+    }
+
+    const data = payload?.data
+    if (Array.isArray(data?.EventBulkTicketsData)) return data.EventBulkTicketsData
+    if (Array.isArray(data)) return data
+    return []
+  }
+
   const fetchBulkTickets = async () => {
     try {
       setLoading(true)
       const authToken = getValidToken()
       if (!user || !authToken) return
-
-      console.log("Fetching bulk tickets for eventId:", eventId)
 
       const bulkTicketsPayload = {
         event_id: eventId
@@ -911,35 +967,15 @@ export default function TicketsPage() {
 
       console.log("Bulk tickets response status:", bulkTicketsResponse.status)
 
-      if (bulkTicketsResponse.ok) {
-        const bulkData = await bulkTicketsResponse.json()
-        console.log("Bulk tickets response data:", JSON.stringify(bulkData, null, 2))
-        
-        if (!bulkData.error) {
-          // Handle the correct response structure with EventBulkTicketsData
-          if (bulkData.data && bulkData.data.EventBulkTicketsData) {
-            console.log("Using bulk tickets structure - EventBulkTicketsData")
-            console.log("EventBulkTicketsData length:", bulkData.data.EventBulkTicketsData.length)
-            if (bulkData.data.EventBulkTicketsData.length > 0) {
-              console.log("First bulk ticket sample:", JSON.stringify(bulkData.data.EventBulkTicketsData[0], null, 2))
-            }
-            setBulkTickets(bulkData.data.EventBulkTicketsData || [])
-          } else {
-            console.log("Using old bulk tickets structure - direct data")
-            setBulkTickets(bulkData.data || [])
-          }
-        } else {
-          console.error("Bulk tickets API returned error:", bulkData)
-        }
-      } else {
-        const errorText = await bulkTicketsResponse.text()
-        console.error("Bulk tickets API call failed:", bulkTicketsResponse.status, errorText)
-      }
+      const tickets = await parseBulkTicketsResponse(bulkTicketsResponse)
+      console.log("Bulk tickets loaded:", tickets.length)
+      setBulkTickets(tickets)
     } catch (error) {
       console.error("Error fetching bulk tickets:", error)
+      setBulkTickets([])
       toast({
         title: "Error",
-        description: "Failed to load bulk tickets",
+        description: error instanceof Error ? error.message : "Failed to load bulk tickets",
         variant: "destructive",
       })
     } finally {
@@ -953,8 +989,6 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      console.log("Fetching filtered bulk tickets for eventId:", eventId)
-      
       // Build filter payload for bulk tickets
       const filterPayload: any = {
         event_id: eventId,
@@ -968,7 +1002,7 @@ export default function TicketsPage() {
 
       console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
-      const response = await fetch(`${BASE_URL}/eventbulktickets/getBulkTicketsOfEvent`, {
+      const response = await fetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -979,36 +1013,15 @@ export default function TicketsPage() {
 
       console.log("Bulk Filter API response status:", response.status)
 
-      if (response.ok) {
-        const data = await response.json()
-        console.log("Bulk Filter API response data:", JSON.stringify(data, null, 2))
-        
-        if (!data.error && data.data) {
-          // Handle response structure for bulk tickets
-          const bulkTicketsData = data.data.EventBulkTicketsData || data.data || []
-          console.log("Filtered bulk tickets count:", bulkTicketsData.length)
-          if (bulkTicketsData.length > 0) {
-            console.log("First filtered bulk ticket sample:", JSON.stringify(bulkTicketsData[0], null, 2))
-          }
-          setBulkTickets(bulkTicketsData)
-        } else {
-          console.error("Bulk Filter API returned error:", data)
-          setBulkTickets([])
-        }
-      } else {
-        const errorText = await response.text()
-        console.error("Bulk Filter API call failed:", response.status, errorText)
-        toast({
-          title: "Error",
-          description: "Failed to load filtered bulk tickets",
-          variant: "destructive",
-        })
-      }
+      const tickets = await parseBulkTicketsResponse(response)
+      console.log("Filtered bulk tickets count:", tickets.length)
+      setBulkTickets(tickets)
     } catch (error) {
       console.error("Error fetching filtered bulk tickets:", error)
+      setBulkTickets([])
       toast({
         title: "Error",
-        description: "Failed to load filtered bulk tickets",
+        description: error instanceof Error ? error.message : "Failed to load filtered bulk tickets",
         variant: "destructive",
       })
     } finally {
@@ -1264,11 +1277,11 @@ export default function TicketsPage() {
         return
       }
       
-      // Validate bulk ticket quantity limit (maximum 20 tickets per booking)
-      if (activeTab === "bulk" && bulkFormData.TotalQuantity > 20) {
+      // Validate bulk ticket quantity limit against the backend's own cap
+      if (activeTab === "bulk" && bulkFormData.TotalQuantity > MAX_BULK_TICKETS_PER_BATCH) {
         toast({
           title: "Validation Error",
-          description: "Maximum 20 tickets can be booked in one transaction.",
+          description: `Maximum ${MAX_BULK_TICKETS_PER_BATCH} tickets can be booked in one transaction.`,
           variant: "destructive",
         })
         setBulkTicketCreating(false)
@@ -1323,10 +1336,10 @@ export default function TicketsPage() {
       } else {
         payload = {
           event_id: eventId,
-          TicketName: bulkFormData.TicketName,
-          CustomerName: bulkFormData.CustomerName,
-          PhoneNumber: bulkFormData.PhoneNumber,
-          Email: bulkFormData.Email,
+          TicketName: bulkFormData.TicketName.trim(),
+          CustomerName: bulkFormData.CustomerName.trim().replace(/\s+/g, " "),
+          PhoneNumber: bulkFormData.PhoneNumber.trim(),
+          Email: bulkFormData.Email.trim(),
           EventDateTime_id: bulkFormData.EventDateTime_id,
           Quantity: bulkFormData.TotalQuantity.toString(),
           Price: bulkFormData.TicketPrice.toString(),
@@ -1559,10 +1572,10 @@ export default function TicketsPage() {
           return
         }
         
-        if (quantity > 20) {
+        if (quantity > MAX_BULK_TICKETS_PER_BATCH) {
           toast({
             title: "Validation Error",
-            description: "Bulk ticket quantity cannot exceed 20",
+            description: `Bulk ticket quantity cannot exceed ${MAX_BULK_TICKETS_PER_BATCH}`,
             variant: "destructive",
           })
           setLoading(false)
@@ -2754,17 +2767,17 @@ export default function TicketsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="totalQuantity">Total Quantity* (Max: 20)</Label>
+                    <Label htmlFor="totalQuantity">Total Quantity* (Max: {MAX_BULK_TICKETS_PER_BATCH})</Label>
                     <Input
                       id="totalQuantity"
                       type="number"
                       min="1"
-                      max="20"
+                      max={MAX_BULK_TICKETS_PER_BATCH}
                       value={bulkFormData.TotalQuantity}
                       onChange={(e) => setBulkFormData(prev => ({ ...prev, TotalQuantity: parseInt(e.target.value) || 0 }))}
                       required
                     />
-                    <p className="text-xs text-muted-foreground">Maximum 20 tickets can be booked per transaction</p>
+                    <p className="text-xs text-muted-foreground">Maximum {MAX_BULK_TICKETS_PER_BATCH} tickets can be booked per transaction</p>
                   </div>
 
                   <div className="space-y-2">
@@ -2792,13 +2805,19 @@ export default function TicketsPage() {
                 </Button>
                 <Button
                   onClick={handleCreateTicket}
-                  disabled={bulkTicketCreating || !bulkFormData.TicketName || !bulkFormData.CustomerName || !bulkFormData.PhoneNumber || !bulkFormData.Email || !bulkFormData.EventDateTime_id || !bulkFormData.TotalQuantity || bulkFormData.TotalQuantity < 1 || bulkFormData.TotalQuantity > 20 || !bulkFormData.TicketPrice}
+                  disabled={bulkTicketCreating || bulkFormIssues.length > 0}
                 >
                   {bulkTicketCreating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   {bulkTicketCreating ? "Creating Bulk Ticket..." : "Create Bulk Ticket"}
                 </Button>
               </div>
               
+              {!bulkTicketCreating && bulkFormIssues.length > 0 && (
+                <p className="text-xs text-muted-foreground text-right">
+                  Still needed: {bulkFormIssues.join(", ")}
+                </p>
+              )}
+
               {bulkTicketCreating && (
                 <div className="text-sm text-muted-foreground text-center p-4 bg-blue-50 rounded-lg">
                   <p>Creating bulk tickets and sending confirmation emails...</p>

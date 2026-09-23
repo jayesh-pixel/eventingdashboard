@@ -144,6 +144,11 @@ export function formatDate(dateString: string): string {
  * and the formatters below always render it in UTC, so what was entered on the
  * create-event screen is what every screen displays.
  */
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+}
+
 export function parseEventDateTime(value?: string | number | Date | null): Date | null {
   if (value === null || value === undefined || value === "") return null
 
@@ -191,6 +196,17 @@ export function parseEventDateTime(value?: string | number | Date | null): Date 
     )
   }
 
+  // "12 Feb,2025" - the shape the API's FormatEventDateTimeForWebsite helper
+  // emits for TicketDate. new Date() reads it as local midnight, which in IST is
+  // 18:30 the previous day, so formatting it back in UTC printed "11 Feb 2025".
+  const dayMonthYear = raw.match(/^(\d{1,2})\s+([A-Za-z]{3,})\s*,\s*(\d{4})$/)
+  if (dayMonthYear) {
+    const month = MONTH_INDEX[dayMonthYear[2].slice(0, 3).toLowerCase()]
+    if (month !== undefined) {
+      return new Date(Date.UTC(Number(dayMonthYear[3]), month, Number(dayMonthYear[1])))
+    }
+  }
+
   const parsed = new Date(raw)
   return Number.isNaN(parsed.getTime()) ? null : parsed
 }
@@ -225,4 +241,17 @@ export function formatEventDateTime(
   const parsed = parseEventDateTime(value)
   if (!parsed) return "N/A"
   return `${formatEventDate(parsed, undefined, locale)}, ${formatEventTime(parsed, undefined, locale)}`
+}
+
+/**
+ * Collapse stray whitespace in a value used for searching or matching.
+ *
+ * A booking saved with a padded customer name - " Eventing Club LLP " - or a
+ * keyword typed with a leading/trailing space was missed by both the API search
+ * (`searchkeyword`) and the client-side filter, so the row looked absent from
+ * the booking table until the exact spacing was reproduced.
+ */
+export function normalizeSearchText(value: unknown): string {
+  if (value === null || value === undefined) return ""
+  return String(value).replace(/\s+/g, " ").trim()
 }

@@ -24,9 +24,11 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
-import { formatEventDate } from "@/lib/utils"
+import { formatEventDate, normalizeSearchText } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
-import { promoterEndPointPannel } from "@/lib/api-endpoints"
+import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { getNumericRole } from "@/lib/role-mapping"
+import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
 import { getValidToken } from "@/lib/token-utils"
 import { useRouter } from "next/navigation"
 import type { UserRole } from "@/lib/navigation"
@@ -46,6 +48,11 @@ interface EventReportPageProps {
   params: { role: UserRole; eventId: string } | Promise<{ role: UserRole; eventId: string }>
 }
 
+// The organizer/superadmin bookings endpoint is server-paginated; these bound how much
+// of it the report pulls in one go.
+const REPORT_PAGE_SIZE = 200
+const MAX_REPORT_PAGES = 25
+
 const BookingTypeOptions = [
   { id: 1, value: 1, text: "Summary Booking" },
   { id: 2, value: 2, text: "Transaction Booking" },
@@ -64,6 +71,31 @@ export default function EventReportPage({ params }: EventReportPageProps) {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
+
+  // This report used to call the promoter-only endpoints for every role. For an
+  // organizer or superadmin that meant the transaction report only ever contained the
+  // bookings made by one promoter id (their own user id), which is why the report
+  // totalled fewer bookings than the event's Bookings tab. Each role now talks to the
+  // endpoint that matches it, so both screens query the same set.
+  const isPromoter = (role as UserRole) === "promoter"
+
+  const scopePayload = React.useCallback(() => {
+    if (isPromoter) {
+      return { promoter_id: user?.user_id, event_id: eventId }
+    }
+
+    const payload: Record<string, any> = {
+      AdminRole: getNumericRole(role as UserRole),
+      user_id: user?.user_id,
+      event_id: eventId,
+    }
+
+    if ((role as UserRole) === "organizer" && user?.user_id) {
+      payload.organizer_id = user.user_id
+    }
+
+    return payload
+  }, [eventId, isPromoter, role, user])
 
   // State management
   const [loading, setLoading] = React.useState(true)
@@ -102,13 +134,12 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       const authToken = getValidToken()
       if (!user || !authToken || !eventId) return
 
-      const payload = {
-        promoter_id: user.user_id,
-        event_id: eventId,
-      }
+      const payload = scopePayload()
 
       const response = await fetch(
-        promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID,
+        isPromoter
+          ? promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
+          : organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID,
         {
           method: "POST",
           headers: {
@@ -140,6 +171,77 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     }
   }
 
+  // Pulls the event's transaction rows for the current role. The organizer/superadmin
+  // endpoint is server-paginated, so every page is collected - a single page of results
+  // was another reason the report undercounted against the Bookings tab.
+  const fetchTransactionRows = React.useCallback(
+    async (searchKeyword?: string): Promise<any[]> => {
+      const authToken = getValidToken()
+      if (!user || !authToken || !eventId) return []
+
+      const basePayload: Record<string, any> = scopePayload()
+      if (searchKeyword) {
+        basePayload[isPromoter ? "searchKeyword" : "searchkeyword"] = searchKeyword
+      }
+
+      const endpoint = isPromoter
+        ? promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
+        : organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+
+      const post = (payload: Record<string, any>) =>
+        fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        })
+
+      const extract = (data: any): any[] =>
+        Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data?.data?.latestBookingData)
+            ? data.data.latestBookingData
+            : []
+
+      if (isPromoter) {
+        const response = await post(basePayload)
+        if (response.status === 404) return []
+        if (!response.ok) throw new Error("Failed to fetch transaction booking data")
+        return extract(await response.json())
+      }
+
+      const firstPayload = { ...basePayload, page: "1", limit: REPORT_PAGE_SIZE.toString() }
+      const response = await post(firstPayload)
+      if (response.status === 404) return []
+      if (!response.ok) throw new Error("Failed to fetch transaction booking data")
+
+      const firstData = await response.json()
+      let rows = extract(firstData)
+
+      const totalPagesFromApi = Number(firstData?.data?.totalPages) || 1
+      const remainingPages = Math.min(totalPagesFromApi, MAX_REPORT_PAGES) - 1
+
+      if (remainingPages > 0) {
+        const pages = await Promise.all(
+          Array.from({ length: remainingPages }, (_, index) =>
+            post({ ...firstPayload, page: (index + 2).toString() })
+              .then((pageResponse) => (pageResponse.ok ? pageResponse.json() : null))
+              .catch(() => null)
+          )
+        )
+
+        for (const pageData of pages) {
+          if (pageData) rows = rows.concat(extract(pageData))
+        }
+      }
+
+      return rows
+    },
+    [eventId, isPromoter, scopePayload, user]
+  )
+
   // Get transaction booking data
   const getAllTransactionBookingData = async () => {
     try {
@@ -147,30 +249,9 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       const authToken = getValidToken()
       if (!user || !authToken || !eventId) return
 
-      const payload = {
-        promoter_id: user.user_id,
-        event_id: eventId,
-      }
-
-      const response = await fetch(
-        promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${authToken}`,
-          },
-          body: JSON.stringify(payload),
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        setAllTransactionBookingData(data.data || [])
-        setOriginalData(data.data || [])
-      } else {
-        throw new Error("Failed to fetch transaction booking data")
-      }
+      const rows = await fetchTransactionRows()
+      setAllTransactionBookingData(rows)
+      setOriginalData(rows)
     } catch (error) {
       console.error("Error fetching transaction data:", error)
       toast({
@@ -228,13 +309,14 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       }, {})
 
       const payload = {
-        event_id: eventId,
-        promoter_id: user.user_id,
+        ...scopePayload(),
         ...filteredParams,
       }
 
       const response = await fetch(
-        promoterEndPointPannel.FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER,
+        isPromoter
+          ? promoterEndPointPannel.FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER
+          : organizerEndpoint.FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER,
         {
           method: "POST",
           headers: {
@@ -247,7 +329,12 @@ export default function EventReportPage({ params }: EventReportPageProps) {
 
       if (response.ok) {
         const data = await response.json()
-        setEventTicketsData(data.data || [])
+        // The promoter endpoint returns the rows directly, the organizer one nests
+        // them under processedTicketsData alongside its totals.
+        const filteredRows = Array.isArray(data.data)
+          ? data.data
+          : data.data?.processedTicketsData || []
+        setEventTicketsData(filteredRows)
         setFilterdDatePayload(payload)
         toast({
           title: "Success",
@@ -271,92 +358,70 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     }
   }
 
-  // Download report handler
+  // Download report handler.
+  //
+  // Both tabs are written in the browser from the rows already on screen. The server's
+  // download endpoints only narrow their query when the request body spells out the
+  // scope, so one lost field turned a per-event report into a dump of every booking on
+  // the platform. Building the file here removes that possibility - it can only ever
+  // contain what this report already fetched for this user and this event.
   const downloadReportHandler = async () => {
     try {
       setDownloadLoading(true)
-      const authToken = getValidToken()
-      if (!user || !authToken || !eventId) return
 
-      let endpoint: string
-      let payload: any
+      const isSummary = selectedBookingType === 1
+      const rows = isSummary ? transformedSummaryData : transformedTransactionData
 
-      if (selectedBookingType === 1) {
-        if (eventTicketsData.length === 0) {
-          toast({
-            title: "No Data",
-            description: "No Summary Booking data found for this event.",
-            variant: "destructive",
-          })
-          return
-        }
-
-        payload = {
-          promoter_id: user.user_id,
-          event_id: eventId,
-        }
-
-        if (storeFilterdDatePayload.ticketName) {
-          payload.ticketName = storeFilterdDatePayload.ticketName
-        }
-
-        if (storeFilterdDatePayload.eventDateTime_id) {
-          payload.eventDateTime_id = storeFilterdDatePayload.eventDateTime_id
-        }
-
-        endpoint = promoterEndPointPannel.DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING
-      } else {
-        if (allTransactionBookingData.length === 0) {
-          toast({
-            title: "No Data",
-            description: "No transaction data found for this event.",
-            variant: "destructive",
-          })
-          return
-        }
-
-        payload = {
-          promoter_id: user.user_id,
-          event_id: eventId,
-        }
-
-        if (searchTerm && searchTerm.length >= 3) {
-          payload.searchKeyword = searchTerm
-        }
-
-        endpoint = promoterEndPointPannel.DOWNLOAD_EXECEL_REPORT_OF_TRANSACTION_BOOKING
-      }
-
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        const link = document.createElement("a")
-        link.href = url
-        link.setAttribute(
-          "download",
-          `${selectedBookingType === 1 ? "Summary Report" : "Transaction Report"}_Report.xlsx`
-        )
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        window.URL.revokeObjectURL(url)
-        
+      if (rows.length === 0) {
         toast({
-          title: "Success",
-          description: "Report downloaded successfully",
+          title: "No Data",
+          description: isSummary
+            ? "No Summary Booking data found for this event."
+            : "No transaction data found for this event.",
+          variant: "destructive",
         })
-      } else {
-        throw new Error("Failed to download report")
+        return
       }
+
+      const summaryColumns: ExportColumn<any>[] = [
+        { header: "Ticket Name", value: (row) => row.ticketName },
+        { header: "Quantity Sold", value: (row) => row.quantity },
+        { header: "Ticket Price", value: (row) => row.ticketPrice },
+        { header: "Ticket Date", value: (row) => formatDate(row.ticketDate) },
+        { header: "Total Amount", value: (row) => row.totalAmount },
+      ]
+
+      const transactionColumns: ExportColumn<any>[] = [
+        { header: "Customer Name", value: (row) => row.customerName },
+        { header: "Booking ID", value: (row) => row.Booking_id },
+        { header: "Phone Number", value: (row) => row.phoneNumber },
+        { header: "Email", value: (row) => row.customerEmail },
+        { header: "Booking Date & Time", value: (row) => row.BookingDateTime },
+        { header: "Event Name", value: (row) => row.eventName },
+        { header: "Ticket Date", value: (row) => formatDate(row.ticketDate) },
+        { header: "City", value: (row) => row.city },
+        { header: "Venue", value: (row) => row.venue },
+        { header: "Ticket Name", value: (row) => row.ticketName },
+        { header: "Ticket Type", value: (row) => row.ticketType },
+        { header: "Quantity", value: (row) => row.quantity },
+        { header: "Check In", value: (row) => row.checkIn ?? 0 },
+        { header: "Scanned By", value: (row) => row.scannedBy },
+        { header: "Ticket Price", value: (row) => row.ticketPrice },
+        { header: "Total Amount", value: (row) => row.totalAmount },
+        { header: "Status", value: (row) => row.bookingStatus },
+      ]
+
+      downloadBookingsWorkbook(
+        rows,
+        isSummary ? summaryColumns : transactionColumns,
+        `${isSummary ? "summary" : "transaction"}-report-${eventId}-${exportTimestamp()}.xlsx`,
+        isSummary ? "Summary Report" : "Transaction Report"
+      )
+
+      toast({
+        title: "Success",
+        description: `Exported ${rows.length} row${rows.length === 1 ? "" : "s"}`,
+      })
     } catch (error) {
       console.error("Download error:", error)
       toast({
@@ -406,30 +471,9 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         const authToken = getValidToken()
         if (!user || !authToken || !eventId) return
 
-        const payload = {
-          promoter_id: user.user_id,
-          event_id: eventId,
-          searchKeyword: debouncedSearchTerm,
-        }
-
-        const response = await fetch(
-          promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${authToken}`,
-            },
-            body: JSON.stringify(payload),
-          }
+        setAllTransactionBookingData(
+          await fetchTransactionRows(normalizeSearchText(debouncedSearchTerm))
         )
-
-        if (response.ok) {
-          const data = await response.json()
-          setAllTransactionBookingData(data.data || [])
-        } else {
-          throw new Error("Failed to search transaction data")
-        }
       } catch (error) {
         console.error("Error searching transaction data:", error)
         toast({

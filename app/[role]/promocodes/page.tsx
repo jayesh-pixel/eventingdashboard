@@ -491,8 +491,8 @@ export default function PromocodesPage() {
           <p className="text-muted-foreground">Manage discount codes and promotional offers</p>
         </div>
         <Dialog open={isCreateDialogOpen} onOpenChange={(open) => {
+          setIsCreateDialogOpen(open)
           if (!open) {
-            setIsCreateDialogOpen(false)
             resetForm()
           }
         }}>
@@ -843,16 +843,20 @@ export default function PromocodesPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleToggleStatus(promocode)}
-                            disabled={submitting}
-                            className={promocode.status === PromocodeStatus.Active ? "text-orange-600" : "text-green-600"}
-                          >
-                            {submitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
-                            {promocode.status === PromocodeStatus.Active ? "Disable" : "Enable"}
-                          </Button>
+                          {promocode.status === PromocodeStatus.Expired ? (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleToggleStatus(promocode)}
+                              disabled={submitting}
+                              className={promocode.status === PromocodeStatus.Active ? "text-orange-600" : "text-green-600"}
+                            >
+                              {submitting && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                              {promocode.status === PromocodeStatus.Active ? "Disable" : "Enable"}
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

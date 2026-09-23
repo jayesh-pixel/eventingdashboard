@@ -19,7 +19,8 @@ import {
 } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/navigation"
 import { useAuth } from "@/lib/auth-context"
-import { formatEventDate } from "@/lib/utils"
+import { formatEventDate, formatEventDateTime, parseEventDateTime } from "@/lib/utils"
+import { getNumericRole } from "@/lib/role-mapping"
 import { useToast } from "@/hooks/use-toast"
 import { promoterEndpoint, promoterEndPointPannel, eventEndPoint, organizerEndpoint } from "@/lib/api-endpoints"
 import {
@@ -242,14 +243,11 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("🚨 DEBUG: Using promoter endpoint:", apiEndpoint)
       console.log("🚨 DEBUG: Should be getEventsByNameandDateTime!")
       
-      // Determine the correct AdminRole based on user role
-      let adminRole = 1 // Default to superadmin
-      if ((role as UserRole) === "promoter") {
-        adminRole = 4 // Promoter role ID
-      } else if ((role as UserRole) === "organizer") {
-        adminRole = 2 // Organizer role ID  
-      }
-      
+      // Backend AdminRoles: SuperAdmin=1, Employee=2, Organizer=3, Promoter=4.
+      // An organizer used to be sent as 2, so the API looked the id up in the
+      // Employee collection and every organizer search came back "Not Found".
+      const adminRole = getNumericRole(role as UserRole)
+
       requestPayload = {
         AdminRole: adminRole,
         user_id: user!.user_id,
@@ -477,11 +475,8 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         }
       } else {
         // For superadmin/organizer - determine AdminRole based on role
-        let adminRole = 1 // Default to superadmin
-        if ((role as UserRole) === "organizer") {
-          adminRole = 3 // Organizer role ID (AdminRoles.Organizer = 3)
-        }
-        
+        const adminRole = getNumericRole(role as UserRole)
+
         if (reportType === "Summary") {
           apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
           requestPayload = {
@@ -742,7 +737,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           city: item.EventCityName || item.city || item.City || item.event_city || "N/A",
           venue: item.EventVenueName || item.venue || item.Venue || item.event_venue || "N/A",
           checkIn: Number(item.Check_In ?? item.CheckIn ?? item.checkIn ?? item.CheckedIn ?? 0),
-          scannedBy: item.ScannedBy || item.scannedBy || item.scanned_by || item.ScannedByName || "N/A",
+          scannedBy: item.ScannerUserName || item.ScannedBy || item.scannedBy || item.scanned_by || item.ScannedByName || "N/A",
           quantity: Number(item.TicketQuantity || item.quantity || item.Quantity || 0),
           ticketName: item.TicketName || item.ticketName || item.ticket_name || "N/A",
           ticketType: item.EventTicketType || item.ticketType || item.ticket_type || "Standard",
@@ -755,11 +750,12 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         
         // Sort transaction data by bookingDate (latest first)
         const sortedTransactionData = transactionData.sort((a: any, b: any) => {
-          const dateA = new Date(a.bookingDate).getTime()
-          const dateB = new Date(b.bookingDate).getTime()
-          if (isNaN(dateA) && isNaN(dateB)) return 0
-          if (isNaN(dateA)) return 1
-          if (isNaN(dateB)) return -1
+          // BookingDateTime is "DD-MM-YYYY HH:mm:ss", which new Date() cannot parse.
+          const dateA = parseEventDateTime(a.bookingDate)?.getTime()
+          const dateB = parseEventDateTime(b.bookingDate)?.getTime()
+          if (dateA === undefined && dateB === undefined) return 0
+          if (dateA === undefined) return 1
+          if (dateB === undefined) return -1
           return dateB - dateA // Descending order (latest first)
         })
           
@@ -999,7 +995,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell className="font-medium">{item.bookingId}</TableCell>
                             <TableCell>{item.phoneNumber || "N/A"}</TableCell>
                             <TableCell>{item.email || "N/A"}</TableCell>
-                            <TableCell>{item.bookingDate && item.bookingDate !== "N/A" ? new Date(item.bookingDate).toLocaleString() : "N/A"}</TableCell>
+                            <TableCell>{formatEventDateTime(item.bookingDate)}</TableCell>
                             <TableCell>{item.eventName || "N/A"}</TableCell>
                             <TableCell>{item.ticketDate && item.ticketDate !== "N/A" ? formatEventDate(item.ticketDate, undefined, []) : "N/A"}</TableCell>
                             <TableCell>{item.source || "Online"}</TableCell>
@@ -1100,7 +1096,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                   <div>
                     <Label className="text-sm font-medium">Booking Date & Time</Label>
                     <div className="p-2 bg-muted rounded text-sm">
-                      {selectedTransaction.bookingDate ? new Date(selectedTransaction.bookingDate).toLocaleDateString() : "N/A"}
+                      {formatEventDateTime(selectedTransaction.bookingDate)}
                     </div>
                   </div>
                   <div>

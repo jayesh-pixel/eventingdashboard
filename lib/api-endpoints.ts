@@ -120,6 +120,8 @@ export const organizerEndpoint = {
     EVENT_TICKETS_BOOKING_BASE + "/downloadPromoterLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXCEL_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
     EVENT_TICKETS_BOOKING_BASE + "/downloadExcelAllLatestBookingsForSuperAdminOrganizer",
+  DOWNLOAD_EXCEL_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER:
+    EVENT_TICKETS_BOOKING_BASE + "/downloadExcelOnlineLatestBookingsForSuperAdminOrganizer",
   DOWNLOAD_EXECEL_REPORT_OF_SUMMARY_BOOKING_FOR_ORGANIZER_ID:
     EVENT_TICKETS_BOOKING_BASE + "/getEventSummaryExcelReportbyFilterforSuperAdminOrganizer",
   ORGANIZER_SALES_DATA_URL: BASE_URL + "/organizer/salesData",

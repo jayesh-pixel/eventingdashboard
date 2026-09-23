@@ -13,7 +13,7 @@ declare global {
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { formatEventDate, formatEventTime, parseEventDateTime } from "@/lib/utils";
+import { formatEventDate, formatEventTime, normalizeSearchText, parseEventDateTime } from "@/lib/utils";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // UI Components (shadcn/ui) & Icons
@@ -144,6 +144,10 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   // ────────────────────────────────────────────────────────────────────────────
   const [loading, setLoading] = React.useState(true);
   const [selectedDateId, setSelectedDateId] = React.useState<string | null>(null);
+  // Multi-day events can also sell a season pass. It is offered as an extra tab
+  // next to the dates; picking it shows the season pass tickets instead of the
+  // tickets for a single date.
+  const [selectionMode, setSelectionMode] = React.useState<"date" | "season">("date");
   const [dates, setDates] = React.useState<EventDateTime[]>([]);
   const [tickets, setTickets] = React.useState<TicketData[]>([]);
   const [seasonPasses, setSeasonPasses] = React.useState<TicketData[]>([]);
@@ -279,6 +283,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   // ────────────────────────────────────────────────────────────────────────────
   const handleDateClick = async (dateId: string) => {
     setSelectedDateId(dateId);
+    setSelectionMode("date");
     setCounts({});
     setShowCount({});
     try {
@@ -309,6 +314,16 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       console.error(err);
       toast({ title: "Error", description: "Could not load tickets", variant: "destructive" });
     }
+  };
+
+
+  // The Season Pass tab sits next to the dates but is not a date. Keep whatever
+  // date was picked (the booking payload still needs one) and swap the ticket
+  // list for the passes.
+  const handleSeasonPassClick = () => {
+    setSelectionMode("season");
+    setCounts({});
+    setShowCount({});
   };
 
   const handleIncrease = (id: string) => {
@@ -388,15 +403,15 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     const errors: Record<string, string> = {};
     if (!customer.FullName.trim()) errors.FullName = "Full name is required";
     if (!customer.PhoneNo.trim()) errors.PhoneNo = "Phone number is required";
-    else if (customer.PhoneNo.length !== 10) errors.PhoneNo = "Phone number must be 10 digits";
+    else if (customer.PhoneNo.trim().length !== 10) errors.PhoneNo = "Phone number must be 10 digits";
     if (!customer.Email.trim()) errors.Email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.Email)) errors.Email = "Enter a valid email";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.Email.trim())) errors.Email = "Enter a valid email";
     if (customer.Age.trim()) {
       const age = parseInt(customer.Age, 10);
       if (isNaN(age) || age < 1 || age > 120) errors.Age = "Age should be 1–120";
     }
     if (customer.isWhatsApp === 0 && !customer.WhatsAppNo.trim()) errors.WhatsAppNo = "WhatsApp no. required";
-    else if (customer.isWhatsApp === 0 && customer.WhatsAppNo.length !== 10) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
+    else if (customer.isWhatsApp === 0 && customer.WhatsAppNo.trim().length !== 10) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -412,11 +427,21 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       const selectedTicket = selectableTickets.find((t) => counts[t._id] > 0);
       if (!selectedTicket) return;
 
-      // A season pass covers every date, so no date has to be picked for it;
-      // book it against the first date of the event.
+      // A season pass covers every date, so its ticket document carries no
+      // EventDateTime_id. Sending one makes the backend's stock filter match
+      // nothing, which surfaces as "409 Insufficient Tickets Available" - so the
+      // field is left out of the payload below for passes. The id is still
+      // resolved here because the confirmation screen labels the booking with it.
       const isSeasonPass = isSeasonPassTicket(selectedTicket._id);
       const bookingDateId = isSeasonPass ? selectedDateId ?? dates[0]?._id : selectedDateId;
-      if (!bookingDateId) return;
+      if (!isSeasonPass && !bookingDateId) return;
+
+      // Stray spaces around the typed name/email are stored verbatim by the
+      // backend, and a booking saved as " Eventing Club LLP " then goes missing
+      // from the booking table until the same spacing is searched for.
+      const customerName = normalizeSearchText(customer.FullName);
+      const customerEmail = customer.Email.trim();
+      const customerPhone = customer.PhoneNo.trim();
 
       const payload: any = {
         promoter_id: user.user_id,
@@ -424,17 +449,22 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         EventTicketType: String(
           selectedTicket.TicketType || (isSeasonPass ? TicketType.SeasonPass : TicketType.SingleDay)
         ),
-        EventDateTime_id: bookingDateId,
         EventTicket_id: selectedTicket._id,
-        CustomerName: customer.FullName,
-        PhoneNumber: customer.PhoneNo,
+        CustomerName: customerName,
+        PhoneNumber: customerPhone,
         isWhatsAppNumberisSame: customer.isWhatsApp,
-        Email: customer.Email,
+        Email: customerEmail,
         TicketQuantity: totalTickets,
       }
 
+      // Only a date-bound ticket has an EventDateTime_id on the backend; a
+      // season pass must be booked without one.
+      if (!isSeasonPass && bookingDateId) {
+        payload.EventDateTime_id = bookingDateId
+      }
+
       // Only send WhatsAppNumber if it's a valid 10-digit number
-      const whatsappNum = customer.isWhatsApp === 1 ? customer.PhoneNo : (customer.WhatsAppNo || customer.PhoneNo)
+      const whatsappNum = customer.isWhatsApp === 1 ? customerPhone : (customer.WhatsAppNo.trim() || customerPhone)
       if (whatsappNum && /^\d{10}$/.test(whatsappNum)) {
         payload.WhatsAppNumber = whatsappNum
       }
@@ -491,9 +521,9 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            CustomerName: customer.FullName,
-            Email: customer.Email,
-            MobileNumber: customer.PhoneNo,
+            CustomerName: customerName,
+            Email: customerEmail,
+            MobileNumber: customerPhone,
             createduser_id: user.user_id,
           }),
         });
@@ -896,7 +926,8 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 const f = formatDateBlock(d.EventStartDateTime);
                 if (!f) return null;
 
-                const selected = selectedDateId === d._id;
+                // The Season Pass tab and the dates share one selection.
+                const selected = selectionMode === "date" && selectedDateId === d._id;
                 return (
                   <div key={d._id} onClick={() => handleDateClick(d._id)} className={`cursor-pointer border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
                     <p className="text-sm font-semibold underline mb-1">{f.day}</p>
@@ -906,40 +937,56 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                   </div>
                 );
               })}
+
+              {/* Season Pass sits alongside the dates as its own tab: it covers
+                  every date, so it is picked instead of a single date. */}
+              {seasonPasses.length > 0 && (() => {
+                const selected = selectionMode === "season";
+                return (
+                  <div onClick={handleSeasonPassClick} className={`cursor-pointer border-2 border-dashed rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
+                    <p className="text-sm font-semibold underline mb-1">Season Pass</p>
+                    <p className="text-xs opacity-80 mb-1">All {dates.length} days</p>
+                    <span className={`inline-flex items-center justify-center text-lg font-bold rounded-full px-3 py-1 ${selected ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
+                      <CalendarDays className="h-5 w-5" />
+                    </span>
+                    <p className="text-xs opacity-80 mt-1">{formatDateRange(dates)}</p>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         )}
 
-        {/* Season Pass selection – multi-day events only. A season pass covers
-            every date, so it is offered independently of the date picker. */}
-        {isMultiDayEvent && seasonPasses.length > 0 && (
-          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <CalendarDays className="h-5 w-5 text-primary" /> Season Pass
-                <Badge variant="secondary" className="ml-1">All {dates.length} days</Badge>
-              </CardTitle>
-              <CardDescription>
-                One pass valid for every day of this event – no date selection needed
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              {seasonPasses.map((sp) => renderTicketRow(sp, true))}
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Ticket selection */}
-        {selectedDateId && (
+        {/* Ticket selection - per-date tickets, or the season passes when the
+            Season Pass tab is active. */}
+        {(selectionMode === "season" ? seasonPasses.length > 0 : !!selectedDateId) && (
           <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
             <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
               <CardTitle className="flex items-center gap-2 text-xl">
                 <Users className="h-5 w-5 text-primary" />
-                {isMultiDayEvent && seasonPasses.length > 0 ? "Single Day Tickets" : "Available Tickets"}
+                {selectionMode === "season"
+                  ? "Season Pass Tickets"
+                  : isMultiDayEvent && seasonPasses.length > 0
+                  ? "Single Day Tickets"
+                  : "Available Tickets"}
+                {selectionMode === "season" && (
+                  <Badge variant="secondary" className="ml-1">All {dates.length} days</Badge>
+                )}
               </CardTitle>
+              {selectionMode === "season" && (
+                <CardDescription>
+                  One pass valid for every day of this event - no date selection needed
+                </CardDescription>
+              )}
             </CardHeader>
             <CardContent className="p-4 space-y-3">
-              {tickets.length === 0 ? (
+              {selectionMode === "season" ? (
+                seasonPasses.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No season pass available for this event</p>
+                ) : (
+                  seasonPasses.map((sp) => renderTicketRow(sp, true))
+                )
+              ) : tickets.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8">No tickets available for this date</p>
               ) : (
                 tickets.map((t) => renderTicketRow(t))

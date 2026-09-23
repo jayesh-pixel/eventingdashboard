@@ -14,7 +14,7 @@ import type { UserRole } from "@/lib/navigation"
 import { promoterEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
-import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { handleApiResponse, getApiErrorMessage, normalizeSearchText } from "@/lib/utils"
 import { SendDefaultPasswordMail, getNumericAdminRole } from "@/lib/api-constants"
 import {
   Pagination,
@@ -188,7 +188,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     return () => clearTimeout(timer)
   }, [searchTerm])
   // Fetch promoters data with pagination
-  const fetchPromoters = React.useCallback(async (page: number = 1, searchKeyword: string = "") => {
+  const fetchPromoters = React.useCallback(async (page: number = 1, rawSearchKeyword: string = "") => {
+    const searchKeyword = normalizeSearchText(rawSearchKeyword)
     if (!user) return
     
     setLoading(true)

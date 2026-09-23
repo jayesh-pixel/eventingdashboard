@@ -35,11 +35,12 @@ import {
 } from "@/components/ui/table"
 import { ArrowLeft, Download, Filter, Loader2, Search } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
-import { formatEventDate, parseEventDateTime } from "@/lib/utils"
+import { formatEventDate, normalizeSearchText, parseEventDateTime } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
 import { eventEndPoint, organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
 import { getNumericRole } from "@/lib/role-mapping"
 import { getValidToken } from "@/lib/token-utils"
 
@@ -92,6 +93,10 @@ interface SummaryDateOption {
 }
 
 const ITEMS_PER_PAGE = 10
+// Server page size used while pulling the event's full booking set, and a hard cap
+// so a very large event can never turn this into an unbounded fan-out.
+const SERVER_PAGE_SIZE = 200
+const MAX_SERVER_PAGES = 25
 const CONTROL_CLASS =
   "h-12 border-blue-100 bg-white text-base shadow-sm focus:ring-primary/30 focus-visible:ring-primary/30"
 const ICON_BUTTON_CLASS =
@@ -99,6 +104,29 @@ const ICON_BUTTON_CLASS =
 const TABLE_CARD_CLASS = "min-w-0 max-w-full overflow-hidden border-blue-100 shadow-sm"
 const TABLE_HEADER_CLASS = "bg-blue-50/80"
 const TABLE_HEAD_CLASS = "text-xs font-bold uppercase text-blue-950"
+
+// Export columns for this event's transaction rows, matching what the table renders.
+const EVENT_BOOKING_EXPORT_COLUMNS = (
+  formatDate: (value: any) => string,
+  formatDateTime: (value: any) => string
+): ExportColumn<any>[] => [
+  { header: "Name", value: (b) => b.customerName },
+  { header: "Booking ID", value: (b) => b.bookingId || b.Booking_id },
+  { header: "Phone No.", value: (b) => b.phoneNumber },
+  { header: "Email", value: (b) => b.customerEmail },
+  { header: "Booking Date & Time", value: (b) => formatDateTime(b.bookingDate) },
+  { header: "Event", value: (b) => b.eventName },
+  { header: "Ticket Date", value: (b) => formatDate(b.ticketDate) },
+  { header: "City", value: (b) => b.city },
+  { header: "Venue", value: (b) => b.venue },
+  { header: "Promoter Name", value: (b) => b.promoterName || b.PromoterName },
+  { header: "Quantity", value: (b) => b.quantity },
+  { header: "Check In", value: (b) => b.checkIn ?? 0 },
+  { header: "Ticket Name", value: (b) => b.ticketName },
+  { header: "Ticket Type", value: (b) => b.ticketType },
+  { header: "Ticket Price", value: (b) => b.ticketPrice },
+  { header: "Total Amount", value: (b) => b.totalAmount },
+]
 
 type BookingDataType = "transaction" | "summary"
 type BookingTab = "all" | "promoter" | "online" | "bulk"
@@ -573,8 +601,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
       const requestPayload: Record<string, any> = {
         event_id: eventId,
-        page: "1",
-        limit: "10",
       }
       const selectedDateRange = getSelectedDateRange()
 
@@ -598,14 +624,26 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         }
       }
 
-      const response = await fetch(apiEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(requestPayload),
-      })
+      const postPayload = (payload: Record<string, any>) =>
+        fetch(apiEndpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify(payload),
+        })
+
+      // Transaction endpoints are server-paginated. This page filters, totals and
+      // paginates on the client, so it needs the event's full booking set - asking for
+      // a single page of 10 was why events with more bookings showed a short table.
+      const isPaginated = !isPromoter && bookingDataType !== "summary"
+      if (isPaginated) {
+        requestPayload.page = "1"
+        requestPayload.limit = SERVER_PAGE_SIZE.toString()
+      }
+
+      const response = await postPayload(requestPayload)
 
       const data = await response.json().catch(() => null)
 
@@ -621,7 +659,28 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         throw new Error(data?.message || `HTTP error! status: ${response.status}`)
       }
 
-      const bookingsArray = extractBookingsArray(data)
+      let bookingsArray = extractBookingsArray(data)
+
+      if (isPaginated) {
+        const totalPagesFromApi = Number(data?.data?.totalPages ?? data?.totalPages) || 1
+        const remainingPages = Math.min(totalPagesFromApi, MAX_SERVER_PAGES) - 1
+
+        if (remainingPages > 0) {
+          const pageResponses = await Promise.all(
+            Array.from({ length: remainingPages }, (_, index) =>
+              postPayload({ ...requestPayload, page: (index + 2).toString() })
+                .then((pageResponse) => (pageResponse.ok ? pageResponse.json() : null))
+                .catch(() => null)
+            )
+          )
+
+          for (const pageData of pageResponses) {
+            if (pageData && !pageData.error) {
+              bookingsArray = bookingsArray.concat(extractBookingsArray(pageData))
+            }
+          }
+        }
+      }
       const eventBookings = bookingsArray.filter((booking) => {
         const rowEventId = getStringValue(booking.eventId, booking.event_id, booking.EventId, booking.Event_id)
         return !rowEventId || rowEventId === eventId
@@ -693,7 +752,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   }, [fetchEventPromoters, role])
 
   React.useEffect(() => {
-    const searchLower = searchTerm.trim().toLowerCase()
+    const searchLower = normalizeSearchText(searchTerm).toLowerCase()
     const selectedPromoter = promoters.find((promoter) => promoter.id === promoterFilter)
     const selectedPromoterName = selectedPromoter?.name.toLowerCase()
     const selectedDateRange = getSelectedDateRange()
@@ -713,7 +772,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
               booking.eventName,
               booking.ticketName,
               booking.promoterName,
-            ].some((field) => String(field || "").toLowerCase().includes(searchLower))
+            ].some((field) => normalizeSearchText(field).toLowerCase().includes(searchLower))
 
       const matchesDate =
         !selectedDateRange ||
@@ -767,43 +826,25 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     URL.revokeObjectURL(url)
   }
 
-  const getFilenameFromResponse = (response: Response, fallback: string) => {
-    const contentDisposition = response.headers.get("content-disposition")
-    const filenameMatch = contentDisposition?.match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i)
-    return filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallback
-  }
-
+  // The promoter report used to come from the server's download endpoint, which only
+  // narrows its query when the body spells out event_id/organizer_id - without them it
+  // returned every booking on the platform. The rows on this page are already scoped to
+  // this event, so the workbook is built from them instead.
   const downloadPromoterReport = async () => {
-    const authToken = getValidToken()
-    if (!user || !authToken) {
-      throw new Error("Please log in to download report")
-    }
-
-    const response = await fetch(organizerEndpoint.DOWNLOAD_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${authToken}`,
-      },
-      body: JSON.stringify({
-        AdminRole: getNumericRole(role as UserRole),
-        user_id: user.user_id,
-      }),
-    })
-
-    const contentType = response.headers.get("content-type") || ""
-
-    if (!response.ok || contentType.includes("application/json")) {
-      const errorData = await response.json().catch(() => null)
-      throw new Error(errorData?.message || `Download failed with status ${response.status}`)
-    }
-
-    const blob = await response.blob()
-    const filename = getFilenameFromResponse(
-      response,
-      `promoter-bookings-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+    const promoterRows = filteredBookings.filter(
+      (booking) => (booking.bookingChannel || "").toLowerCase() === "promoter"
     )
-    downloadBlob(blob, filename)
+
+    if (promoterRows.length === 0) {
+      throw new Error("There are no promoter bookings to export for the current filters.")
+    }
+
+    downloadBookingsWorkbook(
+      promoterRows,
+      EVENT_BOOKING_EXPORT_COLUMNS(formatDate, formatDateTime),
+      `promoter-bookings-${eventId}-${exportTimestamp()}.xlsx`,
+      "Promoter Bookings"
+    )
   }
 
   const exportToExcel = async () => {
@@ -918,15 +959,19 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
             <TableBody>
               {currentBookings.length === 0
                 ? renderEmptyRow(5)
-                : currentBookings.map((booking) => (
-                    <TableRow key={booking._id} className="hover:bg-blue-50/40">
+                : currentBookings.map((booking) => {
+                    const isCancelled = booking.bookingStatus === "2" || booking.bookingStatus === "Cancelled"
+
+                    return (
+                    <TableRow key={booking._id} className={isCancelled ? "bg-red-200 hover:bg-red-200" : "hover:bg-blue-50/40"}>
                       <TableCell className="font-semibold uppercase text-slate-950">{booking.ticketName || "N/A"}</TableCell>
                       <TableCell>{booking.quantity}</TableCell>
                       <TableCell>{booking.ticketPrice}</TableCell>
                       <TableCell>{formatDate(booking.ticketDate)}</TableCell>
                       <TableCell>{booking.totalAmount}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
             </TableBody>
           </Table>
         </div>

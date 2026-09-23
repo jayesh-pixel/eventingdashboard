@@ -20,13 +20,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Download, Filter, Loader2, AlertCircle, ChevronDown } from "lucide-react"
 import { useIsMobile } from "@/components/ui/use-mobile"
@@ -35,9 +28,19 @@ import type { Booking } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { getNumericRole } from "@/lib/role-mapping"
-import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
-import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { downloadBookingsWorkbook, exportTimestamp, fetchAllBookingPages, type ExportColumn } from "@/lib/booking-export"
+import {
+  eventEndPoint,
+  getallcityDataEndPoint,
+  organizerEndpoint,
+  promoterEndpoint,
+  promoterEndPointPannel,
+  venueEndPoint,
+} from "@/lib/api-endpoints"
+import { getValidToken } from "@/lib/token-utils"
+import { handleApiResponse, getApiErrorMessage, normalizeSearchText } from "@/lib/utils"
 import { BookingsTable, type BookingColumnKey } from "@/components/bookings-table"
+import { SearchableSelect } from "@/components/searchable-select"
 
 const ONLINE_TAB_COLUMNS: BookingColumnKey[] = [
   "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
@@ -86,7 +89,31 @@ interface BookingsPageProps {
   params: { role: UserRole } | Promise<{ role: UserRole }>}
 
 const ITEMS_PER_PAGE = 10
+// Matches `searchkeyword: Joi.string().min(3)` on the bookings endpoints.
+const MIN_SEARCH_LENGTH = 3
 type DateFilterOption = "all" | "today" | "yesterday" | "last7days" | "last1month" | "manual"
+
+// Bookings come back under a different key depending on which endpoint answered.
+const extractBookingsArray = (data: any): any[] => {
+  const container = data?.data ?? data
+
+  if (Array.isArray(container)) return container
+
+  for (const key of ["latestBookingData", "TicketsData", "SummaryBookingData", "BookingData"]) {
+    if (Array.isArray(container?.[key])) return container[key]
+  }
+
+  return []
+}
+
+type BookingScopeFilters = {
+  searchTerm?: string
+  cityName?: string
+  venueId?: string
+  eventId?: string
+  promoterId?: string
+  organizerId?: string
+}
 
 export default function BookingsPage({ params }: BookingsPageProps) {
   // Handle params which might be a Promise
@@ -107,6 +134,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
+  const [isExporting, setIsExporting] = React.useState(false)
   const [paginationMeta, setPaginationMeta] = React.useState({
     totalPages: 0,
     totalBookings: 0,
@@ -126,13 +154,28 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [manualEndDate, setManualEndDate] = React.useState("")
   const [cityFilter, setCityFilter] = React.useState("all")
   const [venueFilter, setVenueFilter] = React.useState("all")
-  const [eventNameFilter, setEventNameFilter] = React.useState("all")
+  const [eventFilter, setEventFilter] = React.useState("all")
   const [promoterFilter, setPromoterFilter] = React.useState("all")
   const [draftCityFilter, setDraftCityFilter] = React.useState("all")
   const [draftVenueFilter, setDraftVenueFilter] = React.useState("all")
-  const [draftEventNameFilter, setDraftEventNameFilter] = React.useState("all")
+  const [draftEventFilter, setDraftEventFilter] = React.useState("all")
   const [draftPromoterFilter, setDraftPromoterFilter] = React.useState("all")
+  const [organizerFilter, setOrganizerFilter] = React.useState("all")
+  const [draftOrganizerFilter, setDraftOrganizerFilter] = React.useState("all")
   const [isFilterDialogOpen, setIsFilterDialogOpen] = React.useState(false)
+
+  // Filter dropdown sources loaded from the dedicated list APIs (see fetchAllFilterOptions).
+  // They are refreshed every time the filter icon is clicked so the options are not limited
+  // to whatever happens to be on the bookings page currently loaded.
+  const [filterOptionsLoading, setFilterOptionsLoading] = React.useState(false)
+  const [apiCities, setApiCities] = React.useState<string[]>([])
+  const [apiVenues, setApiVenues] = React.useState<Array<{ id: string; name: string }>>([])
+  const [apiEvents, setApiEvents] = React.useState<Array<{ id: string; name: string }>>([])
+  const [apiOrganizers, setApiOrganizers] = React.useState<Array<{ id: string; name: string }>>([])
+  const [apiPromoters, setApiPromoters] = React.useState<Array<{ id: string; name: string }>>([])
+
+  // An organizer only ever sees their own bookings, a promoter never sees organizers.
+  const canFilterByOrganizer = (role as UserRole) !== "promoter" && (role as UserRole) !== "organizer"
 
   // Mobile UI state
   const [isTabsDropdownOpen, setIsTabsDropdownOpen] = React.useState(false)
@@ -185,6 +228,92 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         return null
     }
   }, [dateFilter, manualEndDate, manualStartDate])
+
+  // Every bookings request - the table *and* the Excel export - has to carry the same
+  // scope. The backend only narrows its query when it is handed organizer_id/promoter_id,
+  // so a payload that omits them silently returns every booking on the platform.
+  const buildBookingScopePayload = React.useCallback(
+    (filters?: BookingScopeFilters) => {
+      const payload: Record<string, any> = {}
+      const isPromoter = (role as UserRole) === "promoter"
+
+      if (isPromoter) {
+        payload.promoter_id = user?.user_id
+      } else {
+        payload.AdminRole = getNumericRole(role as UserRole)
+        payload.user_id = user?.user_id
+
+        // An organizer is always pinned to their own events, never the whole platform.
+        if ((role as UserRole) === "organizer" && user?.user_id) {
+          payload.organizer_id = user.user_id
+        }
+      }
+
+      // The API validates searchkeyword as a min-3-character string and rejects the
+      // whole request with 400 when it is shorter, so a one or two letter search wiped
+      // the table out instead of narrowing it. Below the threshold the keyword is simply
+      // not sent and the unfiltered list stays on screen.
+      if (filters?.searchTerm && filters.searchTerm.length >= MIN_SEARCH_LENGTH) {
+        payload.searchkeyword = filters.searchTerm
+      }
+      if (filters?.cityName && filters.cityName !== "all") {
+        payload.cityname = filters.cityName
+      }
+      if (filters?.venueId && filters.venueId !== "all") {
+        payload.venue_id = filters.venueId
+      }
+      if (filters?.eventId && filters.eventId !== "all") {
+        payload.event_id = filters.eventId
+      }
+      if (!isPromoter && filters?.promoterId && filters.promoterId !== "all") {
+        payload.promoter_id = filters.promoterId
+      }
+      // Organizers already have organizer_id pinned to themselves above.
+      if (canFilterByOrganizer && filters?.organizerId && filters.organizerId !== "all") {
+        payload.organizer_id = filters.organizerId
+      }
+
+      const selectedDateRange = getSelectedDateRange()
+      if (selectedDateRange) {
+        payload.startDate = selectedDateRange.startDate
+        payload.endDate = selectedDateRange.endDate
+      }
+
+      return payload
+    },
+    [canFilterByOrganizer, getSelectedDateRange, role, user]
+  )
+
+  // The endpoint the table is reading. The export reads the very same one, so the
+  // file can only ever contain what the user is actually allowed to see.
+  const getBookingsListEndpoint = React.useCallback(() => {
+    if ((role as UserRole) === "promoter") {
+      return promoterEndPointPannel.GET_PROMOTER_LATEST_BOOKINGS
+    }
+
+    if (bookingDataType === "summary") {
+      return organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+    }
+
+    switch (activeTab) {
+      case "promoter":
+        return organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      case "online":
+        return organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      default:
+        return organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+    }
+  }, [activeTab, bookingDataType, role])
+
+  // Filters currently applied to the table, used to keep the export in sync with it.
+  const activeScopeFilters = (): BookingScopeFilters => ({
+    searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
+    cityName: cityFilter,
+    venueId: venueFilter,
+    eventId: eventFilter,
+    promoterId: promoterFilter,
+    organizerId: organizerFilter,
+  })
 
   const dateFilterOptions: Array<{ value: DateFilterOption; label: string }> = [
     { value: "today", label: "Today" },
@@ -355,7 +484,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         eventId: booking.eventId || booking.event_id || booking.EventId || booking.Event_id || booking.eventID || booking.EventID || "",
         eventName: booking.EventName || booking.eventName || booking.event_name || "N/A",
         customerId: booking.customerId || booking.customer_id || booking.CustomerId || "",
-        customerName: booking.CustomerName || booking.customerName || booking.customer_name || "N/A",
+        customerName: normalizeSearchText(booking.CustomerName || booking.customerName || booking.customer_name) || "N/A",
         customerEmail: booking.Email || booking.customerEmail || booking.customer_email || booking.email || "",
         phoneNumber: phoneNumber,
         promoterId: booking.promoterId || booking.promoter_id || booking.PromoterId || "",
@@ -376,7 +505,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         updatedAt: booking.updatedAt || booking.updated_at || bookingDate || new Date().toISOString(),
         // Additional API fields for compatibility
         Booking_id: booking.Booking_id || booking.booking_id,
-        CustomerName: booking.CustomerName || booking.customerName,
+        CustomerName: normalizeSearchText(booking.CustomerName || booking.customerName),
         PhoneNumber: booking.PhoneNumber || booking.phoneNumber,
         Email: booking.Email || booking.email,
         BookingDateTime: booking.BookingDateTime || booking.bookingDate,
@@ -411,10 +540,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const fetchBookingsData = async (filters?: {
     searchTerm?: string
     page?: number
-    city?: string
-    venue?: string
-    eventName?: string
+    cityName?: string
+    venueId?: string
+    eventId?: string
     promoterId?: string
+    organizerId?: string
   }) => {
     try {
       setLoading(true)
@@ -428,87 +558,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         return
       }
 
-      let apiEndpoint
-      let requestPayload: any = {}
+      const apiEndpoint = getBookingsListEndpoint()
+      const requestPayload: any = buildBookingScopePayload(filters)
 
-      if ((role as UserRole) === "promoter") {
-        apiEndpoint = promoterEndPointPannel.GET_PROMOTER_LATEST_BOOKINGS
-        requestPayload = {
-          promoter_id: user.user_id
-        }
-        
-        // Add filter parameters for promoter endpoint
-        if (filters?.searchTerm) {
-          requestPayload.searchkeyword = filters.searchTerm
-        }
-        if (filters?.city && filters.city !== "all") {
-          requestPayload.city = filters.city
-        }
-        if (filters?.venue && filters.venue !== "all") {
-          requestPayload.venue = filters.venue
-        }
-        if (filters?.eventName && filters.eventName !== "all") {
-          requestPayload.eventName = filters.eventName
-        }
-      } else {
-        // For superadmin/organizer, use different endpoints based on active tab
-        const adminRole = getNumericRole(role as UserRole)
-        
-        if (bookingDataType === "summary") {
-          apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
-          console.log("📋 Using summary booking endpoint")
-        } else {
-          switch (activeTab) {
-            case "promoter":
-              apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
-              console.log("🎤 Using promoter booking endpoint for tab:", activeTab)
-              break
-            case "online":
-              apiEndpoint = organizerEndpoint.GET_ONLINE_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
-              console.log("💻 Using online booking endpoint for tab:", activeTab)
-              break
-            case "all":
-            default:
-              apiEndpoint = organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
-              console.log("📊 Using transaction booking endpoint for tab:", activeTab)
-              break
-          }
-        }
-        
-        requestPayload = {
-          AdminRole: adminRole,
-          user_id: user.user_id,
-          page: (filters?.page ?? currentPage).toString(),
-          limit: "10", // Increased limit to get more data
-        }
-        
-        // For organizer role, add organizer_id to filter only their events' bookings
-        if ((role as UserRole) === "organizer" && user.user_id) {
-          requestPayload.organizer_id = user.user_id
-          console.log("🔒 Organizer filter applied - organizer_id:", user.user_id)
-        }
-        
-        if (filters?.searchTerm) {
-          requestPayload.searchkeyword = filters.searchTerm
-        }
-        if (filters?.city && filters.city !== "all") {
-          requestPayload.city = filters.city
-        }
-        if (filters?.venue && filters.venue !== "all") {
-          requestPayload.venue = filters.venue
-        }
-        if (filters?.eventName && filters.eventName !== "all") {
-          requestPayload.eventName = filters.eventName
-        }
-        if (filters?.promoterId && filters.promoterId !== "all") {
-          requestPayload.promoter_id = filters.promoterId
-        }
-      }
-
-      const selectedDateRange = getSelectedDateRange()
-      if (selectedDateRange) {
-        requestPayload.startDate = selectedDateRange.startDate
-        requestPayload.endDate = selectedDateRange.endDate
+      if ((role as UserRole) !== "promoter") {
+        requestPayload.page = (filters?.page ?? currentPage).toString()
+        requestPayload.limit = ITEMS_PER_PAGE.toString()
       }
 
       console.log("🚀 BOOKING API CALL:")
@@ -668,7 +723,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // Search with debounce
   React.useEffect(() => {
     const delay = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm)
+      // Trim/collapse spaces here so a keyword typed as " eventing club llp "
+      // still matches; the raw value stays in the input box.
+      setDebouncedSearchTerm(normalizeSearchText(searchTerm))
     }, 500)
 
     return () => clearTimeout(delay)
@@ -681,10 +738,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     const filters = {
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
       page: 1,
-      city: cityFilter,
-      venue: venueFilter,
-      eventName: eventNameFilter,
+      cityName: cityFilter,
+      venueId: venueFilter,
+      eventId: eventFilter,
       promoterId: promoterFilter,
+      organizerId: organizerFilter,
     }
 
     setCurrentPage(1)
@@ -699,8 +757,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     manualEndDate,
     cityFilter,
     venueFilter,
-    eventNameFilter,
+    eventFilter,
     promoterFilter,
+    organizerFilter,
   ])
 
   // Initial data fetch - refetch when user or activeTab changes
@@ -710,10 +769,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       setCurrentPage(1)
       fetchBookingsData({
         page: 1,
-        city: cityFilter,
-        venue: venueFilter,
-        eventName: eventNameFilter,
+        cityName: cityFilter,
+        venueId: venueFilter,
+        eventId: eventFilter,
         promoterId: promoterFilter,
+        organizerId: organizerFilter,
       })
     }
   }, [user, activeTab, bookingDataType])
@@ -724,10 +784,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     fetchBookingsData({
       searchTerm: debouncedSearchTerm !== "" ? debouncedSearchTerm : undefined,
       page,
-      city: cityFilter,
-      venue: venueFilter,
-      eventName: eventNameFilter,
+      cityName: cityFilter,
+      venueId: venueFilter,
+      eventId: eventFilter,
       promoterId: promoterFilter,
+      organizerId: organizerFilter,
     })
   }
 
@@ -743,14 +804,20 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     () => getUniqueFilterValues(originalData.map((booking) => booking.city || booking.EventCityName)),
     [getUniqueFilterValues, originalData]
   )
-  const uniqueVenues = React.useMemo(
-    () => getUniqueFilterValues(originalData.map((booking) => booking.venue || booking.EventVenueName)),
-    [getUniqueFilterValues, originalData]
-  )
-  const uniqueEventNames = React.useMemo(
-    () => getUniqueFilterValues(originalData.map((booking) => booking.eventName || booking.EventName)),
-    [getUniqueFilterValues, originalData]
-  )
+  // Bookings carry an event id, so they can still seed the event dropdown when the
+  // events API is unreachable. They carry no venue id, so venues are API-only.
+  const bookingEventOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string }>()
+
+    originalData.forEach((booking) => {
+      const name = booking.eventName || booking.EventName
+      const id = booking.eventId
+      if (!id || !name?.trim() || name === "N/A") return
+      options.set(id, { id, name })
+    })
+
+    return Array.from(options.values())
+  }, [originalData])
   const promoterOptions = React.useMemo(() => {
     const options = new Map<string, { id: string; name: string }>()
 
@@ -764,19 +831,246 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
     return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
   }, [originalData])
-  const activeFilterCount = [cityFilter, venueFilter, eventNameFilter, promoterFilter].filter(
+
+  // ---------------------------------------------------------------------------
+  // Filter option APIs. Each dropdown is backed by its own list endpoint:
+  //   /events/getAllEventCities, /venue/getall, /organizer/getAll, /promoter/getAll,
+  //   /events/getPublishEvents + /events/getCompletedEvents (event names).
+  // All of them are fired together when the filter icon is clicked.
+  // ---------------------------------------------------------------------------
+  const getFilterApiHeaders = () => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${getValidToken() || ""}`,
+  })
+
+  // The list APIs are not consistent about where the array sits in the response.
+  const readListPayload = (data: any): any[] => {
+    if (Array.isArray(data)) return data
+    if (Array.isArray(data?.data)) return data.data
+    if (Array.isArray(data?.data?.data)) return data.data.data
+    if (Array.isArray(data?.data?.EventData)) return data.data.EventData
+    return []
+  }
+
+  const getEventsListPayload = () => {
+    const payload: Record<string, unknown> = {
+      AdminRole: getNumericRole(role as UserRole),
+      user_id: user?.user_id,
+    }
+    if ((role as UserRole) === "organizer" && user?.user_id) {
+      payload.organizer_id = user.user_id
+    }
+    return payload
+  }
+
+  const fetchFilterCities = async () => {
+    const response = await fetch(getallcityDataEndPoint.GET_ALL_EVENT_CITY_DATA, {
+      method: "POST",
+      headers: getFilterApiHeaders(),
+    })
+    const data = await handleApiResponse(response)
+    const cities = readListPayload(data).map((city: any) =>
+      typeof city === "string" ? city : city?.CityName || city?.cityName || city?.name || ""
+    )
+    setApiCities(getUniqueFilterValues(cities))
+  }
+
+  const fetchFilterVenues = async () => {
+    const response = await fetch(venueEndPoint.ALL_VENUE_DATA_LIST, {
+      method: "GET",
+      headers: getFilterApiHeaders(),
+    })
+    const data = await handleApiResponse(response)
+    // Bookings are filtered by venue_id, so the id has to be carried alongside the label.
+    const venues = readListPayload(data)
+      .map((venue: any) => ({
+        id: venue?._id || venue?.id || "",
+        name: venue?.VenueName || venue?.venueName || venue?.Name || venue?.name || "",
+      }))
+      .filter((venue) => venue.id && venue.name)
+    setApiVenues(venues.sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  const fetchFilterOrganizers = async () => {
+    const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
+      method: "GET",
+      headers: getFilterApiHeaders(),
+    })
+    const data = await handleApiResponse(response)
+    const organizers = readListPayload(data)
+      .map((organizer: any) => ({
+        id: organizer?._id || organizer?.id || "",
+        name:
+          organizer?.OrganizerName ||
+          organizer?.CompanyName ||
+          organizer?.FullName ||
+          organizer?.Name ||
+          organizer?.Username ||
+          organizer?.name ||
+          "",
+      }))
+      .filter((organizer) => organizer.id && organizer.name)
+    setApiOrganizers(organizers.sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  const fetchFilterPromoters = async () => {
+    const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+      method: "GET",
+      headers: getFilterApiHeaders(),
+    })
+    const data = await handleApiResponse(response)
+    const promoters = readListPayload(data)
+      .map((promoter: any) => ({
+        id: promoter?._id || promoter?.id || "",
+        name:
+          promoter?.FullName ||
+          promoter?.PromoterName ||
+          promoter?.CompanyName ||
+          promoter?.Name ||
+          promoter?.name ||
+          "",
+      }))
+      .filter((promoter) => promoter.id && promoter.name)
+    setApiPromoters(promoters.sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  // Events come from published + completed events, since bookings exist for both.
+  const fetchFilterEvents = async () => {
+    const payload = JSON.stringify(getEventsListPayload())
+
+    const [published, completed] = await Promise.allSettled([
+      fetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
+        method: "POST",
+        headers: getFilterApiHeaders(),
+        body: payload,
+      }).then(handleApiResponse),
+      fetch(eventEndPoint.GET_ALL_COMPLETED_EVENTS_DATA, {
+        method: "POST",
+        headers: getFilterApiHeaders(),
+        body: payload,
+      }).then(handleApiResponse),
+    ])
+
+    if (published.status === "rejected" && completed.status === "rejected") {
+      throw published.reason
+    }
+
+    const toEvents = (result: PromiseSettledResult<any>) =>
+      result.status === "fulfilled"
+        ? readListPayload(result.value).map((event: any) => ({
+            id: event?._id || event?.id || event?.EventId || event?.event_id || "",
+            name: event?.EventName || event?.eventName || event?.Name || event?.name || "",
+          }))
+        : []
+
+    const events = new Map<string, { id: string; name: string }>()
+    ;[...toEvents(published), ...toEvents(completed)].forEach((event) => {
+      if (event.id && event.name) events.set(event.id, event)
+    })
+
+    setApiEvents(Array.from(events.values()).sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  // Fired from the filter icon. Each request fails independently so one broken list
+  // does not empty the other dropdowns - those simply fall back to the loaded bookings.
+  const fetchAllFilterOptions = async () => {
+    setFilterOptionsLoading(true)
+
+    const requests: Array<[string, Promise<void>]> = [
+      ["cities", fetchFilterCities()],
+      ["venues", fetchFilterVenues()],
+      ["events", fetchFilterEvents()],
+      ["promoters", fetchFilterPromoters()],
+    ]
+
+    // Organizers are only selectable for roles that can see more than one organizer.
+    if (canFilterByOrganizer) {
+      requests.push(["organizers", fetchFilterOrganizers()])
+    }
+
+    const results = await Promise.allSettled(requests.map(([, request]) => request))
+
+    const failed = results
+      .map((result, index) => (result.status === "rejected" ? requests[index][0] : null))
+      .filter((label): label is string => Boolean(label))
+
+    if (failed.length > 0) {
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.warn(`Error fetching ${requests[index][0]} filter (handled):`, result.reason)
+        }
+      })
+      toast({
+        title: "Filter options",
+        description: `Could not refresh ${failed.join(", ")}. Showing options from the loaded bookings.`,
+        variant: "destructive",
+      })
+    }
+
+    setFilterOptionsLoading(false)
+  }
+
+  // API list first, values seen in the loaded bookings as a fallback, so an applied
+  // filter never disappears from its dropdown.
+  const cityOptions = React.useMemo(
+    () => getUniqueFilterValues([...apiCities, ...uniqueCities]),
+    [apiCities, getUniqueFilterValues, uniqueCities]
+  )
+  const venueOptions = apiVenues
+  const eventOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string }>()
+    apiEvents.forEach((event) => options.set(event.id, event))
+    bookingEventOptions.forEach((event) => {
+      if (!options.has(event.id)) options.set(event.id, event)
+    })
+    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [apiEvents, bookingEventOptions])
+  const promoterSelectOptions = React.useMemo(() => {
+    const options = new Map<string, { id: string; name: string }>()
+    apiPromoters.forEach((promoter) => options.set(promoter.id, promoter))
+    promoterOptions.forEach((promoter) => {
+      if (!options.has(promoter.id)) options.set(promoter.id, promoter)
+    })
+    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [apiPromoters, promoterOptions])
+
+  // Dropdown-ready shapes for the searchable filter comboboxes.
+  const citySelectItems = React.useMemo(
+    () => cityOptions.map((city) => ({ value: city, label: city })),
+    [cityOptions]
+  )
+  const venueSelectItems = React.useMemo(
+    () => venueOptions.map((venue) => ({ value: venue.id, label: venue.name })),
+    [venueOptions]
+  )
+  const eventSelectItems = React.useMemo(
+    () => eventOptions.map((event) => ({ value: event.id, label: event.name })),
+    [eventOptions]
+  )
+  const organizerSelectItems = React.useMemo(
+    () => apiOrganizers.map((organizer) => ({ value: organizer.id, label: organizer.name })),
+    [apiOrganizers]
+  )
+  const promoterSelectItems = React.useMemo(
+    () => promoterSelectOptions.map((promoter) => ({ value: promoter.id, label: promoter.name })),
+    [promoterSelectOptions]
+  )
+
+  const activeFilterCount = [cityFilter, venueFilter, eventFilter, promoterFilter, organizerFilter].filter(
     (value) => value !== "all"
   ).length
 
   const resetBookingFilters = () => {
     setDraftCityFilter("all")
     setDraftVenueFilter("all")
-    setDraftEventNameFilter("all")
+    setDraftEventFilter("all")
     setDraftPromoterFilter("all")
+    setDraftOrganizerFilter("all")
     setCityFilter("all")
     setVenueFilter("all")
-    setEventNameFilter("all")
+    setEventFilter("all")
     setPromoterFilter("all")
+    setOrganizerFilter("all")
     setCurrentPage(1)
   }
 
@@ -784,8 +1078,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     if (open) {
       setDraftCityFilter(cityFilter)
       setDraftVenueFilter(venueFilter)
-      setDraftEventNameFilter(eventNameFilter)
+      setDraftEventFilter(eventFilter)
       setDraftPromoterFilter(promoterFilter)
+      setDraftOrganizerFilter(organizerFilter)
+      // Refresh every dropdown from its own list API each time the filter is opened.
+      void fetchAllFilterOptions()
     }
     setIsFilterDialogOpen(open)
   }
@@ -793,63 +1090,20 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const applyBookingFilters = () => {
     setCityFilter(draftCityFilter)
     setVenueFilter(draftVenueFilter)
-    setEventNameFilter(draftEventNameFilter)
+    setEventFilter(draftEventFilter)
     setPromoterFilter(draftPromoterFilter)
+    setOrganizerFilter(draftOrganizerFilter)
     setCurrentPage(1)
     setIsFilterDialogOpen(false)
   }
   
   // Client-side filtering of bookings
-  const filteredBookings = React.useMemo(() => {
-    let filtered = bookingsData
-
-    // Apply search term filter (client-side fallback for phone/email search)
-    if (debouncedSearchTerm && debouncedSearchTerm.trim() !== "") {
-      const searchLower = debouncedSearchTerm.toLowerCase().trim()
-      filtered = filtered.filter((booking) => {
-        // Search in multiple fields including phone and email
-        const searchableFields = [
-          booking.customerName,
-          booking.customerEmail,
-          booking.phoneNumber || booking.PhoneNumber,
-          booking.eventName,
-          booking.city,
-          booking.venue,
-          booking._id,
-          booking.Booking_id,
-          booking.promoterName,
-          booking.PromoterName,
-        ]
-        
-        return searchableFields.some(field => 
-          field && String(field).toLowerCase().includes(searchLower)
-        )
-      })
-    }
-
-    if (cityFilter !== "all") {
-      filtered = filtered.filter((booking) => (booking.city || booking.EventCityName) === cityFilter)
-    }
-
-    if (venueFilter !== "all") {
-      filtered = filtered.filter((booking) => (booking.venue || booking.EventVenueName) === venueFilter)
-    }
-
-    if (eventNameFilter !== "all") {
-      filtered = filtered.filter((booking) => (booking.eventName || booking.EventName) === eventNameFilter)
-    }
-
-    if (promoterFilter !== "all") {
-      const promoterName = promoterOptions.find((promoter) => promoter.id === promoterFilter)?.name
-      filtered = filtered.filter(
-        (booking) =>
-          booking.promoterId === promoterFilter ||
-          Boolean(promoterName && (booking.promoterName || booking.PromoterName) === promoterName)
-      )
-    }
-
-    return filtered
-  }, [bookingsData, cityFilter, debouncedSearchTerm, eventNameFilter, promoterFilter, promoterOptions, venueFilter])
+  // The API is the single source of truth for search/city/venue/event/promoter filters
+  // and for the pagination counts. Re-applying them here only ever removed rows the
+  // server had already matched - a booking whose venue is "to be announced" or whose
+  // promoter name differs from the filter label vanished from the table while the
+  // footer still counted it, which is why the list looked short against the total.
+  const filteredBookings = bookingsData
 
   // Paginated bookings for current page
   const currentBookings = React.useMemo(() => {
@@ -891,8 +1145,37 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return filenameMatch?.[1] ? decodeURIComponent(filenameMatch[1]) : fallback
   }
 
-  // Download bookings report from API
+  // Builds the workbook in the browser from the same scoped endpoint the table reads.
+  // The server's download endpoints were returning every booking on the platform
+  // whenever the request body did not spell the scope out, so they are not used here.
   const exportToExcel = async () => {
+    // Columns mirror what the table shows, so the file matches the screen.
+    const exportColumns: ExportColumn<any>[] = [
+    { header: "Customer Name", value: (b) => b.customerName },
+    { header: "Booking ID", value: (b) => b.bookingId || b.Booking_id },
+    { header: "Phone Number", value: (b) => b.phoneNumber },
+    { header: "Email", value: (b) => b.customerEmail },
+    { header: "Booking Date & Time", value: (b) => formatDateTime(b.bookingDate) },
+    { header: "Event Name", value: (b) => b.eventName },
+    { header: "Ticket Date", value: (b) => formatDate(b.ticketDate) },
+    { header: "City", value: (b) => b.city || b.EventCityName },
+    { header: "Venue", value: (b) => b.venue || b.EventVenueName },
+    { header: "Source", value: (b) => b.bookingChannel },
+    { header: "Promoter Name", value: (b) => b.promoterName || b.PromoterName },
+    { header: "Ticket Name", value: (b) => b.ticketName },
+    { header: "Ticket Type", value: (b) => b.ticketType },
+    { header: "Quantity", value: (b) => b.quantity },
+    { header: "Check In", value: (b) => b.checkIn ?? 0 },
+    { header: "Scanned By", value: (b) => b.scannedBy },
+    { header: "Ticket Price", value: (b) => b.ticketPrice },
+    { header: "Convenience Fee", value: (b) => b.convenienceFee },
+    { header: "GST", value: (b) => b.gst },
+    { header: "Promocode", value: (b) => b.promocode },
+    { header: "Total Amount", value: (b) => b.totalAmount },
+    { header: "Status", value: (b) => b.bookingStatus },
+    { header: "Remark", value: (b) => b.Remark || b.remark },
+    ]
+
     try {
       const authToken = localStorage.getItem("authToken")
 
@@ -901,39 +1184,50 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         return
       }
 
-      const response = await fetch(organizerEndpoint.DOWNLOAD_EXCEL_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          AdminRole: getNumericRole(role as UserRole),
-          user_id: user.user_id,
-        }),
-      })
+      const scopePayload = buildBookingScopePayload(activeScopeFilters())
 
-      const contentType = response.headers.get("content-type") || ""
-
-      if (!response.ok || contentType.includes("application/json")) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.message || `Download failed with status ${response.status}`)
+      // Never ship an export that lost its scope - that is the whole-platform dump.
+      if ((role as UserRole) === "organizer" && !scopePayload.organizer_id) {
+        showErrorPopup("Could not determine your organizer account. Please log in again.")
+        return
+      }
+      if ((role as UserRole) === "promoter" && !scopePayload.promoter_id) {
+        showErrorPopup("Could not determine your promoter account. Please log in again.")
+        return
       }
 
-      const blob = await response.blob()
-      const filename = getFilenameFromResponse(
-        response,
-        `bookings-report-${new Date().toISOString().slice(0, 10)}.xlsx`
+      setIsExporting(true)
+
+      const rawRows = await fetchAllBookingPages(
+        getBookingsListEndpoint(),
+        scopePayload,
+        authToken,
+        extractBookingsArray
       )
-      downloadBlob(blob, filename)
+
+      if (rawRows.length === 0) {
+        showErrorPopup("There are no bookings to export for the current filters.")
+        return
+      }
+
+      const rows = normalizeBookingData(rawRows)
+
+      downloadBookingsWorkbook(
+        rows,
+        exportColumns,
+        `bookings-report-${exportTimestamp()}.xlsx`,
+        "Bookings"
+      )
 
       toast({
         title: "Export Successful",
-        description: "Bookings report downloaded successfully",
+        description: `Exported ${rows.length} booking${rows.length === 1 ? "" : "s"}`,
       })
     } catch (error) {
       console.error('Error exporting to Excel:', error)
       showErrorPopup(error instanceof Error ? error.message : "Failed to download report")
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -1209,20 +1503,36 @@ export default function BookingsPage({ params }: BookingsPageProps) {
           <h1 className="text-2xl font-semibold">
             {(role as UserRole) === "promoter" ? "My Bookings" : "Bookings Management"}
           </h1>
-          <Button onClick={exportToExcel} className="h-10 bg-primary px-6 text-primary-foreground hover:bg-primary/90">
-            <Download className="mr-2 h-4 w-4" />
-            Download Report
+          <Button
+            onClick={exportToExcel}
+            disabled={isExporting}
+            className="h-10 bg-primary px-6 text-primary-foreground hover:bg-primary/90"
+          >
+            {isExporting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {isExporting ? "Preparing..." : "Download Report"}
           </Button>
         </div>
 
         <div className="px-4 sm:px-6">
           <div className="grid gap-3 lg:grid-cols-[minmax(280px,520px)_auto_1fr] lg:items-start">
-            <Input
-              placeholder="Search By Customer Name and Booking ID"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-12"
-            />
+            <div className="space-y-1">
+              <Input
+                placeholder="Search by name, booking ID, email or phone"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-12"
+              />
+              {normalizeSearchText(searchTerm).length > 0 &&
+                normalizeSearchText(searchTerm).length < MIN_SEARCH_LENGTH && (
+                  <p className="text-xs text-muted-foreground">
+                    Type at least {MIN_SEARCH_LENGTH} characters to search.
+                  </p>
+                )}
+            </div>
             <div className="flex flex-wrap gap-3">
               <Dialog open={isFilterDialogOpen} onOpenChange={handleFilterDialogOpenChange}>
                 <DialogTrigger asChild>
@@ -1249,71 +1559,75 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                       Reset All
                     </Button>
                   </div>
+                  {filterOptionsLoading && (
+                    <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading filter options...
+                    </p>
+                  )}
                   <div className="grid gap-6 py-3 sm:grid-cols-2">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">City</label>
-                      <Select value={draftCityFilter} onValueChange={setDraftCityFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select City" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Select City</SelectItem>
-                          {uniqueCities.map((city) => (
-                            <SelectItem key={city} value={city}>
-                              {city}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={draftCityFilter}
+                        onValueChange={setDraftCityFilter}
+                        options={citySelectItems}
+                        placeholder="Select City"
+                        searchPlaceholder="Search cities..."
+                        emptyText="No city found."
+                        loading={filterOptionsLoading}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Venue</label>
-                      <Select value={draftVenueFilter} onValueChange={setDraftVenueFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Venue" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Select Venue</SelectItem>
-                          {uniqueVenues.map((venue) => (
-                            <SelectItem key={venue} value={venue}>
-                              {venue}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={draftVenueFilter}
+                        onValueChange={setDraftVenueFilter}
+                        options={venueSelectItems}
+                        placeholder="Select Venue"
+                        searchPlaceholder="Search venues..."
+                        emptyText="No venue found."
+                        loading={filterOptionsLoading}
+                      />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Event Name</label>
-                      <Select value={draftEventNameFilter} onValueChange={setDraftEventNameFilter}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select Event names" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">Select Event names</SelectItem>
-                          {uniqueEventNames.map((eventName) => (
-                            <SelectItem key={eventName} value={eventName}>
-                              {eventName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={draftEventFilter}
+                        onValueChange={setDraftEventFilter}
+                        options={eventSelectItems}
+                        placeholder="Select Event names"
+                        searchPlaceholder="Search events..."
+                        emptyText="No event found."
+                        loading={filterOptionsLoading}
+                      />
                     </div>
+                    {canFilterByOrganizer && (
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Organizers</label>
+                        <SearchableSelect
+                          value={draftOrganizerFilter}
+                          onValueChange={setDraftOrganizerFilter}
+                          options={organizerSelectItems}
+                          placeholder="Select Organizer"
+                          searchPlaceholder="Search organizers..."
+                          emptyText="No organizer found."
+                          loading={filterOptionsLoading}
+                        />
+                      </div>
+                    )}
                     {(role as UserRole) !== "promoter" && (
                       <div className="space-y-2">
                         <label className="text-sm font-medium">Promoters</label>
-                        <Select value={draftPromoterFilter} onValueChange={setDraftPromoterFilter}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Promoter" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Select Promoter</SelectItem>
-                            {promoterOptions.map((promoter) => (
-                              <SelectItem key={promoter.id} value={promoter.id}>
-                                {promoter.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <SearchableSelect
+                          value={draftPromoterFilter}
+                          onValueChange={setDraftPromoterFilter}
+                          options={promoterSelectItems}
+                          placeholder="Select Promoter"
+                          searchPlaceholder="Search promoters..."
+                          emptyText="No promoter found."
+                          loading={filterOptionsLoading}
+                        />
                       </div>
                     )}
                   </div>

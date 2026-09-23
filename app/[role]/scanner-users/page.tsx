@@ -120,7 +120,12 @@ export default function ScannerUsersPage() {
       const data = await handleApiResponse(response)
       console.log('Events API Response:', data)
       if (data.data) {
-        setEvents(data.data)
+        // getPublishEvents only filters on EventStatus, but the scanner-user API
+        // additionally requires the event to be enabled and rejects the whole
+        // request with "Some events do not exist or are not Published/Enabled."
+        // Dropping disabled events here keeps the picker in step with what the
+        // register/update endpoints will actually accept.
+        setEvents(data.data.filter((event: any) => event.EventIsEnableOrDisable !== 2))
       } else {
         console.warn('Events API returned no data:', data)
         setEvents([])
@@ -292,6 +297,22 @@ export default function ScannerUsersPage() {
     }
   }
 
+  /**
+   * Build the Events/Organizers half of a scanner-user payload.
+   *
+   * The API validates both keys with a "min 1 item" rule that fires whenever the
+   * key is present, so posting `Events: []` for an Organizer Scanner came back as
+   * `"Events" must contain at least 1 items` (and the mirror image for the other
+   * type) even though the operator had made a valid selection. Omitting the key
+   * that does not apply to the chosen UserType skips that rule entirely.
+   */
+  const buildAssignmentPayload = () => {
+    if (formData.userType === "1") {
+      return { Events: formData.selectedEvents.map(eventId => ({ event_id: eventId })) }
+    }
+    return { Organizers: formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) }
+  }
+
   // CRUD Functions
   const handleCreateUser = async () => {
     if (!formData.username.trim() || !formData.password.trim()) {
@@ -348,8 +369,7 @@ export default function ScannerUsersPage() {
         Username: formData.username,
         Password: formData.password,
         UserType: Number(formData.userType),
-        Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
-        Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
+        ...buildAssignmentPayload(),
         CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user.user_id,
       }
@@ -386,6 +406,24 @@ export default function ScannerUsersPage() {
   const handleEditUser = async () => {
     if (!selectedUser) return
 
+    if (formData.userType === "1" && formData.selectedEvents.length === 0) {
+      toast({
+        title: "Error",
+        description: "Event Scanner must have at least one event assigned",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.userType === "2" && formData.selectedOrganizers.length === 0) {
+      toast({
+        title: "Error",
+        description: "Organizer Scanner must have at least one organizer assigned",
+        variant: "destructive",
+      })
+      return
+    }
+
     setSubmitting(true)
     try {
       const authToken = getValidToken()
@@ -396,8 +434,7 @@ export default function ScannerUsersPage() {
       const payload = {
         scanneruser_id: selectedUser._id,
         UserType: Number(formData.userType),
-        Events: formData.userType === "1" ? formData.selectedEvents.map(eventId => ({ event_id: eventId })) : [],
-        Organizers: formData.userType === "2" ? formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) : [],
+        ...buildAssignmentPayload(),
       }
 
       const response = await fetch(scannerUserEndpoint.UPDATE_DETAILS, {
