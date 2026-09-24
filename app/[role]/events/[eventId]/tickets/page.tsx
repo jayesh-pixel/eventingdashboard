@@ -1350,7 +1350,7 @@ export default function TicketsPage() {
 
       // Create AbortController for timeout handling
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 300000 : 30000) // 5 minutes for bulk, 30 seconds for normal
+      const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 600000 : 30000) // 10 minutes for bulk, 30 seconds for normal
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -1513,7 +1513,6 @@ export default function TicketsPage() {
           Event_id: eventId,
           eventTicket_id: normalTicket._id,
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
-          Price: parseFloat(editFormData.TicketPrice || editFormData.Price || normalTicket.Price),
           EventTicketVisibility: currentVisibility,
           ...(editFormData.Description && editFormData.Description.trim().length >= 3
             ? { Description: editFormData.Description.trim() }
@@ -1526,18 +1525,7 @@ export default function TicketsPage() {
 
       // Validation for editable fields
       if (isNormal) {
-        const price = parseFloat(editFormData.TicketPrice || editFormData.Price || (selectedTicket as ExtendedNormalTicket).Price)
         const quantity = parseInt(editFormData.MaxQuantity || editFormData.Quantity || (selectedTicket as ExtendedNormalTicket).Quantity)
-        
-        if (price < 0) {
-          toast({
-            title: "Validation Error",
-            description: "Price cannot be negative",
-            variant: "destructive",
-          })
-          setLoading(false)
-          return
-        }
         
         if (quantity < 1) {
           toast({
@@ -2919,95 +2907,92 @@ export default function TicketsPage() {
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue />
+                        <SelectValue placeholder="Select visibility" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(() => {
-                          const eventVisibility = (eventData as any)?.EventVisibility || (eventData as any)?.eventVisibility
-                          if (eventVisibility === 2) {
-                            return <SelectItem value="3">Promoters</SelectItem>
-                          }
-                          return (
-                            <>
-                              <SelectItem value="1">All</SelectItem>
-                              <SelectItem value="2">All Customers</SelectItem>
-                              <SelectItem value="3">Promoters</SelectItem>
-                            </>
-                          )
-                        })()}
+                        {(eventData as any)?.EventVisibility === 2 || (eventData as any)?.eventVisibility === 2 ? (
+                          <SelectItem value="3">Promoters</SelectItem>
+                        ) : (
+                          <>
+                            <SelectItem value="1">All</SelectItem>
+                            <SelectItem value="2">All Customers</SelectItem>
+                            <SelectItem value="3">Promoters</SelectItem>
+                          </>
+                        )}
                       </SelectContent>
                     </Select>
-                    {((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString() === "3" && (
-                      <div className="space-y-3">
-                        <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
-                          💡 This ticket will only be visible to the promoters you select below.
-                        </p>
-                        <div className="space-y-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => {
-                              setPromoterSearchTerm("")
-                              setShowPromoterModal(true)
-                            }}
-                            className="w-full justify-start h-auto p-3 border-dashed"
-                          >
-                            <Users className="mr-2 h-4 w-4" />
-                            <div className="flex flex-col items-start">
-                              <span className="font-medium">
-                                {selectedPromoters.length > 0
-                                  ? `${selectedPromoters.length} Promoter(s) Selected`
-                                  : 'Choose Promoters'}
-                              </span>
-                              <span className="text-xs text-muted-foreground mt-1">
-                                {selectedPromoters.length > 0
-                                  ? 'Click to modify selection'
-                                  : `${filteredPromoters.length} promoters assigned to this event`}
-                              </span>
-                            </div>
-                          </Button>
-                        </div>
-                        {selectedPromoters.length > 0 && (
+                    {(() => {
+                      const visibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
+                      return visibility === "3" ? (
+                        <div className="space-y-3">
+                          <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                            💡 This ticket will only be visible to the promoters you select below.
+                          </p>
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">Selected Promoters:</Label>
-                            <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg">
-                              {selectedPromoters.map(promoterId => {
-                                const promoter = promoters.find(p => p._id === promoterId)
-                                return promoter ? (
-                                  <Badge key={promoterId} variant="secondary" className="text-xs">
-                                    {promoter.FullName}
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        setSelectedPromoters(prev => prev.filter(id => id !== promoterId))
-                                      }}
-                                      className="ml-1 hover:bg-destructive/20 rounded-sm"
-                                    >
-                                      <X className="h-3 w-3" />
-                                    </button>
-                                  </Badge>
-                                ) : null
-                              })}
-                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                setPromoterSearchTerm("")
+                                setShowPromoterModal(true)
+                              }}
+                              className="w-full justify-start h-auto p-3 border-dashed"
+                            >
+                              <Users className="mr-2 h-4 w-4" />
+                              <div className="flex flex-col items-start">
+                                <span className="font-medium">
+                                  {selectedPromoters.length > 0
+                                    ? `${selectedPromoters.length} Promoter(s) Selected`
+                                    : 'Choose Promoters'}
+                                </span>
+                                <span className="text-xs text-muted-foreground mt-1">
+                                  {selectedPromoters.length > 0
+                                    ? 'Click to modify selection'
+                                    : `${filteredPromoters.length} promoters assigned to this event`}
+                                </span>
+                              </div>
+                            </Button>
                           </div>
-                        )}
-                      </div>
-                    )}
+                          {selectedPromoters.length > 0 && (
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">Selected Promoters:</Label>
+                              <div className="flex flex-wrap gap-2 p-3 bg-muted/30 rounded-lg">
+                                {selectedPromoters.map(promoterId => {
+                                  const promoter = promoters.find(p => p._id === promoterId)
+                                  return promoter ? (
+                                    <Badge key={promoterId} variant="secondary" className="text-xs">
+                                      {promoter.FullName}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setSelectedPromoters(prev => prev.filter(id => id !== promoterId))
+                                        }}
+                                        className="ml-1 hover:bg-destructive/20 rounded-sm"
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </button>
+                                    </Badge>
+                                  ) : null
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : null
+                    })()}
                   </div>
 
-                  {/* Editable Price and Quantity */}
+                  {/* Read-only Price and Editable Quantity */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="editTicketPrice">Price (₹) *</Label>
+                      <Label htmlFor="editTicketPrice">Price (₹) (Read Only)</Label>
                       <Input
                         id="editTicketPrice"
                         type="number"
-                        min="0"
-                        step="1"
+                        disabled
                         value={editFormData.TicketPrice || editFormData.Price || ""}
-                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0, Price: parseFloat(e.target.value) || 0 }))}
-                        className="border-primary"
+                        className="bg-muted"
                       />
                     </div>
 
@@ -3024,7 +3009,7 @@ export default function TicketsPage() {
                     </div>
                   </div>
                   <div className="text-sm text-muted-foreground">
-                    * Description, Visibility, Price, and Total Quantity can be edited
+                    * Description, Visibility, and Total Quantity can be edited. Price cannot be edited.
                   </div>
                 </>
               ) : (
