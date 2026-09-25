@@ -1242,8 +1242,8 @@ export default function TicketsPage() {
         return
       }
       
-      // Validate event date/time selection for normal tickets
-      if (activeTab === "normal") {
+      // Validate event date/time selection for normal tickets (skip for Season Pass - covers all dates)
+      if (activeTab === "normal" && normalFormData.TicketType !== 3) {
         if (isMultiDateEvent || eventDateTimes.length > 1) {
           // Multi-day event: check if at least one date is selected
           if (selectedEventDateTimes.length === 0) {
@@ -1309,9 +1309,12 @@ export default function TicketsPage() {
       
       if (activeTab === "normal") {
         // For multi-day events, use selected dates; for single-day events, use the default EventDateTime_id
-        const eventDateTimeIds = (isMultiDateEvent || eventDateTimes.length > 1) 
-          ? selectedEventDateTimes.map(id => ({ eventDateTime_id: id }))
-          : [{ eventDateTime_id: normalFormData.EventDateTime_id }]
+        // Season Pass automatically covers all event dates
+        const eventDateTimeIds = normalFormData.TicketType === 3
+          ? eventDateTimes.map(dt => ({ eventDateTime_id: dt._id }))
+          : (isMultiDateEvent || eventDateTimes.length > 1)
+            ? selectedEventDateTimes.map(id => ({ eventDateTime_id: id }))
+            : [{ eventDateTime_id: normalFormData.EventDateTime_id }]
           
         payload = {
           ...payload,
@@ -2561,7 +2564,7 @@ export default function TicketsPage() {
                 </div>
 
                 {/* Event Date & Time Selection */}
-                {eventDateTimes.length > 0 && (
+                {eventDateTimes.length > 0 && normalFormData.TicketType !== 3 && (
                   <div className="space-y-2">
                     <Label>Event Date & Time Selection</Label>
                     {isMultiDateEvent || eventDateTimes.length > 1 ? (
@@ -2679,9 +2682,9 @@ export default function TicketsPage() {
                 </Button>                <Button
                   onClick={handleCreateTicket}
                   disabled={loading || !normalFormData.TicketName || 
-                    (isMultiDateEvent || eventDateTimes.length > 1 
+                    (normalFormData.TicketType !== 3 && (isMultiDateEvent || eventDateTimes.length > 1 
                       ? selectedEventDateTimes.length === 0 
-                      : !normalFormData.EventDateTime_id)}
+                      : !normalFormData.EventDateTime_id))}
                 >
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Ticket
