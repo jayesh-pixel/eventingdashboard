@@ -30,13 +30,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
-  CalendarDays,
-  Clock,
-  IndianRupee,
   Loader2,
   Minus,
   Plus,
-  Users,
 } from "lucide-react";
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -93,19 +89,6 @@ interface TicketData {
 const formatTimeInIST = (iso: string) =>
   formatEventTime(iso, { hour: "2-digit", minute: "2-digit" }, "en-IN");
 
-const formatDateBlock = (iso: string) => {
-  if (!iso) return null;
-  const d = parseEventDateTime(iso);
-  if (!d) return null;
-  return {
-    day: formatEventDate(d, { weekday: "long" }, "en-US"),
-    month: formatEventDate(d, { month: "short" }, "en-US"),
-    date: formatEventDate(d, { day: "numeric" }, "en-US"),
-    year: formatEventDate(d, { year: "numeric" }, "en-US"),
-    time: formatEventTime(d, { hour: "2-digit", minute: "2-digit", hour12: true }, "en-US"),
-  } as const;
-};
-
 // Season passes span every date of the event, so label them with the range
 // rather than a single date.
 const formatDateRange = (list: { EventStartDateTime: string }[]) => {
@@ -121,6 +104,42 @@ const formatDateRange = (list: { EventStartDateTime: string }[]) => {
   const last = asDay(sorted[sorted.length - 1].EventStartDateTime);
   return first === last ? first : `${first} - ${last}`;
 };
+
+const sortByStart = <T extends { EventStartDateTime: string }>(list: T[]) =>
+  [...list].sort(
+    (a, b) =>
+      (parseEventDateTime(a.EventStartDateTime)?.getTime() ?? 0) -
+      (parseEventDateTime(b.EventStartDateTime)?.getTime() ?? 0)
+  );
+
+// Calendar-day key used to group show slots that fall on the same date.
+const dayKeyOf = (iso: string) =>
+  formatEventDate(iso, { year: "numeric", month: "2-digit", day: "2-digit" }, "en-CA");
+
+const slotTimeOf = (iso: string) =>
+  formatEventTime(iso, { hour: "numeric", minute: "2-digit", hour12: true }, "en-US");
+
+// "Sun, 31 Jan · 3:00 PM" - shown under the title of a single-date event.
+const formatSingleDateLine = (iso: string) => {
+  const weekday = formatEventDate(iso, { weekday: "short" }, "en-US");
+  const day = formatEventDate(iso, { day: "numeric" }, "en-US");
+  const month = formatEventDate(iso, { month: "short" }, "en-US");
+  return `${weekday}, ${day} ${month} · ${slotTimeOf(iso)}`;
+};
+
+// The event-by-id response is not typed, so read the title/venue defensively.
+const readEventHeader = (ev: any) => {
+  const venue =
+    ev?.VenueName || ev?.venueName || ev?.EventVenue || (typeof ev?.Venue === "string" ? ev.Venue : "") || "";
+  const city = ev?.VenueCity || ev?.CityName || ev?.City || ev?.VenueToBeAnnouncedCity || "";
+  return {
+    name: ev?.EventName || ev?.eventName || "",
+    venue: [venue, city].filter(Boolean).join(", "),
+  };
+};
+
+// Brand gradient (logo cyan -> deep blue) used for the active chip and CTAs.
+const BRAND_GRADIENT = "bg-gradient-to-br from-[#00E1FC] to-[#0F33D1] text-white";
 
 // -----------------------------------------------------------------------------
 // Component
@@ -143,6 +162,8 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   // Local state
   // ────────────────────────────────────────────────────────────────────────────
   const [loading, setLoading] = React.useState(true);
+  const [ticketsLoading, setTicketsLoading] = React.useState(false);
+  const [eventInfo, setEventInfo] = React.useState({ name: "", venue: "" });
   const [selectedDateId, setSelectedDateId] = React.useState<string | null>(null);
   // Multi-day events can also sell a season pass. It is offered as an extra tab
   // next to the dates; picking it shows the season pass tickets instead of the
@@ -182,6 +203,22 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     [seasonPasses]
   );
 
+  // Dates are picked as calendar days; a day with several show slots then
+  // offers them as time chips underneath.
+  const dayGroups = React.useMemo(() => {
+    const groups: { key: string; slots: EventDateTime[] }[] = [];
+    for (const d of dates) {
+      const key = dayKeyOf(d.EventStartDateTime);
+      const group = groups.find((g) => g.key === key);
+      if (group) group.slots.push(d);
+      else groups.push({ key, slots: [d] });
+    }
+    return groups;
+  }, [dates]);
+  const selectedDate = dates.find((d) => d._id === selectedDateId);
+  const selectedDayKey = selectedDate ? dayKeyOf(selectedDate.EventStartDateTime) : null;
+  const selectedDaySlots = dayGroups.find((g) => g.key === selectedDayKey)?.slots ?? [];
+
   // Derived totals -------------------------------------------------------------
   const totalTickets = Object.values(counts).reduce((s, n) => s + n, 0);
   const totalPrice = selectableTickets.reduce((s, t) => s + (counts[t._id] || 0) * t.Price, 0);
@@ -208,11 +245,13 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
 
         if (!res.ok) throw new Error("Failed to load dates");
         const data = await res.json();
-        const list: EventDateTime[] =
+        const list: EventDateTime[] = sortByStart(
           data?.data?.EventDateTimeData?.length > 0
             ? data.data.EventDateTimeData
-            : data?.data?.EventDateTime ?? [];
+            : data?.data?.EventDateTime ?? []
+        );
         setDates(list);
+        setEventInfo(readEventHeader(Array.isArray(data?.data) ? data.data[0] : data?.data));
 
         // Multi-day event -> the event can also sell a Season Pass that covers
         // every date, so fetch those alongside the per-date tickets.
@@ -244,10 +283,11 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           setSeasonPasses([]);
         }
 
-        // If only one date, auto-select it and fetch tickets
-        if (list.length === 1) {
+        // Open on the earliest date so tickets show straight away; on a
+        // multi-day event the user can switch dates or pick the season pass.
+        if (list.length > 0) {
           setSelectedDateId(list[0]._id);
-          // Fetch tickets for the single date
+          // Fetch tickets for that date
           const token2 = getValidToken();
           if (user && token2) {
             const payload = { event_id: eventId, eventDateTime_id: list[0]._id, promoter_id: user.user_id };
@@ -286,6 +326,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     setSelectionMode("date");
     setCounts({});
     setShowCount({});
+    setTicketsLoading(true);
     try {
       const token = getValidToken();
       if (!user || !token) return;
@@ -313,6 +354,8 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     } catch (err) {
       console.error(err);
       toast({ title: "Error", description: "Could not load tickets", variant: "destructive" });
+    } finally {
+      setTicketsLoading(false);
     }
   };
 
@@ -340,7 +383,6 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       return { [id]: newCount };
     });
   };
-  const handleShowCount = (id: string) => setShowCount({ [id]: true });
 
   // ────────────────────────────────────────────────────────────────────────────
   // Shared ticket row renderer (used for per-date tickets and for season passes)
@@ -356,38 +398,49 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     const atLimit =
       (typeof maxAllowed === "number" && count >= maxAllowed) ||
       (hasAvailability && count >= t.AvailableQuantity);
+    // Only one ticket type can be booked per order, so the others lock while a
+    // quantity is being chosen.
+    const locked = isAnyCountActive && !selected;
+    const hasFooter = !!t.Description || seasonPass || hasAvailability;
     return (
-      <Card key={t._id} className={`border-2 transition-all ${selected ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"} ${soldOut ? "opacity-60" : ""}`}>
-        <CardContent className="p-4 flex flex-col lg:flex-row gap-4 lg:items-center lg:justify-between">
-          <div className="flex-1 space-y-1 min-w-0 pr-2">
-            <p className="font-bold truncate">{t.Name}</p>
-            {t.Description && <p className="text-xs text-muted-foreground leading-tight">{t.Description}</p>}
-            {seasonPass && (
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <CalendarDays className="h-3 w-3" />
-                Valid for all {dates.length} days · {formatDateRange(dates)}
-              </p>
-            )}
-            {hasAvailability && (
-              <div className="flex gap-4 text-xs mt-1">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 bg-green-500 rounded-full"></span>Available: {t.AvailableQuantity}</span>
-              </div>
-            )}
+      <div
+        key={t._id}
+        className={`rounded-2xl border bg-card p-5 transition-colors ${selected ? "border-[#00E1FC]/60" : "border-border"} ${soldOut || locked ? "opacity-60" : ""}`}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-2">
+            <p className="font-semibold text-base sm:text-lg leading-tight break-words">{t.Name}</p>
+            <p className="font-semibold text-base sm:text-lg">₹{t.Price}</p>
           </div>
-          <div className="flex flex-row lg:flex-col items-center gap-3 lg:gap-2">
-            <p className="text-lg font-bold text-primary flex items-center"><IndianRupee className="h-4 w-4" />{t.Price}</p>
-            {selected ? (
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleDecrease(t._id)} className="h-8 w-8 p-0"><Minus className="h-3 w-3" /></Button>
-                <span className="w-8 text-center font-bold text-primary">{count}</span>
-                <Button size="sm" variant="outline" onClick={() => handleIncrease(t._id)} disabled={atLimit} className="h-8 w-8 p-0"><Plus className="h-3 w-3" /></Button>
-              </div>
-            ) : (
-              <Button onClick={() => handleShowCount(t._id)} disabled={isAnyCountActive || soldOut} className="px-4" >{soldOut ? "Sold Out" : "Select"}</Button>
-            )}
+          {selected && count > 0 ? (
+            <div className={`flex h-11 w-[130px] shrink-0 items-center justify-between rounded-xl px-1 ${BRAND_GRADIENT}`}>
+              <button type="button" aria-label="Remove one" onClick={() => handleDecrease(t._id)} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15">
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="font-bold tabular-nums">{count}</span>
+              <button type="button" aria-label="Add one" onClick={() => handleIncrease(t._id)} disabled={atLimit} className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-white/15 disabled:opacity-40 disabled:hover:bg-transparent">
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleIncrease(t._id)}
+              disabled={locked || soldOut}
+              className={`h-11 w-[130px] shrink-0 rounded-xl font-bold tracking-wide transition-opacity disabled:cursor-not-allowed ${soldOut ? "bg-muted text-muted-foreground" : `${BRAND_GRADIENT} hover:opacity-90`}`}
+            >
+              {soldOut ? "SOLD OUT" : "ADD"}
+            </button>
+          )}
+        </div>
+        {hasFooter && (
+          <div className="mt-4 border-t pt-4 space-y-1.5 text-sm text-muted-foreground">
+            {t.Description && <p className="leading-snug">{t.Description}</p>}
+            {seasonPass && <p>Valid for all {dates.length} days · {formatDateRange(dates)}</p>}
+            {hasAvailability && !soldOut && <p className="text-xs">{t.AvailableQuantity} available</p>}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
     );
   };
 
@@ -881,132 +934,186 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   // ---------------------------------------------------------------------------
   // MAIN PAGE (step 1 – select date & tickets)
   // ---------------------------------------------------------------------------
+  const sectionHeading = (label: string) => (
+    <div className="flex items-center gap-4">
+      <h2 className="text-sm font-extrabold uppercase tracking-wider whitespace-nowrap">{label}</h2>
+      <div className="h-px flex-1 bg-border" />
+    </div>
+  );
+
+  const dateChipBase =
+    "flex h-20 min-w-[70px] flex-col items-center justify-center rounded-xl border px-3 transition-all";
+  const selectedTicket = selectableTickets.find((t) => counts[t._id] > 0);
+  const showTickets = selectionMode === "season" ? seasonPasses.length > 0 : !!selectedDateId;
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted/20">
-      <div className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 flex flex-col gap-6">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background to-muted/20">
+      <div className="container mx-auto max-w-4xl flex-1 px-4 py-6 sm:py-8 flex flex-col gap-8">
         {/* Header */}
-        <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => router.push(`/${role}/events`)} className="flex items-center gap-2 text-xs sm:text-sm">
-            <ArrowLeft className="h-3 w-3" />
-            Back to Events
+        <div className="flex items-start gap-4">
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Back to events"
+            onClick={() => router.push(`/${role}/events`)}
+            className="h-11 w-11 shrink-0 rounded-xl"
+          >
+            <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">Book Event Tickets</h1>
+          <div className="min-w-0 space-y-1">
+            <h1 className="text-2xl sm:text-3xl font-bold leading-tight break-words">
+              {eventInfo.name || "Book Event Tickets"}
+            </h1>
+            {eventInfo.venue && <p className="text-muted-foreground">{eventInfo.venue}</p>}
+            {!isMultiDayEvent && dates[0] && (
+              <p className="text-sm font-medium text-[#0F33D1] dark:text-[#00E1FC]">
+                {formatSingleDateLine(dates[0].EventStartDateTime)}
+              </p>
+            )}
+          </div>
         </div>
 
-        {/* Date selection UI: show as selected if only one date, else show list */}
-        {dates.length === 1 && selectedDateId && (
-          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-              <CardTitle className="flex items-center gap-2 text-xl"><CalendarDays className="h-5 w-5 text-primary" /> Event Date</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 flex gap-3 flex-wrap">
-              {(() => {
-                const d = dates[0];
-                const f = formatDateBlock(d.EventStartDateTime);
-                if (!f) return null;
+        {/* Date & time selection - multi-date events only */}
+        {isMultiDayEvent && (
+          <section className="space-y-4">
+            {sectionHeading("Select Date & Time")}
+            <div className="flex flex-wrap gap-3">
+              {dayGroups.map((g, i) => {
+                const first = g.slots[0].EventStartDateTime;
+                const month = formatEventDate(first, { month: "short" }, "en-US").toUpperCase();
+                const prevMonth =
+                  i > 0
+                    ? formatEventDate(dayGroups[i - 1].slots[0].EventStartDateTime, { month: "short" }, "en-US").toUpperCase()
+                    : null;
+                const selected = selectionMode === "date" && selectedDayKey === g.key;
                 return (
-                  <div key={d._id} className={"border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center border-primary bg-primary text-primary-foreground scale-105"}>
-                    <p className="text-sm font-semibold underline mb-1">{f.day}</p>
-                    <p className="text-xs opacity-80 mb-1">{f.month} {f.year}</p>
-                    <span className={"inline-block text-lg font-bold rounded-full px-3 py-1 bg-white/20"}>{f.date}</span>
-                    <p className="text-xs opacity-80 mt-1">{f.time}</p>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        )}
-        {dates.length > 1 && (
-          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-              <CardTitle className="flex items-center gap-2 text-xl"><CalendarDays className="h-5 w-5 text-primary" /> Select Event Date</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 flex gap-3 flex-wrap">
-              {dates.map((d) => {
-                const f = formatDateBlock(d.EventStartDateTime);
-                if (!f) return null;
-
-                // The Season Pass tab and the dates share one selection.
-                const selected = selectionMode === "date" && selectedDateId === d._id;
-                return (
-                  <div key={d._id} onClick={() => handleDateClick(d._id)} className={`cursor-pointer border-2 rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
-                    <p className="text-sm font-semibold underline mb-1">{f.day}</p>
-                    <p className="text-xs opacity-80 mb-1">{f.month} {f.year}</p>
-                    <span className={`inline-block text-lg font-bold rounded-full px-3 py-1 ${selected ? "bg-white/20" : "bg-primary/10 text-primary"}`}>{f.date}</span>
-                    <p className="text-xs opacity-80 mt-1">{f.time}</p>
-                  </div>
+                  <React.Fragment key={g.key}>
+                    {month !== prevMonth && (
+                      <div className="flex h-20 w-11 items-center justify-center rounded-xl border bg-card">
+                        <span className="rotate-180 text-xs font-bold tracking-[0.2em] [writing-mode:vertical-rl]">{month}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDateClick(g.slots[0]._id)}
+                      className={`${dateChipBase} ${
+                        selected
+                          ? `${BRAND_GRADIENT} border-transparent shadow-[0_8px_20px_-6px_rgba(0,225,252,0.6)]`
+                          : "bg-card border-border hover:border-[#00E1FC]/60"
+                      }`}
+                    >
+                      <span className="text-xl font-bold leading-none">{formatEventDate(first, { day: "numeric" }, "en-US")}</span>
+                      <span className={`mt-1.5 text-sm ${selected ? "text-white/90" : "text-muted-foreground"}`}>
+                        {formatEventDate(first, { weekday: "short" }, "en-US")}
+                      </span>
+                    </button>
+                  </React.Fragment>
                 );
               })}
 
               {/* Season Pass sits alongside the dates as its own tab: it covers
                   every date, so it is picked instead of a single date. */}
-              {seasonPasses.length > 0 && (() => {
-                const selected = selectionMode === "season";
-                return (
-                  <div onClick={handleSeasonPassClick} className={`cursor-pointer border-2 border-dashed rounded-2xl px-4 py-3 min-w-[120px] text-center transition-all ${selected ? "border-primary bg-primary text-primary-foreground scale-105" : "border-border hover:border-primary/50"}`}>
-                    <p className="text-sm font-semibold underline mb-1">Season Pass</p>
-                    <p className="text-xs opacity-80 mb-1">All {dates.length} days</p>
-                    <span className={`inline-flex items-center justify-center text-lg font-bold rounded-full px-3 py-1 ${selected ? "bg-white/20" : "bg-primary/10 text-primary"}`}>
-                      <CalendarDays className="h-5 w-5" />
-                    </span>
-                    <p className="text-xs opacity-80 mt-1">{formatDateRange(dates)}</p>
-                  </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
+              {seasonPasses.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleSeasonPassClick}
+                  className={`${dateChipBase} px-4 ${
+                    selectionMode === "season"
+                      ? "border-transparent bg-gradient-to-br from-amber-400 to-amber-600 text-white shadow-[0_8px_20px_-6px_rgba(245,158,11,0.6)]"
+                      : "bg-card border-amber-500/50 hover:border-amber-500"
+                  }`}
+                >
+                  <span className={`font-bold ${selectionMode === "season" ? "" : "text-amber-600 dark:text-amber-300"}`}>Season Pass</span>
+                  <span className={`mt-1 text-sm ${selectionMode === "season" ? "text-white/90" : "text-muted-foreground"}`}>
+                    All {dates.length} days
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Show slots for the picked day */}
+            {selectionMode === "date" && selectedDaySlots.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {selectedDaySlots.map((s) => {
+                  const selected = s._id === selectedDateId;
+                  return (
+                    <button
+                      key={s._id}
+                      type="button"
+                      onClick={() => !selected && handleDateClick(s._id)}
+                      className={`h-14 min-w-[130px] rounded-xl border px-5 font-semibold transition-colors ${
+                        selected
+                          ? "border-[#00E1FC] bg-[#00E1FC]/10"
+                          : "border-border bg-card hover:border-[#00E1FC]/60"
+                      }`}
+                    >
+                      {slotTimeOf(s.EventStartDateTime)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </section>
         )}
 
         {/* Ticket selection - per-date tickets, or the season passes when the
             Season Pass tab is active. */}
-        {(selectionMode === "season" ? seasonPasses.length > 0 : !!selectedDateId) && (
-          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm">
-            <CardHeader className="bg-gradient-to-r from-primary/5 to-primary/10 p-4">
-              <CardTitle className="flex items-center gap-2 text-xl">
-                <Users className="h-5 w-5 text-primary" />
-                {selectionMode === "season"
-                  ? "Season Pass Tickets"
-                  : isMultiDayEvent && seasonPasses.length > 0
-                  ? "Single Day Tickets"
-                  : "Available Tickets"}
-                {selectionMode === "season" && (
-                  <Badge variant="secondary" className="ml-1">All {dates.length} days</Badge>
-                )}
-              </CardTitle>
-              {selectionMode === "season" && (
-                <CardDescription>
-                  One pass valid for every day of this event - no date selection needed
-                </CardDescription>
-              )}
-            </CardHeader>
-            <CardContent className="p-4 space-y-3">
-              {selectionMode === "season" ? (
-                seasonPasses.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No season pass available for this event</p>
-                ) : (
+        {showTickets && (
+          <section className="space-y-4">
+            {ticketsLoading && selectionMode === "date" ? (
+              <div className="flex justify-center py-10">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {selectionMode === "season" ? (
                   seasonPasses.map((sp) => renderTicketRow(sp, true))
-                )
-              ) : tickets.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">No tickets available for this date</p>
-              ) : (
-                tickets.map((t) => renderTicketRow(t))
-              )}
-            </CardContent>
-          </Card>
+                ) : tickets.length === 0 ? (
+                  <p className="rounded-2xl border border-dashed py-10 text-center text-muted-foreground">
+                    No tickets available for this date
+                  </p>
+                ) : (
+                  tickets.map((t) => renderTicketRow(t))
+                )}
+              </div>
+            )}
+          </section>
         )}
 
-        {/* Sticky footer checkout */}
-        {totalTickets > 0 && (
-          <Card className="border-0 shadow-xl bg-card/80 backdrop-blur-sm sticky bottom-2 z-10">
-            <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-center gap-3">
-              <div className="flex flex-col text-center sm:text-left">
-                <p className="text-xl font-bold flex items-center gap-1"><IndianRupee className="h-5 w-5" />{totalPrice}</p>
-                <p className="text-xs text-muted-foreground">{totalTickets} ticket{totalTickets !== 1 ? "s" : ""} selected</p>
-              </div>
-              <Button size="lg" className="w-full sm:w-auto h-12" onClick={() => setCustomerFormPage(true)}>Continue</Button>
-            </CardContent>
-          </Card>
+        {dates.length === 0 && (
+          <p className="rounded-2xl border border-dashed py-10 text-center text-muted-foreground">
+            No dates are scheduled for this event yet
+          </p>
         )}
+      </div>
+
+      {/* Checkout bar */}
+      <div className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <div className="container mx-auto max-w-4xl px-4 py-4 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            {totalTickets > 0 ? (
+              <>
+                <p className="truncate text-sm text-muted-foreground">
+                  {totalTickets} × {selectedTicket?.Name}
+                </p>
+                <p className="text-xl font-bold">₹{totalPrice}</p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">No tickets selected</p>
+                <p className="text-xl font-bold leading-none">—</p>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={totalTickets === 0}
+            onClick={() => setCustomerFormPage(true)}
+            className={`h-12 w-40 sm:w-48 shrink-0 rounded-xl font-bold transition-opacity ${BRAND_GRADIENT} hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            Continue
+          </button>
+        </div>
       </div>
     </div>
   );
