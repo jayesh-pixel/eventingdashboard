@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -109,7 +110,7 @@ export default function ScannerUsersPage() {
         user_id: user.user_id
       }
 
-      const response = await fetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
+      const response = await authFetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -153,7 +154,7 @@ export default function ScannerUsersPage() {
         return
       }
 
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
+      const response = await authFetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -374,7 +375,7 @@ export default function ScannerUsersPage() {
         createduser_id: user.user_id,
       }
 
-      const response = await fetch(scannerUserEndpoint.REGISTER, {
+      const response = await authFetch(scannerUserEndpoint.REGISTER, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -437,7 +438,7 @@ export default function ScannerUsersPage() {
         ...buildAssignmentPayload(),
       }
 
-      const response = await fetch(scannerUserEndpoint.UPDATE_DETAILS, {
+      const response = await authFetch(scannerUserEndpoint.UPDATE_DETAILS, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -476,7 +477,7 @@ export default function ScannerUsersPage() {
 
       const endpoint = currentStatus === 1 ? scannerUserEndpoint.DISABLE : scannerUserEndpoint.ENABLE
       
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,

@@ -33,17 +33,12 @@ import { TokenExpirationWarning } from "@/components/token-expiration-warning"
 
 interface AdminLayoutProps {
   children: React.ReactNode
-  params: { role: UserRole } | Promise<{ role: UserRole }>
+  // Next.js 15+ always passes params as a Promise
+  params: Promise<{ role: string }>
 }
 
 const AdminLayout = ({ children, params }: AdminLayoutProps) => {
-  let resolvedParams: { role: UserRole }
-  if (params instanceof Promise) {
-    resolvedParams = React.use(params)
-  } else {
-    resolvedParams = params
-  }
-  const { role } = resolvedParams
+  const role = React.use(params).role as UserRole
   const pathname = usePathname()
   const { user, logout } = useAuth()
 

@@ -1,3 +1,4 @@
+import { authFetch } from "@/lib/auth-fetch"
 import * as XLSX from "xlsx"
 
 /**
@@ -60,7 +61,7 @@ export async function fetchAllBookingPages(
   maxPages = 25
 ): Promise<any[]> {
   const post = (payload: Record<string, any>) =>
-    fetch(endpoint, {
+    authFetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

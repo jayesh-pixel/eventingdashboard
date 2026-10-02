@@ -1,5 +1,7 @@
 "use client"
 
+import { getValidToken } from "@/lib/token-utils"
+
 interface ApiResponse<T = any> {
   success: boolean
   data: T | null
@@ -9,25 +11,23 @@ interface ApiResponse<T = any> {
 
 class ApiClient {
   private baseURL: string
-  private token: string | null = null
 
   constructor(baseURL: string) {
     this.baseURL = baseURL
-    // Get token from localStorage if available
-    if (typeof window !== "undefined") {
-      this.token = localStorage.getItem("authToken")
-    }
+  }
+
+  // Read the token fresh on every request so it is never stale after login/logout
+  private get token(): string | null {
+    return typeof window !== "undefined" ? getValidToken() : null
   }
 
   setToken(token: string) {
-    this.token = token
     if (typeof window !== "undefined") {
-      localStorage.setItem("authToken", token)
+      localStorage.setItem("authToken", JSON.stringify({ token, expiresAt: Date.now() + 60 * 60 * 24 * 7 * 1000 }))
     }
   }
 
   removeToken() {
-    this.token = null
     if (typeof window !== "undefined") {
       localStorage.removeItem("authToken")
     }

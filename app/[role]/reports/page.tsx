@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -270,7 +271,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("- Should contain 'getEventsByNameandDateTime':", apiEndpoint.includes('getEventsByNameandDateTime'))
       console.log("- Should NOT contain 'getAllPaginated':", !apiEndpoint.includes('getAllPaginated'))
       
-      const response = await fetch(apiEndpoint, {
+      const response = await authFetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -525,7 +526,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
       console.log("- page:", requestPayload.page, typeof requestPayload.page)
 
       const authToken = localStorage.getItem("authToken")
-      const response = await fetch(apiEndpoint, {
+      const response = await authFetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

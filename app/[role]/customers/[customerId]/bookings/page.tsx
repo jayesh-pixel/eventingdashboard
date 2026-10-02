@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -44,7 +45,7 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
+      const response = await authFetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -92,7 +93,7 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(websiteCustomer.GET_CUSTOMER_BOOKINGS, {
+      const response = await authFetch(websiteCustomer.GET_CUSTOMER_BOOKINGS, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,

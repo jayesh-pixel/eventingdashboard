@@ -13,6 +13,8 @@ interface PromoterData {
   _id: string
   promoter_id: string
   PromoterName: string
+  Username?: string
+  FullName?: string
 }
 
 interface AddPromoterAndShowProps {

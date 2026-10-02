@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -547,7 +548,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(eventEndPoint.GET_EVENT_PROMOTERS, {
+      const response = await authFetch(eventEndPoint.GET_EVENT_PROMOTERS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -625,7 +626,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       }
 
       const postPayload = (payload: Record<string, any>) =>
-        fetch(apiEndpoint, {
+        authFetch(apiEndpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

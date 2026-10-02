@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -114,7 +115,7 @@ export default function BannersPage({ params }: BannersPageProps) {
         limit: "100", // Get more events for selection
       }
       
-      const response = await fetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
+      const response = await authFetch(eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -151,7 +152,7 @@ export default function BannersPage({ params }: BannersPageProps) {
         throw new Error("No valid authentication token found")
       }
 
-      const response = await fetch(bannerEndpoint.GET_ALL_BANNERS, {
+      const response = await authFetch(bannerEndpoint.GET_ALL_BANNERS, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -190,7 +191,7 @@ export default function BannersPage({ params }: BannersPageProps) {
   const filteredBanners = React.useMemo(() => {
     if (!debouncedSearchTerm) return banners
     return banners.filter((banner) => 
-      banner.Event_id.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (banner.Event_id || "").toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
       banner._id.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
     )
   }, [banners, debouncedSearchTerm])
@@ -269,10 +270,10 @@ export default function BannersPage({ params }: BannersPageProps) {
 
   // CRUD Functions
   const handleCreateBanner = async () => {
-    if (!formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events" || !formData.desktopImage || !formData.mobileImage) {
+    if (!formData.desktopImage || !formData.mobileImage) {
       toast({
         title: "Error",
-        description: "Please fill all required fields and upload both images",
+        description: "Please upload both desktop and mobile banner images",
         variant: "destructive",
       })
       return
@@ -286,11 +287,13 @@ export default function BannersPage({ params }: BannersPageProps) {
       }
 
       const formDataToSend = new FormData()
-      formDataToSend.append("Event_id", formData.eventId)
+      if (formData.eventId && formData.eventId !== "loading" && formData.eventId !== "no-events") {
+        formDataToSend.append("Event_id", formData.eventId)
+      }
       formDataToSend.append("DesktopbannerImage", formData.desktopImage)
       formDataToSend.append("MobilebannerImage", formData.mobileImage)
 
-      const response = await fetch(bannerEndpoint.CREATE_BANNER, {
+      const response = await authFetch(bannerEndpoint.CREATE_BANNER, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -322,12 +325,7 @@ export default function BannersPage({ params }: BannersPageProps) {
     }
   }
   const handleEditBanner = async () => {
-    if (!selectedBanner || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events") {
-      toast({
-        title: "Error",
-        description: "Please select an event",
-        variant: "destructive",
-      })
+    if (!selectedBanner) {
       return
     }
 
@@ -340,8 +338,10 @@ export default function BannersPage({ params }: BannersPageProps) {
 
       const formDataToSend = new FormData()
       formDataToSend.append("BannerSlider_id", selectedBanner._id)
-      formDataToSend.append("Event_id", formData.eventId)
-      
+      if (formData.eventId && formData.eventId !== "loading" && formData.eventId !== "no-events") {
+        formDataToSend.append("Event_id", formData.eventId)
+      }
+
       if (formData.desktopImage) {
         formDataToSend.append("DesktopbannerImage", formData.desktopImage)
       }
@@ -349,7 +349,7 @@ export default function BannersPage({ params }: BannersPageProps) {
         formDataToSend.append("MobilebannerImage", formData.mobileImage)
       }
 
-      const response = await fetch(bannerEndpoint.UPDATE_BANNER, {
+      const response = await authFetch(bannerEndpoint.UPDATE_BANNER, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -391,7 +391,7 @@ export default function BannersPage({ params }: BannersPageProps) {
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(bannerEndpoint.DELETE_BANNER, {
+      const response = await authFetch(bannerEndpoint.DELETE_BANNER, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -705,7 +705,7 @@ export default function BannersPage({ params }: BannersPageProps) {
               Add a new banner to the homepage slider
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="eventId">Event *</Label>
+          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="eventId">Event</Label>
               <Select 
                 value={formData.eventId} 
                 onValueChange={(value) => {
@@ -819,7 +819,7 @@ export default function BannersPage({ params }: BannersPageProps) {
               Cancel
             </Button>            <Button 
               onClick={handleCreateBanner}
-              disabled={submitting || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events" || !formData.desktopImage || !formData.mobileImage}
+              disabled={submitting || !formData.desktopImage || !formData.mobileImage}
             >
               {submitting ? (
                 <>
@@ -844,7 +844,7 @@ export default function BannersPage({ params }: BannersPageProps) {
               Update banner details and images
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="editEventId">Event *</Label>
+          <div className="grid gap-4 py-4">            <div className="grid gap-2">              <Label htmlFor="editEventId">Event</Label>
               <Select 
                 value={formData.eventId} 
                 onValueChange={(value) => {
@@ -926,7 +926,7 @@ export default function BannersPage({ params }: BannersPageProps) {
               Cancel
             </Button>            <Button 
               onClick={handleEditBanner}
-              disabled={submitting || !formData.eventId || formData.eventId === "loading" || formData.eventId === "no-events"}
+              disabled={submitting}
             >
               {submitting ? (
                 <>

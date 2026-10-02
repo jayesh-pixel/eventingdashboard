@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -573,7 +574,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       console.log("- Applied filters:", filters || "none")
       console.log("- Full URL being called:", apiEndpoint)
 
-      const response = await fetch(apiEndpoint, {
+      const response = await authFetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -864,7 +865,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   const fetchFilterCities = async () => {
-    const response = await fetch(getallcityDataEndPoint.GET_ALL_EVENT_CITY_DATA, {
+    const response = await authFetch(getallcityDataEndPoint.GET_ALL_EVENT_CITY_DATA, {
       method: "POST",
       headers: getFilterApiHeaders(),
     })
@@ -876,7 +877,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   const fetchFilterVenues = async () => {
-    const response = await fetch(venueEndPoint.ALL_VENUE_DATA_LIST, {
+    const response = await authFetch(venueEndPoint.ALL_VENUE_DATA_LIST, {
       method: "GET",
       headers: getFilterApiHeaders(),
     })
@@ -892,7 +893,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   const fetchFilterOrganizers = async () => {
-    const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
+    const response = await authFetch(organizerEndpoint.GET_ALL_ORGANIZERS_DATA_URL, {
       method: "GET",
       headers: getFilterApiHeaders(),
     })
@@ -914,7 +915,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   const fetchFilterPromoters = async () => {
-    const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+    const response = await authFetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
       method: "GET",
       headers: getFilterApiHeaders(),
     })
@@ -939,12 +940,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     const payload = JSON.stringify(getEventsListPayload())
 
     const [published, completed] = await Promise.allSettled([
-      fetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
+      authFetch(eventEndPoint.GET_ALL_PUBLISHED_EVENTS_DATA, {
         method: "POST",
         headers: getFilterApiHeaders(),
         body: payload,
       }).then(handleApiResponse),
-      fetch(eventEndPoint.GET_ALL_COMPLETED_EVENTS_DATA, {
+      authFetch(eventEndPoint.GET_ALL_COMPLETED_EVENTS_DATA, {
         method: "POST",
         headers: getFilterApiHeaders(),
         body: payload,
@@ -1306,7 +1307,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         bookingStatus: booking.bookingStatus
       })
 
-      const response = await fetch(promoterEndPointPannel.CANCEL_EVENT_TICKET, {
+      const response = await authFetch(promoterEndPointPannel.CANCEL_EVENT_TICKET, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1382,7 +1383,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         return
       }
 
-      const response = await fetch(promoterEndPointPannel.RESEND_EVENT_TICKET, {
+      const response = await authFetch(promoterEndPointPannel.RESEND_EVENT_TICKET, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

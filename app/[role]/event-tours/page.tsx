@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -104,7 +105,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       console.log("- Page:", page)
       console.log("- Limit:", limit)
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOURS_PAGINATED_URL, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOURS_PAGINATED_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -200,6 +201,24 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       return
     }
 
+    if (!formData.tourDescription.trim()) {
+      toast({
+        title: "Error",
+        description: "Tour description is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.imageFiles.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please upload at least one tour image",
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()
@@ -223,7 +242,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         formDataToSend.append("EventTourImages", file)
       })
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOUR_CREATION_URL, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOUR_CREATION_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -262,12 +281,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   }
 
   const handleEditTour = async () => {
-    if (!selectedTour || !formData.tourName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      })
+    if (!selectedTour) {
       return
     }
 
@@ -284,7 +298,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         return
       }
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOUR_DATA_UPDATED, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOUR_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -341,7 +355,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         return
       }
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOUR_DELETE, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOUR_DELETE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -392,7 +406,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         return
       }
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOUR_IMAGE_REMOVE, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOUR_IMAGE_REMOVE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -455,7 +469,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         EventTourImage: imageFile.name
       })
 
-      const response = await fetch(eventTourEndPoint.EVENT_TOUR_UPLOAD_IMAGE, {
+      const response = await authFetch(eventTourEndPoint.EVENT_TOUR_UPLOAD_IMAGE, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -508,7 +522,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
       const endpoint = enable ? eventTourEndPoint.EVENT_TOUR_ENABLE : eventTourEndPoint.EVENT_TOUR_DISABLE
       
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -670,7 +684,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="tourDescription">Description</Label>
+                <Label htmlFor="tourDescription">Description *</Label>
                 <Textarea
                   id="tourDescription"
                   value={formData.tourDescription}
@@ -680,7 +694,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="imageFiles">Images</Label>
+                <Label htmlFor="imageFiles">Images *</Label>
                 <Input
                   id="imageFiles"
                   type="file"
@@ -901,7 +915,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="editTourName">Tour Name *</Label>
+              <Label htmlFor="editTourName">Tour Name</Label>
               <Input
                 id="editTourName"
                 value={formData.tourName}

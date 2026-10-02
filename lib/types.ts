@@ -453,7 +453,6 @@ export interface Promocode {
   CustomerIds?: Array<{
     customer_id: string
   }>
-  CanBeUsed?: string
   [key: string]: any
 }
 

@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -219,7 +220,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         requestBody.createduser_id = user.user_id
       }
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -556,7 +557,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         payload.CityIsoCode = cityIsoCode
       }
 
-      const response = await fetch(promoterEndpoint.REGISTER_PROMOTER_URL, {
+      const response = await authFetch(promoterEndpoint.REGISTER_PROMOTER_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -585,18 +586,14 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     }
   }
   const handleEditPromoter = async () => {
-    if (!selectedPromoter || !formData.FullName || !formData.Email || !formData.Phone1) {
-      toast({
-        title: "Error",
-        description: "Please fill all required fields",
-        variant: "destructive",
-      })
+    // Backend update only requires user_id; all profile fields are optional
+    if (!selectedPromoter) {
       return
     }
 
-    // Validate phone number (must be exactly 10 digits)
+    // Validate phone number only if provided (must be exactly 10 digits)
     const phoneRegex = /^\d{10}$/
-    if (!phoneRegex.test(formData.Phone1)) {
+    if (formData.Phone1 && formData.Phone1.trim() && !phoneRegex.test(formData.Phone1)) {
       toast({
         title: "Error",
         description: "Phone number must be exactly 10 digits",
@@ -605,9 +602,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
-    // Validate email format
+    // Validate email format only if provided
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(formData.Email)) {
+    if (formData.Email && formData.Email.trim() && !emailRegex.test(formData.Email)) {
       toast({
         title: "Error",
         description: "Please enter a valid email address",
@@ -625,11 +622,12 @@ export default function PromotersPage({ params }: PromotersPageProps) {
 
       const formDataToSend = new FormData()
       formDataToSend.append("user_id", selectedPromoter._id)
-      formDataToSend.append("FullName", formData.FullName)
-      formDataToSend.append("Email", formData.Email)
-      formDataToSend.append("Phone1", formData.Phone1)
+      // Only send non-empty values — backend Joi rejects empty strings
+      if (formData.FullName?.trim()) formDataToSend.append("FullName", formData.FullName)
+      if (formData.Email?.trim()) formDataToSend.append("Email", formData.Email)
+      if (formData.Phone1?.trim()) formDataToSend.append("Phone1", formData.Phone1)
 
-      const response = await fetch(promoterEndpoint.UPDATE_PROMOTER_DATA_URL, {
+      const response = await authFetch(promoterEndpoint.UPDATE_PROMOTER_DATA_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -671,7 +669,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         ? promoterEndpoint.ENABLE_PROMOTER_URL 
         : promoterEndpoint.DISABLE_PROMOTER_URL
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -733,7 +731,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         throw new Error("Promoter id not found")
       }
 
-      const response = await fetch(promoterEndPointPannel.PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD, {
+      const response = await authFetch(promoterEndPointPannel.PROMOTER_FORGOT_PASSWORD_RESET_PASSWORD, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1283,14 +1281,14 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Password *</Label>
               <div className="relative">
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
                   value={formData.Password}
                   onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
-                  placeholder="Enter password (optional)"
+                  placeholder="Enter password (5-10 characters)"
                   className="pr-10"
                 />
                 <button
@@ -1392,7 +1390,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label htmlFor="editFullName">Full Name *</Label>
+              <Label htmlFor="editFullName">Full Name</Label>
               <Input
                 id="editFullName"
                 value={formData.FullName}
@@ -1411,7 +1409,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="editEmail">Email *</Label>
+              <Label htmlFor="editEmail">Email</Label>
               <Input
                 id="editEmail"
                 type="email"
@@ -1420,7 +1418,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 placeholder="Enter email address"
               />
             </div>            <div className="grid gap-2">
-              <Label htmlFor="editPhone">Phone * (10 digits)</Label>
+              <Label htmlFor="editPhone">Phone (10 digits)</Label>
               <Input
                 id="editPhone"
                 type="tel"
@@ -1461,7 +1459,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               Cancel
             </Button>            <Button 
               onClick={handleEditPromoter}
-              disabled={submitting || !formData.FullName || !formData.Email || !formData.Phone1 || !stateIsoCode || !cityIsoCode}
+              disabled={submitting}
             >
               {submitting ? (
                 <>

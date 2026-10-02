@@ -11,6 +11,7 @@ declare global {
   }
 }
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { formatEventDate, formatEventTime, normalizeSearchText, parseEventDateTime } from "@/lib/utils";
@@ -234,7 +235,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         const token = getValidToken();
         if (!user || !token) return;
 
-        const res = await fetch(promoterEndPointPannel.GET_ALL_EVENT_DATE_BY_EVENT_ID, {
+        const res = await authFetch(promoterEndPointPannel.GET_ALL_EVENT_DATE_BY_EVENT_ID, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -259,7 +260,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           const spToken = getValidToken();
           if (user && spToken) {
             try {
-              const spRes = await fetch(promoterEndPointPannel.GET_PROMOTER_SEASON_PASS, {
+              const spRes = await authFetch(promoterEndPointPannel.GET_PROMOTER_SEASON_PASS, {
                 method: "POST",
                 headers: {
                   "Content-Type": "application/json",
@@ -291,7 +292,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           const token2 = getValidToken();
           if (user && token2) {
             const payload = { event_id: eventId, eventDateTime_id: list[0]._id, promoter_id: user.user_id };
-            const res2 = await fetch(promoterEndPointPannel.GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE, {
+            const res2 = await authFetch(promoterEndPointPannel.GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE, {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
@@ -332,7 +333,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       if (!user || !token) return;
 
       const payload = { event_id: eventId, eventDateTime_id: dateId, promoter_id: user.user_id };
-      const res = await fetch(promoterEndPointPannel.GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE, {
+      const res = await authFetch(promoterEndPointPannel.GET_PROMOTER_TICKET_DATA_BY_EVENT_DATE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -463,8 +464,10 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       const age = parseInt(customer.Age, 10);
       if (isNaN(age) || age < 1 || age > 120) errors.Age = "Age should be 1–120";
     }
-    if (customer.isWhatsApp === 0 && !customer.WhatsAppNo.trim()) errors.WhatsAppNo = "WhatsApp no. required";
-    else if (customer.isWhatsApp === 0 && customer.WhatsAppNo.trim().length !== 10) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
+    // WhatsApp number is optional on the backend; only check its format when provided
+    if (customer.isWhatsApp === 0 && customer.WhatsAppNo.trim() && customer.WhatsAppNo.trim().length !== 10) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
+    // Note is optional, but when provided the backend requires at least 3 characters
+    if (customer.noteDescription.trim() && customer.noteDescription.trim().length < 3) errors.noteDescription = "Note must be at least 3 characters";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -478,7 +481,10 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       const token = getValidToken();
       if (!user || !token) return;
       const selectedTicket = selectableTickets.find((t) => counts[t._id] > 0);
-      if (!selectedTicket) return;
+      if (!selectedTicket) {
+        toast({ title: "Validation Error", description: "Please select at least one ticket", variant: "destructive" });
+        return;
+      }
 
       // A season pass covers every date, so its ticket document carries no
       // EventDateTime_id. Sending one makes the backend's stock filter match
@@ -487,7 +493,10 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       // resolved here because the confirmation screen labels the booking with it.
       const isSeasonPass = isSeasonPassTicket(selectedTicket._id);
       const bookingDateId = isSeasonPass ? selectedDateId ?? dates[0]?._id : selectedDateId;
-      if (!isSeasonPass && !bookingDateId) return;
+      if (!isSeasonPass && !bookingDateId) {
+        toast({ title: "Validation Error", description: "Please select an event date", variant: "destructive" });
+        return;
+      }
 
       // Stray spaces around the typed name/email are stored verbatim by the
       // backend, and a booking saved as " Eventing Club LLP " then goes missing
@@ -522,8 +531,8 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         payload.WhatsAppNumber = whatsappNum
       }
 
-      // Only send PromoterNote if it has at least 3 chars (Joi min(3))
-      if (customer.noteDescription && customer.noteDescription.trim().length >= 3) {
+      // PromoterNote is optional — only send it when provided (length checked in validateCustomerForm)
+      if (customer.noteDescription && customer.noteDescription.trim()) {
         payload.PromoterNote = customer.noteDescription.trim()
       }
 
@@ -535,7 +544,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
         }
       }
 
-      const res = await fetch(promoterEndPointPannel.BOOKING_TICKET_BY_PROMOTER, {
+      const res = await authFetch(promoterEndPointPannel.BOOKING_TICKET_BY_PROMOTER, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -567,7 +576,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
 
       // Create customer record (fire-and-forget, don't block booking success)
       try {
-        await fetch(websiteCustomer.CREATE_CUSTOMER_WEBSITE, {
+        await authFetch(websiteCustomer.CREATE_CUSTOMER_WEBSITE, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -850,21 +859,21 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
               <CardContent className="p-4 space-y-4 text-sm">
                 {/* Full Name */}
                 <div className="space-y-1">
-                  <label className="font-medium">Full Name</label>
+                  <label className="font-medium">Full Name *</label>
                   <input value={customer.FullName} className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("FullName", e.target.value)} />
                   {formErrors.FullName && <p className="text-destructive text-xs">{formErrors.FullName}</p>}
                 </div>
 
                 {/* Phone only */}
                 <div className="space-y-1">
-                  <label className="font-medium">Phone Number</label>
+                  <label className="font-medium">Phone Number *</label>
                   <input value={customer.PhoneNo} maxLength={10} pattern="[6-9][0-9]{9}" className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("PhoneNo", e.target.value.replace(/\D/g, "").slice(0, 10))} />
                   {formErrors.PhoneNo && <p className="text-destructive text-xs">{formErrors.PhoneNo}</p>}
                 </div>
 
                 {/* Email */}
                 <div className="space-y-1">
-                  <label className="font-medium">Email</label>
+                  <label className="font-medium">Email *</label>
                   <input value={customer.Email} type="email" className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("Email", e.target.value)} />
                   {formErrors.Email && <p className="text-destructive text-xs">{formErrors.Email}</p>}
                 </div>
@@ -893,6 +902,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 <div className="space-y-1">
                   <label className="font-medium">Note (optional)</label>
                   <textarea rows={3} value={customer.noteDescription} className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("noteDescription", e.target.value)} />
+                  {formErrors.noteDescription && <p className="text-destructive text-xs">{formErrors.noteDescription}</p>}
                 </div>
 
                 <Button className="w-full h-12" onClick={() => validateCustomerForm() && setCheckoutPage(true)}>

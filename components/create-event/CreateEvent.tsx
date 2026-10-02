@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Formik, Form, Field, FieldArray, FormikProps } from "formik"
 import * as Yup from "yup"
@@ -26,6 +27,7 @@ import type { UserRole } from "@/lib/navigation"
 import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
+import { AddressSelector } from "@/components/address-selector"
 import { 
   createVenueOption, 
   createOrganizerOption, 
@@ -129,29 +131,39 @@ interface EventFormValues {
 
 // Validation Schema
 // Dynamic validation schema function
-const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string) => Yup.object().shape({
-  eventname: Yup.string()
-    .required("Event name is required")
-    .min(1, "Event name must be at least 1 character"),
-  
-  eventDescription: Yup.string()
-    .required("Event description is required")
-    .min(10, "Event description must be at least 10 characters"),
-  
-  eventTermsandConditions: Yup.string()
-    .required("Terms and conditions are required")
-    .min(10, "Terms and conditions must be at least 10 characters"),
+// Mirrors the backend: the create endpoints require most fields, while the update endpoints
+// only require EventLanguages + the location flags (omitted fields keep their existing value).
+const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string, editMode: boolean = false) => Yup.object().shape({
+  eventname: editMode
+    ? Yup.string().min(1, "Event name must be at least 1 character")
+    : Yup.string()
+      .required("Event name is required")
+      .min(1, "Event name must be at least 1 character"),
+
+  eventDescription: editMode
+    ? Yup.string().min(10, "Event description must be at least 10 characters")
+    : Yup.string()
+      .required("Event description is required")
+      .min(10, "Event description must be at least 10 characters"),
+
+  eventTermsandConditions: editMode
+    ? Yup.string().min(10, "Terms and conditions must be at least 10 characters")
+    : Yup.string()
+      .required("Terms and conditions are required")
+      .min(10, "Terms and conditions must be at least 10 characters"),
   
   eventVideoUrl: Yup.string()
     .url("Please enter a valid URL")
     .nullable()
     .transform((value) => value === '' ? null : value),
   
-  eventVisibility: Yup.string()
-    .required("Event visibility is required"),
-  
-  eventType: Yup.string()
-    .required("Event type is required"),
+  eventVisibility: editMode
+    ? Yup.string()
+    : Yup.string().required("Event visibility is required"),
+
+  eventType: editMode
+    ? Yup.string()
+    : Yup.string().required("Event type is required"),
   
   locationType: Yup.string()
     .required("Location type is required"),
@@ -170,60 +182,63 @@ const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string)
       otherwise: (schema) => schema.notRequired()
     }),
   
+  // TBA state/city are only enforced by the create endpoints
   stateIsoCode: Yup.string()
     .when("locationType", {
-      is: "tba",
+      is: (value: string) => value === "tba" && !editMode,
       then: (schema) => schema.required("State is required for TBA events"),
       otherwise: (schema) => schema.notRequired()
     }),
-  
+
   cityIsoCode: Yup.string()
     .when("locationType", {
-      is: "tba",
+      is: (value: string) => value === "tba" && !editMode,
       then: (schema) => schema.required("City is required for TBA events"),
       otherwise: (schema) => schema.notRequired()
     }),
-  
+
+  // BookingPhoneNumber / WhatsAppPhoneNumber are optional on the backend (10-digit pattern only)
   bookingphonenumber: Yup.string()
-    .when("eventType", {
-      is: "1",
-      then: (schema) => schema.required("Booking phone number is required").matches(/^[0-9]{10}$/, "Phone number must be 10 digits"),
-      otherwise: (schema) => schema.notRequired()
-    }),
-  
+    .matches(/^[0-9]{10}$/, { message: "Phone number must be 10 digits", excludeEmptyString: true }),
+
   whatsappnumber: Yup.string()
-    .when("eventType", {
-      is: "3",
-      then: (schema) => schema.required("WhatsApp number is required").matches(/^[0-9]{10}$/, "Phone number must be 10 digits"),
-      otherwise: (schema) => schema.notRequired()
-    }),
-  
-  
-  organizers: userRole === "organizer" 
-    ? Yup.array() // No minimum requirement for organizer role users
+    .matches(/^[0-9]{10}$/, { message: "Phone number must be 10 digits", excludeEmptyString: true }),
+
+
+  organizers: userRole === "organizer" || editMode
+    ? Yup.array() // Not sent by organizer role users; optional on update
     : Yup.array().min(1, "At least one organizer is required"),
-  
-  categories: Yup.array()
-    .min(1, "At least one category is required"),
-  
-  artists: Yup.array()
-    .min(1, "At least one artist is required"),
-  
-  genres: Yup.array()
-    .min(1, "At least one genre is required"),
-  
+
+  categories: editMode
+    ? Yup.array()
+    : Yup.array().min(1, "At least one category is required"),
+
+  artists: editMode
+    ? Yup.array()
+    : Yup.array().min(1, "At least one artist is required"),
+
+  genres: editMode
+    ? Yup.array()
+    : Yup.array().min(1, "At least one genre is required"),
+
   languages: Yup.array()
     .min(1, "At least one language is required"),
-  
-  ageRestriction: Yup.string()
-    .required("Age restriction is required"),
-  
-  feevalue: Yup.number()
-    .required("Convenience fee value is required")
-    .min(0, "Fee value cannot be negative"),
-  
-  events: Yup.array()
-    .min(1, "At least one event date/time is required"),
+
+  // BestSuitedFor is optional on every endpoint
+  ageRestriction: Yup.string(),
+
+  // ConvinienceFeeValue is only required by the superAdmin create endpoint
+  feevalue: userRole === "superadmin" && !editMode
+    ? Yup.number()
+      .required("Convenience fee value is required")
+      .min(0, "Fee value cannot be negative")
+    : Yup.number()
+      .min(0, "Fee value cannot be negative"),
+
+  // EventDateTime is only sent/required on create (dates are managed separately on update)
+  events: editMode
+    ? Yup.array()
+    : Yup.array().min(1, "At least one event date/time is required"),
   
   // Tour event validation - conditionally required based on eventSelectionFlag
   eventTour_id: eventSelectionFlag === 1 
@@ -622,7 +637,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/venue/getall"), {
+      const response = await authFetch(getApiEndpoint("/venue/getall"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -649,7 +664,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/organizer/getAll"), {
+      const response = await authFetch(getApiEndpoint("/organizer/getAll"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -681,7 +696,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/category/getall"), {
+      const response = await authFetch(getApiEndpoint("/category/getall"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -709,7 +724,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/artist/getall"), {
+      const response = await authFetch(getApiEndpoint("/artist/getall"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -737,7 +752,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/genre/getall"), {
+      const response = await authFetch(getApiEndpoint("/genre/getall"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -765,7 +780,7 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(getApiEndpoint("/eventtour/getall"), {
+      const response = await authFetch(getApiEndpoint("/eventtour/getall"), {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
@@ -1280,7 +1295,8 @@ export default function CreateEvent({
         return
       }
 
-      // Validate images - in edit mode, we allow no new images if there are existing ones
+      // Validate images - carousel images are only required by the create endpoints
+      // (the update endpoints do not accept carousel images at all)
       if (!editMode && carouselImages.length === 0) {
         toast({
           title: "Validation Error",
@@ -1289,24 +1305,12 @@ export default function CreateEvent({
         })
         return
       }
-      
-      // In edit mode, if there are existing images, new uploads are optional
-      if (editMode && carouselImages.length === 0 && existingCarouselImages.length === 0) {
-        toast({
-          title: "Validation Error", 
-          description: "Please upload at least one carousel image or keep existing images",
-          variant: "destructive"
-        })
-        return
-      }
 
-      // Validate EventDateTime - must have at least one event date/time
-      if (!values.events || values.events.length === 0) {
+      // Validate EventDateTime - create endpoints require at least one event date/time
+      if (!editMode && (!values.events || values.events.length === 0)) {
         toast({
           title: "Validation Error",
-          description: editMode 
-            ? "No event dates found. Please add at least one event date and time." 
-            : "Please add at least one event date and time",
+          description: "Please add at least one event date and time",
           variant: "destructive"
         })
         return
@@ -1340,9 +1344,10 @@ export default function CreateEvent({
       }
 
       // Add form data using the exact field names required by the API
-      submitData.append("EventName", values.eventname || "")
-      submitData.append("EventDescription", values.eventDescription || "")
-      submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
+      // On update these are optional (omitted = keep existing); an empty string would be rejected
+      if (!editMode || values.eventname) submitData.append("EventName", values.eventname || "")
+      if (!editMode || values.eventDescription) submitData.append("EventDescription", values.eventDescription || "")
+      if (!editMode || values.eventTermsandConditions) submitData.append("EventTermsCondition", values.eventTermsandConditions || "")
       submitData.append("EventVisibility", values.eventVisibility || "1")
       
       // EventType is not allowed when organizer is updating an event
@@ -1540,7 +1545,7 @@ export default function CreateEvent({
       } else {
         eventEndpoint = role === "superadmin" ? "/events/superAdmin/create" : "/events/organizer/create"
       }
-        const response = await fetch(getApiEndpoint(eventEndpoint), {
+        const response = await authFetch(getApiEndpoint(eventEndpoint), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -1692,10 +1697,26 @@ export default function CreateEvent({
           organizers.length, categories.length, artists.length, genres.length, languageOptions.length
         ])}
         enableReinitialize={true} // Re-initialize when existingEventData changes
-        validationSchema={getEventValidationSchema(eventSelectionFlag ?? 0, role)}
+        validationSchema={getEventValidationSchema(eventSelectionFlag ?? 0, role, editMode)}
         onSubmit={() => {}} // We handle submission manually through buttons
       >
-        {({ values, errors, touched, setFieldValue, setFieldTouched }: FormikProps<EventFormValues>) => {
+        {({ values, errors, touched, setFieldValue, setFieldTouched, validateForm, setTouched }: FormikProps<EventFormValues>) => {
+          // Run the Yup schema before submitting and surface every error (inline + toast)
+          const validateAndSubmit = async (eventStatus: number) => {
+            const formErrors = await validateForm()
+            const errorFields = Object.keys(formErrors) as Array<keyof EventFormValues>
+            if (errorFields.length > 0) {
+              setTouched(errorFields.reduce((acc, field) => ({ ...acc, [field]: true }), {}) as any, false)
+              toast({
+                title: "Validation Error",
+                description: errorFields.map((field) => String(formErrors[field])).join(", "),
+                variant: "destructive"
+              })
+              return
+            }
+            handleSubmit(values, eventStatus)
+          }
+
           // Store setFieldValue reference for modal usage
           React.useEffect(() => {
             setFormikSetFieldValue(() => setFieldValue)
@@ -1984,7 +2005,7 @@ export default function CreateEvent({
                 {/* 1. Upload Carousel Images */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Upload Carousel Images <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Upload Carousel Images {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                     <p className="text-sm text-muted-foreground">
                       First image will be used for thumbnail. Maximum file size: 500KB. Dimensions: 612x408
                     </p>
@@ -2101,16 +2122,13 @@ export default function CreateEvent({
                     {!editMode && carouselImages.length === 0 && (
                       <p className="text-sm text-red-600">At least one carousel image is required</p>
                     )}
-                    {editMode && existingCarouselImages.length === 0 && carouselImages.length === 0 && (
-                      <p className="text-sm text-red-600">At least one carousel image is required</p>
-                    )}
                   </CardContent>
                 </Card>
 
                 {/* 2. Event Visibility */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Visibility <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Event Visibility {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex space-x-4">
@@ -2143,7 +2161,7 @@ export default function CreateEvent({
                 {!isOrganizer && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Event Type <span className="text-red-500">*</span></CardTitle>
+                      <CardTitle>Event Type {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex space-x-4">
@@ -2186,7 +2204,7 @@ export default function CreateEvent({
                       {/* Booking Phone Number - Only for Booking type */}
                       {values.eventType === "1" && (
                         <div className="space-y-2 mt-4">
-                          <Label>Booking Phone Number <span className="text-red-500">*</span></Label>
+                          <Label>Booking Phone Number</Label>
                           <Field
                             as={Input}
                             name="bookingphonenumber"
@@ -2206,7 +2224,7 @@ export default function CreateEvent({
                 {values.eventType === "3" && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>WhatsApp Number <span className="text-red-500">*</span></CardTitle>
+                      <CardTitle>WhatsApp Number</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <Field
@@ -2271,7 +2289,7 @@ export default function CreateEvent({
                               options={venues}
                               value={venues.find(v => v.value === values.venue_id)}
                               onChange={(selected) => {
-                                if (selected?.value === 'create-new-venue') {
+                                if (selected?.value === createVenueOption.value) {
                                   setShowCreateVenueModal(true)
                                 } else {
                                   setFieldValue("venue_id", selected?.value || "")
@@ -2345,7 +2363,7 @@ export default function CreateEvent({
                           
                           <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                              <Label>State <span className="text-red-500">*</span></Label>
+                              <Label>State {!editMode && <span className="text-red-500">*</span>}</Label>
                               <Select
                                 options={states}
                                 value={states.find(s => s.value === values.stateIsoCode)}
@@ -2368,7 +2386,7 @@ export default function CreateEvent({
                             </div>
 
                             <div className="space-y-2">
-                              <Label>City <span className="text-red-500">*</span></Label>
+                              <Label>City {!editMode && <span className="text-red-500">*</span>}</Label>
                               <Select
                                 options={cities}
                                 value={cities.find(c => c.value === values.cityIsoCode)}
@@ -2398,7 +2416,7 @@ export default function CreateEvent({
                 {role !== "organizer" && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Organizers <span className="text-red-500">*</span></CardTitle>
+                      <CardTitle>Organizers {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
@@ -2424,7 +2442,7 @@ export default function CreateEvent({
                 {/* 7. Categories Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Select Category <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Select Category {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2449,7 +2467,7 @@ export default function CreateEvent({
                 {/* 8. Artists Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Select Artist <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Select Artist {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2474,7 +2492,7 @@ export default function CreateEvent({
                 {/* 9. Genres Selection */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Select Genre <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Select Genre {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -2524,7 +2542,7 @@ export default function CreateEvent({
                 {/* 11. Age Restriction */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Select Age <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Select Age</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <Select
@@ -2570,7 +2588,7 @@ export default function CreateEvent({
                   <CardContent>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label>Convenience Fee Unit <span className="text-red-500">*</span></Label>
+                        <Label>Convenience Fee Unit {role === "superadmin" && !editMode && <span className="text-red-500">*</span>}</Label>
                         <UISelect
                           value={values.feeunit.toString()}
                           onValueChange={(value) => setFieldValue("feeunit", parseInt(value))}
@@ -2586,7 +2604,7 @@ export default function CreateEvent({
                         </UISelect>
                       </div>
                       <div className="space-y-2">
-                        <Label>Convenience Fee Value <span className="text-red-500">*</span></Label>
+                        <Label>Convenience Fee Value {role === "superadmin" && !editMode && <span className="text-red-500">*</span>}</Label>
                         <Field
                           as={Input}
                           name="feevalue"
@@ -2615,7 +2633,7 @@ export default function CreateEvent({
                 {/* Event Name */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Name <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Event Name {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <Field
@@ -2632,7 +2650,7 @@ export default function CreateEvent({
                 {/* Event Description */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Description <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Event Description {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ReactQuillWrapper
@@ -2668,7 +2686,7 @@ export default function CreateEvent({
                 {/* Event Terms and Conditions */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Event Terms and Conditions <span className="text-red-500">*</span></CardTitle>
+                    <CardTitle>Event Terms and Conditions {!editMode && <span className="text-red-500">*</span>}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ReactQuillWrapper
@@ -2695,7 +2713,7 @@ export default function CreateEvent({
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="space-y-2">
-                        <Label className="text-base font-semibold">Available Tours</Label>
+                        <Label className="text-base font-semibold">Available Tours <span className="text-red-500">*</span></Label>
                         <Select
                           options={eventTours}
                           value={eventTours.find(tour => tour.value === values.eventTour_id)}
@@ -2731,7 +2749,7 @@ export default function CreateEvent({
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center space-x-2">
-                      <span>Date & Time <span className="text-red-500">*</span></span>
+                      <span>Date & Time {!editMode && <span className="text-red-500">*</span>}</span>
                       {editingEventIndex !== null && (
                         <span className="text-sm bg-primary text-primary-foreground px-2 py-1 rounded">
                           Editing Event #{editingEventIndex + 1}
@@ -3068,14 +3086,14 @@ export default function CreateEvent({
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => handleSubmit(values, EventStatus.Draft)}
+                        onClick={() => validateAndSubmit(EventStatus.Draft)}
                       >
                         Save as Draft
                       </Button>
                     )}
                     <Button
                       type="button"
-                      onClick={() => handleSubmit(values, role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
+                      onClick={() => validateAndSubmit(role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
                     >
                       {role === "organizer" 
                         ? "Send to Review" 
@@ -3105,21 +3123,32 @@ export default function CreateEvent({
                 Name: "",
                 Address: "",
                 City: "",
+                CityIsoCode: "",
                 State: "",
+                StateIsoCode: "",
+                Map_Location: "",
                 PinCode: "",
                 Capacity: "",
                 ContactNumber: "",
-                Description: ""
+                Description: "",
+                Images: [] as File[]
               }}
               validationSchema={Yup.object({
                 Name: Yup.string().required("Venue name is required"),
                 Address: Yup.string().required("Address is required"),
                 City: Yup.string().required("City is required"),
+                CityIsoCode: Yup.string().required("City is required"),
                 State: Yup.string().required("State is required"),
+                StateIsoCode: Yup.string().required("State is required"),
+                Map_Location: Yup.string().required("Map location (Google Maps embed iframe) is required"),
+                Images: Yup.array().min(1, "At least one venue image is required"),
                 // Make these fields optional
                 PinCode: Yup.string(),
-                Capacity: Yup.number().min(1, "Capacity must be at least 1"),
-                ContactNumber: Yup.string().matches(/^[0-9]{10}$/, "Must be 10 digits"),
+                Capacity: Yup.number()
+                  .transform((value, originalValue) => originalValue === "" ? undefined : value)
+                  .typeError("Capacity must be a number")
+                  .min(1, "Capacity must be at least 1"),
+                ContactNumber: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
                 Description: Yup.string()
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
@@ -3134,40 +3163,34 @@ export default function CreateEvent({
                     return
                   }
 
-                  // Prepare payload matching the API requirements
-                  const payload = {
-                    AdminRole: getNumericAdminRole(user?.AdminRole || role || "superadmin"),
-                    user_id: user?.user_id || "",
-                    Name: values.Name,
-                    Description: values.Description || "",
-                    Address: values.Address,
-                    City: values.City,
-                    State: values.State,
-                    Country: "India",
-                    CountryIsoCode: "IN",
-                    StateIsoCode: "",
-                    CityIsoCode: "",
-                    Map_Location: "", // Optional field
-                    Priority: 1,
-                  }
+                  // Prepare multipart payload matching the API requirements (venue images are required)
+                  const payload = new FormData()
+                  payload.append("AdminRole", getNumericAdminRole(user?.AdminRole || role || "superadmin").toString())
+                  payload.append("user_id", user?.user_id || "")
+                  payload.append("Name", values.Name)
+                  payload.append("Description", values.Description || "")
+                  payload.append("Address", values.Address)
+                  payload.append("City", values.City)
+                  payload.append("State", values.State)
+                  payload.append("Country", "India")
+                  payload.append("CountryIsoCode", "IN")
+                  payload.append("StateIsoCode", values.StateIsoCode)
+                  payload.append("CityIsoCode", values.CityIsoCode)
+                  payload.append("Map_Location", values.Map_Location.trim())
+                  payload.append("Priority", "1")
+                  values.Images.forEach((image) => payload.append("Images", image))
 
-                  console.log("Creating venue with payload:", payload)
+                  console.log("Creating venue with FormData")
 
-                  const response = await fetch(getApiEndpoint("/venue/create"), {
+                  const response = await authFetch(getApiEndpoint("/venue/create"), {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(payload)
+                    body: payload
                   })
 
-                  if (!response.ok) {
-                    const errorText = await response.text()
-                    console.error("Venue creation failed:", response.status, errorText)
-                    throw new Error(`Failed to create venue: ${response.status}`)
-                  }
-
+                  // handleApiResponse surfaces the backend's message (e.g. invalid Google Maps iframe)
                   const data = await handleApiResponse(response)
                   console.log("Venue created:", data)
                   
@@ -3201,7 +3224,7 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Venue Name *</Label>
@@ -3210,7 +3233,7 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Address *</Label>
                     <Field as={Textarea} name="Address" placeholder="Enter venue address" rows={2} />
@@ -3218,22 +3241,45 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.Address}</p>
                     )}
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>City *</Label>
-                      <Field as={Input} name="City" placeholder="City" />
-                      {touched.City && errors.City && (
-                        <p className="text-sm text-red-600">{errors.City}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>State *</Label>
-                      <Field as={Input} name="State" placeholder="State" />
-                      {touched.State && errors.State && (
-                        <p className="text-sm text-red-600">{errors.State}</p>
-                      )}
-                    </div>
+
+                  <div className="space-y-2">
+                    <AddressSelector
+                      stateIsoCode={values.StateIsoCode}
+                      setStateIsoCode={(value) => setFieldValue("StateIsoCode", value)}
+                      stateName={values.State}
+                      setStateName={(value) => setFieldValue("State", value)}
+                      cityIsoCode={values.CityIsoCode}
+                      setCityIsoCode={(value) => setFieldValue("CityIsoCode", value)}
+                      cityName={values.City}
+                      setCityName={(value) => setFieldValue("City", value)}
+                    />
+                    {(touched.State || touched.StateIsoCode) && (errors.State || errors.StateIsoCode) && (
+                      <p className="text-sm text-red-600">{errors.State || errors.StateIsoCode}</p>
+                    )}
+                    {(touched.City || touched.CityIsoCode) && (errors.City || errors.CityIsoCode) && (
+                      <p className="text-sm text-red-600">{errors.City || errors.CityIsoCode}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Map Location *</Label>
+                    <Field as={Textarea} name="Map_Location" placeholder='Paste the Google Maps embed code (<iframe src="https://www.google.com/maps/embed?pb=...">)' rows={3} />
+                    {touched.Map_Location && errors.Map_Location && (
+                      <p className="text-sm text-red-600">{errors.Map_Location}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Venue Images *</Label>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      multiple
+                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                    />
+                    {touched.Images && errors.Images && (
+                      <p className="text-sm text-red-600">{String(errors.Images)}</p>
+                    )}
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -3287,36 +3333,69 @@ export default function CreateEvent({
             </DialogHeader>
             <Formik
               initialValues={{
-                Name: "",
+                OwnerType: "",
+                CompanyName: "",
+                FullName: "",
+                Username: "",
+                Password: "",
                 Email: "",
-                PhoneNumber: "",
-                Address: "",
-                Description: ""
+                Phone1: "",
+                State: "",
+                StateIsoCode: "",
+                City: "",
+                CityIsoCode: ""
               }}
+              // Mirrors validaterRegisterOrganizer (Email / Phone1 are optional on the backend)
               validationSchema={Yup.object({
-                Name: Yup.string().required("Organizer name is required"),
-                Email: Yup.string().email("Invalid email").required("Email is required"),
-                PhoneNumber: Yup.string().matches(/^[0-9]{10}$/, "Must be 10 digits").required("Phone number is required"),
-                Address: Yup.string().required("Address is required")
+                OwnerType: Yup.string().required("Owner type is required"),
+                CompanyName: Yup.string().required("Company / club name is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
+                FullName: Yup.string().required("Full name is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
+                Username: Yup.string().required("Username is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
+                Password: Yup.string().required("Password is required").min(5, "Must be at least 5 characters").max(10, "Must not exceed 10 characters"),
+                Email: Yup.string().email("Invalid email"),
+                Phone1: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
+                State: Yup.string().required("State is required"),
+                StateIsoCode: Yup.string().required("State is required"),
+                City: Yup.string().required("City is required"),
+                CityIsoCode: Yup.string().required("City is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
                   if (!authToken) return
 
-                  const response = await fetch(getApiEndpoint("/organizer/register"), {
+                  const payload: Record<string, string | number> = {
+                    OwnerType: Number(values.OwnerType),
+                    CompanyName: values.CompanyName.trim(),
+                    FullName: values.FullName.trim(),
+                    Username: values.Username.trim(),
+                    Password: values.Password,
+                    Country: "India",
+                    CountryIsoCode: "IN",
+                    State: values.State,
+                    StateIsoCode: values.StateIsoCode,
+                    City: values.City,
+                    CityIsoCode: values.CityIsoCode,
+                    SendMailFlag: 2, // SendDefaultPasswordMail.No
+                    CreatedBy: getNumericAdminRole(user?.AdminRole || role || "superadmin"),
+                    createduser_id: user?.user_id || ""
+                  }
+                  if (values.Email.trim()) payload.Email = values.Email.trim()
+                  if (values.Phone1.trim()) payload.Phone1 = values.Phone1.trim()
+
+                  const response = await authFetch(getApiEndpoint("/organizer/register"), {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: JSON.stringify(payload)
                   })
 
                   const data = await handleApiResponse(response)
                   const newOrganizer = {
                     value: data.data._id || data.data.id,
-                    label: data.data.Name || data.data.name || data.data.organizerName
+                    label: data.data.Username || data.data.FullName || data.data.Name || values.Username
                   }
                   
                   // Update organizers list
@@ -3340,43 +3419,90 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Organizer Name *</Label>
-                    <Field as={Input} name="Name" placeholder="Enter organizer name" />
-                    {touched.Name && errors.Name && (
-                      <p className="text-sm text-red-600">{errors.Name}</p>
+                    <Label>Owner Type *</Label>
+                    <UISelect value={values.OwnerType} onValueChange={(value) => setFieldValue("OwnerType", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select owner type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">Own Club</SelectItem>
+                        <SelectItem value="2">Event Company</SelectItem>
+                      </SelectContent>
+                    </UISelect>
+                    {touched.OwnerType && errors.OwnerType && (
+                      <p className="text-sm text-red-600">{errors.OwnerType}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label>Email *</Label>
-                    <Field as={Input} name="Email" type="email" placeholder="Enter email address" />
+                    <Label>{values.OwnerType === "1" ? "Club Name" : "Company Name"} *</Label>
+                    <Field as={Input} name="CompanyName" placeholder="Enter club / company name" />
+                    {touched.CompanyName && errors.CompanyName && (
+                      <p className="text-sm text-red-600">{errors.CompanyName}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Full Name *</Label>
+                    <Field as={Input} name="FullName" placeholder="Enter organizer full name" />
+                    {touched.FullName && errors.FullName && (
+                      <p className="text-sm text-red-600">{errors.FullName}</p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Username *</Label>
+                      <Field as={Input} name="Username" placeholder="Login username" />
+                      {touched.Username && errors.Username && (
+                        <p className="text-sm text-red-600">{errors.Username}</p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Password *</Label>
+                      <Field as={Input} name="Password" type="password" placeholder="5-10 characters" />
+                      {touched.Password && errors.Password && (
+                        <p className="text-sm text-red-600">{errors.Password}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Field as={Input} name="Email" type="email" placeholder="Enter email address (optional)" />
                     {touched.Email && errors.Email && (
                       <p className="text-sm text-red-600">{errors.Email}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label>Phone Number *</Label>
-                    <Field as={Input} name="PhoneNumber" placeholder="10-digit phone number" />
-                    {touched.PhoneNumber && errors.PhoneNumber && (
-                      <p className="text-sm text-red-600">{errors.PhoneNumber}</p>
+                    <Label>Phone Number</Label>
+                    <Field as={Input} name="Phone1" placeholder="10-digit phone number (optional)" />
+                    {touched.Phone1 && errors.Phone1 && (
+                      <p className="text-sm text-red-600">{errors.Phone1}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label>Address *</Label>
-                    <Field as={Textarea} name="Address" placeholder="Enter address" rows={2} />
-                    {touched.Address && errors.Address && (
-                      <p className="text-sm text-red-600">{errors.Address}</p>
+                    <AddressSelector
+                      stateIsoCode={values.StateIsoCode}
+                      setStateIsoCode={(value) => setFieldValue("StateIsoCode", value)}
+                      stateName={values.State}
+                      setStateName={(value) => setFieldValue("State", value)}
+                      cityIsoCode={values.CityIsoCode}
+                      setCityIsoCode={(value) => setFieldValue("CityIsoCode", value)}
+                      cityName={values.City}
+                      setCityName={(value) => setFieldValue("City", value)}
+                    />
+                    {(touched.State || touched.StateIsoCode) && (errors.State || errors.StateIsoCode) && (
+                      <p className="text-sm text-red-600">{errors.State || errors.StateIsoCode}</p>
                     )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Field as={Textarea} name="Description" placeholder="Organizer description (optional)" rows={2} />
+                    {(touched.City || touched.CityIsoCode) && (errors.City || errors.CityIsoCode) && (
+                      <p className="text-sm text-red-600">{errors.City || errors.CityIsoCode}</p>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-2">
@@ -3401,23 +3527,29 @@ export default function CreateEvent({
             <Formik
               initialValues={{
                 Name: "",
-                Description: ""
+                Description: "",
+                CategoryImages: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Category name is required").min(3, "Category name must be at least 3 characters")
+                Name: Yup.string().required("Category name is required").min(3, "Category name must be at least 3 characters"),
+                CategoryImages: Yup.array().min(1, "At least one category image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
                   if (!authToken) return
 
-                  const response = await fetch(getApiEndpoint("/category/create"), {
+                  const payload = new FormData()
+                  payload.append("Name", values.Name)
+                  if (values.Description.trim()) payload.append("Description", values.Description)
+                  values.CategoryImages.forEach((image) => payload.append("CategoryImages", image))
+
+                  const response = await authFetch(getApiEndpoint("/category/create"), {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: payload
                   })
 
                   const data = await handleApiResponse(response)
@@ -3447,7 +3579,7 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Category Name *</Label>
@@ -3456,10 +3588,23 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <Label>Description</Label>
                     <Field as={Textarea} name="Description" placeholder="Category description (optional)" rows={3} />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Category Images *</Label>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      multiple
+                      onChange={(e) => setFieldValue("CategoryImages", Array.from(e.target.files || []))}
+                    />
+                    {touched.CategoryImages && errors.CategoryImages && (
+                      <p className="text-sm text-red-600">{String(errors.CategoryImages)}</p>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-2">
@@ -3486,25 +3631,34 @@ export default function CreateEvent({
                 Name: "",
                 Description: "",
                 ContactEmail: "",
-                ContactPhone: ""
+                ContactPhone: "",
+                Images: [] as File[]
               }}
               validationSchema={Yup.object({
                 Name: Yup.string().required("Artist name is required").min(2, "Artist name must be at least 2 characters"),
                 ContactEmail: Yup.string().email("Invalid email format"),
-                ContactPhone: Yup.string().matches(/^[0-9]{10}$/, "Must be 10 digits")
+                ContactPhone: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
+                Images: Yup.array().min(1, "At least one artist image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
                   if (!authToken) return
 
-                  const response = await fetch(getApiEndpoint("/artist/register"), {
+                  // Backend reads Name / Email / Description / PhoneNo + "Images" files (multipart)
+                  const payload = new FormData()
+                  payload.append("Name", values.Name)
+                  if (values.Description.trim()) payload.append("Description", values.Description)
+                  if (values.ContactEmail.trim()) payload.append("Email", values.ContactEmail.trim())
+                  if (values.ContactPhone.trim()) payload.append("PhoneNo", values.ContactPhone.trim())
+                  values.Images.forEach((image) => payload.append("Images", image))
+
+                  const response = await authFetch(getApiEndpoint("/artist/register"), {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: payload
                   })
 
                   const data = await handleApiResponse(response)
@@ -3534,7 +3688,7 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Artist Name *</Label>
@@ -3564,6 +3718,19 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.ContactPhone}</p>
                     )}
                   </div>
+
+                  <div className="space-y-2">
+                    <Label>Artist Images *</Label>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      multiple
+                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                    />
+                    {touched.Images && errors.Images && (
+                      <p className="text-sm text-red-600">{String(errors.Images)}</p>
+                    )}
+                  </div>
                   
                   <div className="flex justify-end space-x-2">
                     <Button type="button" variant="outline" onClick={() => setShowCreateArtistModal(false)}>
@@ -3587,23 +3754,30 @@ export default function CreateEvent({
             <Formik
               initialValues={{
                 Name: "",
-                Description: ""
+                Description: "",
+                Images: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Genre name is required").min(2, "Genre name must be at least 2 characters")
+                Name: Yup.string().required("Genre name is required").min(2, "Genre name must be at least 2 characters"),
+                Description: Yup.string().trim().required("Genre description is required"),
+                Images: Yup.array().min(1, "At least one genre image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
                   if (!authToken) return
 
-                  const response = await fetch(getApiEndpoint("/genre/create"), {
+                  const payload = new FormData()
+                  payload.append("Name", values.Name)
+                  payload.append("Description", values.Description)
+                  values.Images.forEach((image) => payload.append("Images", image))
+
+                  const response = await authFetch(getApiEndpoint("/genre/create"), {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: payload
                   })
 
                   const data = await handleApiResponse(response)
@@ -3633,7 +3807,7 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Genre Name *</Label>
@@ -3642,10 +3816,26 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Field as={Textarea} name="Description" placeholder="Genre description (optional)" rows={3} />
+                    <Label>Description *</Label>
+                    <Field as={Textarea} name="Description" placeholder="Genre description" rows={3} />
+                    {touched.Description && errors.Description && (
+                      <p className="text-sm text-red-600">{errors.Description}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Genre Images *</Label>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      multiple
+                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                    />
+                    {touched.Images && errors.Images && (
+                      <p className="text-sm text-red-600">{String(errors.Images)}</p>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-2">
@@ -3671,26 +3861,30 @@ export default function CreateEvent({
               initialValues={{
                 Name: "",
                 Description: "",
-                StartDate: "",
-                EndDate: ""
+                EventTourImages: [] as File[]
               }}
+              // Backend (validateEventTourCreation) only accepts Name + Description, plus EventTourImages files
               validationSchema={Yup.object({
                 Name: Yup.string().required("Tour name is required").min(3, "Tour name must be at least 3 characters"),
-                StartDate: Yup.date().required("Start date is required").min(new Date(), "Start date cannot be in the past"),
-                EndDate: Yup.date().required("End date is required").min(Yup.ref('StartDate'), "End date must be after start date")
+                Description: Yup.string().trim().required("Tour description is required"),
+                EventTourImages: Yup.array().min(1, "At least one tour image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
                   const authToken = getValidToken()
                   if (!authToken) return
 
-                  const response = await fetch(getApiEndpoint("/eventtour/create"), {
+                  const payload = new FormData()
+                  payload.append("Name", values.Name)
+                  payload.append("Description", values.Description)
+                  values.EventTourImages.forEach((image) => payload.append("EventTourImages", image))
+
+                  const response = await authFetch(getApiEndpoint("/eventtour/create"), {
                     method: "POST",
                     headers: {
-                      "Content-Type": "application/json",
                       Authorization: `Bearer ${authToken}`
                     },
-                    body: JSON.stringify(values)
+                    body: payload
                   })
 
                   const data = await handleApiResponse(response)
@@ -3722,7 +3916,7 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ values, errors, touched, isSubmitting }) => (
+              {({ errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Tour Name *</Label>
@@ -3731,27 +3925,26 @@ export default function CreateEvent({
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label>Description</Label>
-                    <Field as={Textarea} name="Description" placeholder="Tour description (optional)" rows={3} />
+                    <Label>Description *</Label>
+                    <Field as={Textarea} name="Description" placeholder="Tour description" rows={3} />
+                    {touched.Description && errors.Description && (
+                      <p className="text-sm text-red-600">{errors.Description}</p>
+                    )}
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Start Date *</Label>
-                      <Field as={Input} name="StartDate" type="date" min={formattedDate} />
-                      {touched.StartDate && errors.StartDate && (
-                        <p className="text-sm text-red-600">{errors.StartDate}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      <Label>End Date *</Label>
-                      <Field as={Input} name="EndDate" type="date" min={values.StartDate || formattedDate} />
-                      {touched.EndDate && errors.EndDate && (
-                        <p className="text-sm text-red-600">{errors.EndDate}</p>
-                      )}
-                    </div>
+
+                  <div className="space-y-2">
+                    <Label>Tour Images *</Label>
+                    <Input
+                      type="file"
+                      accept="image/jpeg,image/png"
+                      multiple
+                      onChange={(e) => setFieldValue("EventTourImages", Array.from(e.target.files || []))}
+                    />
+                    {touched.EventTourImages && errors.EventTourImages && (
+                      <p className="text-sm text-red-600">{String(errors.EventTourImages)}</p>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-2">

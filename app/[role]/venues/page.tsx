@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -262,7 +263,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body.search_keyword = search.trim()
       }
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -312,10 +313,10 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   }
 
   const handleCreateVenue = async () => {
-    if (!formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.city.trim() || !formData.mapLocation.trim()) {
+    if (!formData.venueName.trim() || !formData.fullAddress.trim() || !formData.state.trim() || !formData.city.trim() || !formData.mapLocation.trim()) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields (Name, Description, Address, City, and Map Location)",
+        description: "Please fill in all required fields (Name, Address, State, City, and Map Location)",
         variant: "destructive",
       })
       return
@@ -330,7 +331,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
-    if (formData.venueDescription.trim().length < 5) {
+    if (formData.venueDescription.trim() && formData.venueDescription.trim().length < 5) {
       toast({
         title: "Error",
         description: "Description must be at least 5 characters",
@@ -384,7 +385,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
       console.log("Creating venue with FormData")
 
-      const response = await fetch(venueEndPoint.VENUE_CREATION_URL, {
+      const response = await authFetch(venueEndPoint.VENUE_CREATION_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -418,22 +419,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   }
 
   const handleEditVenue = async () => {
-    if (!selectedVenue || !formData.venueName.trim() || !formData.venueDescription.trim() || !formData.fullAddress.trim() || !formData.city.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields (Name, Description, Address, and City)",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const hasExistingImage = !!selectedVenue.Images && selectedVenue.Images.length > 0
-    if (selectedImages.length === 0 && !hasExistingImage) {
-      toast({
-        title: "Image Required",
-        description: "Please upload at least one venue image before saving this venue.",
-        variant: "destructive",
-      })
+    if (!selectedVenue) {
       return
     }
 
@@ -464,7 +450,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         Priority: formData.priority,
       }
 
-      const response = await fetch(venueEndPoint.VENUE_DATA_UPDATED, {
+      const response = await authFetch(venueEndPoint.VENUE_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -515,7 +501,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         venue_id: venueId,
       }
 
-      const response = await fetch(venueEndPoint.VENUE_DELETE_URL, {
+      const response = await authFetch(venueEndPoint.VENUE_DELETE_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -629,7 +615,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         formData.append('AdminRole', getNumericAdminRole(user?.AdminRole || role).toString())
         formData.append('user_id', user?.user_id || '')
 
-        const response = await fetch(venueEndPoint.VENUE_UPLOAD_IMAGE, {
+        const response = await authFetch(venueEndPoint.VENUE_UPLOAD_IMAGE, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -666,7 +652,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       const authToken = getValidToken()
       if (!authToken) throw new Error("Authentication required")
 
-      const response = await fetch(venueEndPoint.VENUE_IMAGE_REMOVE, {
+      const response = await authFetch(venueEndPoint.VENUE_IMAGE_REMOVE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -759,7 +745,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="venueDescription">Venue Description *</Label>
+                <Label htmlFor="venueDescription">Venue Description</Label>
                 <Textarea
                   id="venueDescription"
                   value={formData.venueDescription}
@@ -782,7 +768,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
               
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="state">State</Label>
+                  <Label htmlFor="state">State *</Label>
                   <Select value={formData.state} onValueChange={(value) => {
                     setFormData({ ...formData, state: value, city: "" })
                   }}>
@@ -1192,7 +1178,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="editVenueName">Venue Name *</Label>
+                <Label htmlFor="editVenueName">Venue Name</Label>
                 <Input
                   id="editVenueName"
                   value={formData.venueName}
@@ -1213,7 +1199,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="editVenueDescription">Venue Description *</Label>
+              <Label htmlFor="editVenueDescription">Venue Description</Label>
               <Textarea
                 id="editVenueDescription"
                 value={formData.venueDescription}
@@ -1224,7 +1210,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="editFullAddress">Full Address *</Label>
+              <Label htmlFor="editFullAddress">Full Address</Label>
               <Textarea
                 id="editFullAddress"
                 value={formData.fullAddress}
@@ -1251,7 +1237,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="editCity">City *</Label>
+                <Label htmlFor="editCity">City</Label>
                 <Select
                   value={formData.city}
                   onValueChange={(value) => setFormData({ ...formData, city: value })}
@@ -1270,7 +1256,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="editMapLocation">Map Location *</Label>
+              <Label htmlFor="editMapLocation">Map Location</Label>
               <Textarea
                 id="editMapLocation"
                 value={formData.mapLocation}

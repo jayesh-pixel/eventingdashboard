@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -136,7 +137,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
 
       const payload = scopePayload()
 
-      const response = await fetch(
+      const response = await authFetch(
         isPromoter
           ? promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
           : organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID,
@@ -189,7 +190,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         : organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
 
       const post = (payload: Record<string, any>) =>
-        fetch(endpoint, {
+        authFetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -313,7 +314,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         ...filteredParams,
       }
 
-      const response = await fetch(
+      const response = await authFetch(
         isPromoter
           ? promoterEndPointPannel.FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER
           : organizerEndpoint.FILTER_EVENT_BOOKING_DATA_BY_NAME_AND_DATE_IN_PROMOTER,

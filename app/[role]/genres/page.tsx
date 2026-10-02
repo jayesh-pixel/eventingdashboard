@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -193,7 +194,7 @@ export default function GenresPage({ params }: GenresPageProps) {
       console.log("- Page:", page)
       console.log("- Limit:", limit)
 
-      const response = await fetch(genreEndPoint.GENRE_PAGINATED_URL, {
+      const response = await authFetch(genreEndPoint.GENRE_PAGINATED_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -294,6 +295,15 @@ export default function GenresPage({ params }: GenresPageProps) {
       return
     }
 
+    if (!formData.genreDescription.trim()) {
+      toast({
+        title: "Error",
+        description: "Genre description is required",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (selectedImages.length === 0 && !formData.genreImage) {
       toast({
         title: "Image Required",
@@ -333,7 +343,7 @@ export default function GenresPage({ params }: GenresPageProps) {
         formDataToSend.append("Images", formData.genreImage)
       }
 
-      const response = await fetch(genreEndPoint.GENRE_CREATION_URL, {
+      const response = await authFetch(genreEndPoint.GENRE_CREATION_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -372,24 +382,7 @@ export default function GenresPage({ params }: GenresPageProps) {
     }  }
 
   const handleEditGenre = async () => {
-    if (!selectedGenre || !formData.genreName.trim()) {
-      toast({
-        title: "Error",
-        description: "Genre name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const hasExistingImage = !!selectedGenre.Images && selectedGenre.Images.length > 0
-    if (selectedImages.length === 0 && !formData.genreImage && !hasExistingImage) {
-      toast({
-        title: "Image Required",
-        description: "Please upload a genre image before saving this genre.",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!selectedGenre) return
 
     setLoading(true)
     try {
@@ -404,7 +397,7 @@ export default function GenresPage({ params }: GenresPageProps) {
         return
       }
 
-      const response = await fetch(genreEndPoint.GENRE_DATA_UPDATED, {
+      const response = await authFetch(genreEndPoint.GENRE_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -464,7 +457,7 @@ export default function GenresPage({ params }: GenresPageProps) {
         return
       }
 
-      const response = await fetch(genreEndPoint.GENRE_DELETE, {
+      const response = await authFetch(genreEndPoint.GENRE_DELETE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -629,7 +622,7 @@ export default function GenresPage({ params }: GenresPageProps) {
         formData.append("genre_id", genreId)
         formData.append("GenreImage", image)
 
-        const response = await fetch(genreEndPoint.GENRE_UPLOAD_IMAGE, {
+        const response = await authFetch(genreEndPoint.GENRE_UPLOAD_IMAGE, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -676,7 +669,7 @@ export default function GenresPage({ params }: GenresPageProps) {
         return
       }
 
-      const response = await fetch(genreEndPoint.GENRE_IMAGE_REMOVE, {
+      const response = await authFetch(genreEndPoint.GENRE_IMAGE_REMOVE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -753,7 +746,7 @@ export default function GenresPage({ params }: GenresPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="genreDescription">Description</Label>
+                <Label htmlFor="genreDescription">Description *</Label>
                 <Textarea
                   id="genreDescription"
                   value={formData.genreDescription}
@@ -949,7 +942,7 @@ Actions
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="editGenreName">Genre Name *</Label>
+              <Label htmlFor="editGenreName">Genre Name</Label>
               <Input
                 id="editGenreName"
                 value={formData.genreName}
@@ -995,10 +988,10 @@ Actions
             
             {/* New Images Section */}
             <div className="space-y-2">
-              <Label>Add New Images *</Label>
+              <Label>Add New Images</Label>
               <div className="space-y-2">
                 <p className="text-xs text-muted-foreground">
-                  Required if the genre does not already have an image. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                  Optional. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                 </p>
                 <Input
                   type="file"

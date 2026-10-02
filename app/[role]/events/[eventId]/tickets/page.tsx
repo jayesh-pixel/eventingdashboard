@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { useParams, useRouter } from "next/navigation"
 import { formatEventDate, formatEventTime } from "@/lib/utils"
@@ -497,7 +498,7 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      const response = await fetch(eventEndPoint.GET_EVENT_PROMOTERS, {
+      const response = await authFetch(eventEndPoint.GET_EVENT_PROMOTERS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -596,7 +597,7 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+      const response = await authFetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
         method: "GET",
         headers: { Authorization: `Bearer ${authToken}` },
       })
@@ -670,7 +671,7 @@ export default function TicketsPage() {
 
       console.log("API Payload:", JSON.stringify(payload, null, 2))
 
-      const response = await fetch(eventEndPoint.GET_EVENTDATA_BY_ID, {
+      const response = await authFetch(eventEndPoint.GET_EVENTDATA_BY_ID, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -785,7 +786,7 @@ export default function TicketsPage() {
 
       console.log("Normal tickets API Payload:", JSON.stringify(payload, null, 2))
 
-      const normalTicketsResponse = await fetch(ticketEndPoint.GET_ALL_EVENT_TICKETS, {
+      const normalTicketsResponse = await authFetch(ticketEndPoint.GET_ALL_EVENT_TICKETS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -866,7 +867,7 @@ export default function TicketsPage() {
 
       console.log("Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
-      const response = await fetch(`${BASE_URL}/eventstickets/getTicketsByFilter`, {
+      const response = await authFetch(`${BASE_URL}/eventstickets/getTicketsByFilter`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -956,7 +957,7 @@ export default function TicketsPage() {
 
       console.log("Bulk tickets API Payload:", JSON.stringify(bulkTicketsPayload, null, 2))
 
-      const bulkTicketsResponse = await fetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
+      const bulkTicketsResponse = await authFetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1002,7 +1003,7 @@ export default function TicketsPage() {
 
       console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
-      const response = await fetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
+      const response = await authFetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1070,7 +1071,7 @@ export default function TicketsPage() {
         ? `${BASE_URL}/eventstickets/enableEventTicket`
         : `${BASE_URL}/eventstickets/disableEventTicket`
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1148,7 +1149,7 @@ export default function TicketsPage() {
 
       console.log(`Using endpoint: ${endpoint}`)
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1241,7 +1242,39 @@ export default function TicketsPage() {
         setLoading(false)
         return
       }
-      
+
+      // Backend requires Quantity and BookingMaxLimit as positive integers (Joi .positive().required())
+      if (activeTab === "normal" && (!Number.isFinite(normalFormData.MaxQuantity) || normalFormData.MaxQuantity < 1)) {
+        toast({
+          title: "Validation Error",
+          description: "Total quantity is required (at least 1).",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
+      if (activeTab === "normal" && (!Number.isFinite(normalFormData.BookingMaxLimit) || normalFormData.BookingMaxLimit < 1)) {
+        toast({
+          title: "Validation Error",
+          description: "Booking max limit is required (at least 1).",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
+      // Description is optional, but when provided the backend requires at least 3 characters
+      if (activeTab === "normal" && normalFormData.TicketDescription.trim() && normalFormData.TicketDescription.trim().length < 3) {
+        toast({
+          title: "Validation Error",
+          description: "Description must be at least 3 characters.",
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
       // Validate event date/time selection for normal tickets (skip for Season Pass - covers all dates)
       if (activeTab === "normal" && normalFormData.TicketType !== 3) {
         if (isMultiDateEvent || eventDateTimes.length > 1) {
@@ -1327,8 +1360,8 @@ export default function TicketsPage() {
           EventTicketVisibility: normalFormData.VisibilityLevel.toString(),
         }
         
-        // Only send Description if it has at least 3 chars (Joi min(3))
-        if (normalFormData.TicketDescription && normalFormData.TicketDescription.trim().length >= 3) {
+        // Description is optional — only send it when provided (Joi rejects an empty string)
+        if (normalFormData.TicketDescription && normalFormData.TicketDescription.trim()) {
           payload.Description = normalFormData.TicketDescription.trim()
         }
         
@@ -1355,7 +1388,7 @@ export default function TicketsPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), activeTab === "bulk" ? 600000 : 30000) // 10 minutes for bulk, 30 seconds for normal
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1517,7 +1550,7 @@ export default function TicketsPage() {
           eventTicket_id: normalTicket._id,
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           EventTicketVisibility: currentVisibility,
-          ...(editFormData.Description && editFormData.Description.trim().length >= 3
+          ...(editFormData.Description && editFormData.Description.trim()
             ? { Description: editFormData.Description.trim() }
             : {}),
           ...(currentVisibility === "3" && selectedPromoters.length > 0
@@ -1534,6 +1567,29 @@ export default function TicketsPage() {
           toast({
             title: "Validation Error",
             description: "Quantity must be at least 1",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+
+        // Backend requires EventPromoters when visibility is Promoters
+        if (payload.EventTicketVisibility === "3" && selectedPromoters.length === 0) {
+          toast({
+            title: "Validation Error",
+            description: "Please select at least one promoter for promoter-only tickets",
+            variant: "destructive",
+          })
+          setLoading(false)
+          return
+        }
+
+        // Description is optional, but when provided the backend requires at least 3 characters
+        const editDescription = (editFormData.Description || "").trim()
+        if (editDescription && editDescription.length < 3) {
+          toast({
+            title: "Validation Error",
+            description: "Description must be at least 3 characters.",
             variant: "destructive",
           })
           setLoading(false)
@@ -1576,7 +1632,7 @@ export default function TicketsPage() {
 
       console.log("Update ticket payload:", JSON.stringify(payload, null, 2))
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1635,7 +1691,7 @@ export default function TicketsPage() {
       console.log("🚫 Cancelling bulk ticket:", { batchId })
 
       // Call the cancel bulk ticket API endpoint with correct payload
-      const response = await fetch(ticketEndPoint.CANCEL_BULK_TICKET, {
+      const response = await authFetch(ticketEndPoint.CANCEL_BULK_TICKET, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1687,7 +1743,7 @@ export default function TicketsPage() {
       if (!user || !authToken) return
 
       // Call the correct download bulk ticket report API endpoint
-      const response = await fetch(`${BASE_URL}/eventbulktickets/exportBulkTicketBookingIds`, {
+      const response = await authFetch(`${BASE_URL}/eventbulktickets/exportBulkTicketBookingIds`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2410,7 +2466,7 @@ export default function TicketsPage() {
             <TabsContent value="normal" className="space-y-4">
               <div className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="ticketName">Ticket Name</Label>
+                  <Label htmlFor="ticketName">Ticket Name *</Label>
                   <Input
                     id="ticketName"
                     value={normalFormData.TicketName}
@@ -2419,7 +2475,7 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Event Type</Label>
+                  <Label>Event Type *</Label>
                   {(isMultiDateEvent || eventDateTimes.length > 1) ? (
                     // Multi-day event: allow Multiple Day or Season Pass
                     <RadioGroup
@@ -2456,7 +2512,7 @@ export default function TicketsPage() {
 
                 <div className="grid grid-cols-1 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="visibilityLevel">Visibility</Label>
+                    <Label htmlFor="visibilityLevel">Visibility *</Label>
                     <Select
                       value={normalFormData.VisibilityLevel.toString()}
                       onValueChange={handleVisibilityChange}
@@ -2503,7 +2559,7 @@ export default function TicketsPage() {
                     )}                    {normalFormData.VisibilityLevel === 3 && (
                       <div className="space-y-3">
                         <div className="space-y-2">
-                          <Label htmlFor="promoterSelect">Assign to Promoters</Label>
+                          <Label htmlFor="promoterSelect">Assign to Promoters *</Label>
                           <p className="text-xs text-muted-foreground">
                             Select which promoters assigned to this event can sell this ticket
                           </p>
@@ -2566,7 +2622,7 @@ export default function TicketsPage() {
                 {/* Event Date & Time Selection */}
                 {eventDateTimes.length > 0 && normalFormData.TicketType !== 3 && (
                   <div className="space-y-2">
-                    <Label>Event Date & Time Selection</Label>
+                    <Label>Event Date & Time Selection{(isMultiDateEvent || eventDateTimes.length > 1) && " *"}</Label>
                     {isMultiDateEvent || eventDateTimes.length > 1 ? (
                       <div className="space-y-3">
                         <p className="text-sm text-muted-foreground">
@@ -2639,7 +2695,7 @@ export default function TicketsPage() {
                   />
                 </div>                <div className={`grid gap-4 ${getNumericRole(role) === 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div className="space-y-2">
-                    <Label htmlFor="ticketPrice">Price (₹)</Label>
+                    <Label htmlFor="ticketPrice">Price (₹) *</Label>
                     <Input
                       id="ticketPrice"
                       type="number"
@@ -2649,7 +2705,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="maxQuantity">Total Quantity</Label>
+                    <Label htmlFor="maxQuantity">Total Quantity *</Label>
                     <Input
                       id="maxQuantity"
                       type="number"
@@ -2661,7 +2717,7 @@ export default function TicketsPage() {
                   {/* Only show Booking Max Limit for superadmin */}
                   {getNumericRole(role) === 1 && (
                     <div className="space-y-2">
-                      <Label htmlFor="bookingMaxLimit">Booking Max Limit</Label>
+                      <Label htmlFor="bookingMaxLimit">Booking Max Limit *</Label>
                       <Input
                         id="bookingMaxLimit"
                         type="number"
@@ -2696,7 +2752,7 @@ export default function TicketsPage() {
             <TabsContent value="bulk" className="space-y-4">
               <div className="grid gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bulkTicketName">Ticket Name*</Label>
+                  <Label htmlFor="bulkTicketName">Ticket Name *</Label>
                   <Input
                     id="bulkTicketName"
                     value={bulkFormData.TicketName}
@@ -2706,7 +2762,7 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="customerName">Customer Name*</Label>
+                  <Label htmlFor="customerName">Customer Name *</Label>
                   <Input
                     id="customerName"
                     value={bulkFormData.CustomerName}
@@ -2716,7 +2772,7 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Phone Number*</Label>
+                  <Label htmlFor="phoneNumber">Phone Number *</Label>
                   <Input
                     id="phoneNumber"
                     type="tel"
@@ -2727,7 +2783,7 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email*</Label>
+                  <Label htmlFor="email">Email *</Label>
                   <Input
                     id="email"
                     type="email"
@@ -2738,7 +2794,7 @@ export default function TicketsPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="eventDateTime">Select Date*</Label>
+                  <Label htmlFor="eventDateTime">Select Date *</Label>
                   <Select
                     value={bulkFormData.EventDateTime_id}
                     onValueChange={(value) => setBulkFormData(prev => ({ ...prev, EventDateTime_id: value }))}
@@ -2758,7 +2814,7 @@ export default function TicketsPage() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="totalQuantity">Total Quantity* (Max: {MAX_BULK_TICKETS_PER_BATCH})</Label>
+                    <Label htmlFor="totalQuantity">Total Quantity * (Max: {MAX_BULK_TICKETS_PER_BATCH})</Label>
                     <Input
                       id="totalQuantity"
                       type="number"
@@ -2772,7 +2828,7 @@ export default function TicketsPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="bulkTicketPrice">Ticket Price*</Label>
+                    <Label htmlFor="bulkTicketPrice">Ticket Price *</Label>
                     <Input
                       id="bulkTicketPrice"
                       type="number"
@@ -3000,7 +3056,7 @@ export default function TicketsPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="editMaxQuantity">Total Quantity *</Label>
+                      <Label htmlFor="editMaxQuantity">Total Quantity</Label>
                       <Input
                         id="editMaxQuantity"
                         type="number"

@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import { useState, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -132,7 +133,7 @@ export default function PromocodesPage() {
         limit: "50",
       }
 
-      const response = await fetch(eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS, {
+      const response = await authFetch(eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,7 +220,7 @@ export default function PromocodesPage() {
         endpoint = promocodeEndPoint.SEARCH_PROMOCODE_PAGINATED
       }
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -314,10 +315,10 @@ export default function PromocodesPage() {
       return
     }
 
-    if (!formData.TermsCondition.trim() || formData.TermsCondition.trim().length < 5) {
+    if (formData.TermsCondition.trim() && formData.TermsCondition.trim().length < 5) {
       toast({
         title: "Validation Error",
-        description: "Terms & Conditions are required (min 5 characters)",
+        description: "Terms & Conditions must be at least 5 characters",
         variant: "destructive",
       })
       return
@@ -373,7 +374,6 @@ export default function PromocodesPage() {
       // PromocodeValidFor: 1=Public, 2=Private
       const requestData: any = {
         PromoCodeName: formData.PromoCodeName.trim(),
-        TermsCondition: formData.TermsCondition.trim(),
         PromocodeType: Number(formData.PromocodeType),
         Value: valueNumber,
         MinCheckoutAmount: minCheckoutNumber,
@@ -383,13 +383,18 @@ export default function PromocodesPage() {
         CanBeUsed: Number(formData.CanBeUsed),
       }
 
+      // TermsCondition is optional on the backend (Joi rejects an empty string), so omit it when blank
+      if (formData.TermsCondition.trim()) {
+        requestData.TermsCondition = formData.TermsCondition.trim()
+      }
+
       // Backend only processes Events when CanBeUsed === SpecificEvents(2).
       // When CanBeUsed === AllEvents(1), Events should be omitted or empty.
       if (formData.CanBeUsed === "2") {
         requestData.Events = selectedEvents.filter(Boolean).map((id) => ({ event_id: id }))
       }
 
-      const response = await fetch(promocodeEndPoint.CREATE_PROMOCODE, {
+      const response = await authFetch(promocodeEndPoint.CREATE_PROMOCODE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -454,7 +459,7 @@ export default function PromocodesPage() {
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -576,7 +581,7 @@ export default function PromocodesPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="validFor">Applies To</Label>
+                  <Label htmlFor="validFor">Applies To *</Label>
                   <Select 
                     value={formData.CanBeUsed} 
                     onValueChange={(value) => {
@@ -673,7 +678,7 @@ export default function PromocodesPage() {
               )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="canBeUsed">Visibility</Label>
+                  <Label htmlFor="canBeUsed">Visibility *</Label>
                   <Select 
                     value={formData.PromocodeValidFor} 
                     onValueChange={(value) => {

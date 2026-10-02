@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -229,28 +230,28 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
     
-    // Owner Type is required
-    if (!formData.OwnerType) {
+    // Owner Type is required (create only — updateProfile does not accept it)
+    if (!editingOrganizer && !formData.OwnerType) {
       errors.OwnerType = "Please select Owner Type"
     }
     
-    // Company/Club name is required when owner type is selected
-    if (formData.OwnerType && !formData.CompanyName.trim()) {
+    // Company/Club name is required when owner type is selected (create only)
+    if (!editingOrganizer && formData.OwnerType && !formData.CompanyName.trim()) {
       errors.CompanyName = formData.OwnerType === "ownClub" ? "Club name is required" : "Company name is required"
     }
     
-    // Full Name validation (backend requires min 5 chars)
+    // Full Name validation (backend requires min 5 chars on create; optional on update)
     if (!formData.FullName.trim()) {
-      errors.FullName = "Full name is required"
+      if (!editingOrganizer) errors.FullName = "Full name is required"
     } else if (formData.FullName.trim().length < 5) {
       errors.FullName = "Full name must be at least 5 characters"
     } else if (formData.FullName.trim().length > 50) {
       errors.FullName = "Full name must not exceed 50 characters"
     }
     
-    // Username validation (backend requires min 5 chars)
+    // Username validation (backend requires min 5 chars on create; not used on update)
     if (!formData.Username.trim()) {
-      errors.Username = "Username is required"
+      if (!editingOrganizer) errors.Username = "Username is required"
     } else if (formData.Username.trim().length < 5) {
       errors.Username = "Username must be at least 5 characters"
     } else if (formData.Username.trim().length > 50) {
@@ -273,6 +274,16 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       }
     }
     
+    // State and City are required by backend on create (Country is fixed to India)
+    if (!editingOrganizer) {
+      if (!formData.State || !formData.StateIsoCode) {
+        errors.State = "State is required"
+      }
+      if (!formData.City || !formData.CityIsoCode) {
+        errors.City = "City is required"
+      }
+    }
+
     // Password validation (required for new organizers)
     if (!editingOrganizer) {
       if (!formData.password) {
@@ -336,7 +347,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         limit: ITEMS_PER_PAGE
       }
 
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZERS_PAGINATED_DATA_URL, {
+      const response = await authFetch(organizerEndpoint.GET_ALL_ORGANIZERS_PAGINATED_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -434,7 +445,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         search_keyword: keyword
       }
 
-      const response = await fetch(organizerEndpoint.GET_ORGANIZERS_PAGINATED_SEARCH_URL, {
+      const response = await authFetch(organizerEndpoint.GET_ORGANIZERS_PAGINATED_SEARCH_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -625,7 +636,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           if (value) formDataPayload.append(key, value)
         })
 
-        response = await fetch(organizerEndpoint.UPDATE_ORGANIZER_PROFILE, {
+        response = await authFetch(organizerEndpoint.UPDATE_ORGANIZER_PROFILE, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -635,7 +646,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         })
       } else {
         // TODO: Replace with actual create organizer endpoint
-        response = await fetch(organizerEndpoint.REGISTER_ORGANIZER_URL, {
+        response = await authFetch(organizerEndpoint.REGISTER_ORGANIZER_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -752,7 +763,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       
       const action = isCurrentlyActive ? "disabled" : "enabled"
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -828,7 +839,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(organizerEndpoint.UPDATE_PASSWORD, {
+      const response = await authFetch(organizerEndpoint.UPDATE_PASSWORD, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -935,7 +946,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
       // Fetch both sales data and total sales data concurrently
       const [salesResponse, totalSalesResponse] = await Promise.all([
-        fetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
+        authFetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -943,7 +954,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           },
           body: JSON.stringify(salesRequest),
         }),
-        fetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
+        authFetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -1195,7 +1206,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
           <div className="space-y-6 py-4">
             {/* Owner Type Selection */}
             <div className="space-y-3">
-              <Label className="text-sm font-medium">Owner Type <span className="text-red-500">*</span></Label>
+              <Label className="text-sm font-medium">Owner Type {!editingOrganizer && <span className="text-red-500">*</span>}</Label>
               <div className="flex gap-6">
                 <div className="flex items-center">
                   <input
@@ -1234,7 +1245,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Conditional Company/Club Name Fields */}
             {formData.OwnerType === "ownClub" && (
               <div className="space-y-2">
-                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name <span className="text-red-500">*</span></Label>
+                <Label htmlFor="clubName" className="text-sm font-medium">Own Club Name {!editingOrganizer && <span className="text-red-500">*</span>}</Label>
                 <Input
                   id="clubName"
                   value={formData.CompanyName}
@@ -1249,7 +1260,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {formData.OwnerType === "eventCompany" && (
               <div className="space-y-2">
-                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name <span className="text-red-500">*</span></Label>
+                <Label htmlFor="companyName" className="text-sm font-medium">Event Company Name {!editingOrganizer && <span className="text-red-500">*</span>}</Label>
                 <Input
                   id="companyName"
                   value={formData.CompanyName}
@@ -1264,7 +1275,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {/* Full Name */}
             <div className="space-y-2">
-              <Label htmlFor="organizerFullName" className="text-sm font-medium">Full Name <span className="text-red-500">*</span></Label>
+              <Label htmlFor="organizerFullName" className="text-sm font-medium">Full Name {!editingOrganizer && <span className="text-red-500">*</span>}</Label>
               <Input
                 id="organizerFullName"
                 value={formData.FullName}
@@ -1278,7 +1289,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
             {/* Username */}
             <div className="space-y-2">
-              <Label htmlFor="organizerusername" className="text-sm font-medium">Username <span className="text-red-500">*</span></Label>
+              <Label htmlFor="organizerusername" className="text-sm font-medium">Username {!editingOrganizer && <span className="text-red-500">*</span>}</Label>
               <Input
                 id="organizerusername"
                 value={formData.Username}
@@ -1335,6 +1346,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 cityName={cityName}
                 setCityName={setCityName}
               />
+              {formErrors.State && (
+                <div className="text-red-600 text-sm">{formErrors.State}</div>
+              )}
+              {formErrors.City && (
+                <div className="text-red-600 text-sm">{formErrors.City}</div>
+              )}
             </div>
 
             {/* Password - Only show for create mode */}

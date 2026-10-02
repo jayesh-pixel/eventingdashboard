@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -187,7 +188,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.log("- Page:", page)
       console.log("- Limit:", limit)
 
-      const response = await fetch(categorieEndPoint.CATEGORIES_PAGINATED_URL, {
+      const response = await authFetch(categorieEndPoint.CATEGORIES_PAGINATED_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -373,7 +374,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         formData.append("category_id", categoryId)
         formData.append("Image", image)
 
-        const response = await fetch(categorieEndPoint.CATEGORIES_UPLOAD_IMAGE, {
+        const response = await authFetch(categorieEndPoint.CATEGORIES_UPLOAD_IMAGE, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -417,7 +418,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         return
       }
 
-      const response = await fetch(categorieEndPoint.CATEGORIES_IMAGE_REMOVE, {
+      const response = await authFetch(categorieEndPoint.CATEGORIES_IMAGE_REMOVE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -525,7 +526,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         formDataToSend.append("CategoryImages", formData.categoryImage)
       }
 
-      const response = await fetch(categorieEndPoint.CATEGORIE_CREATION_URL, {
+      const response = await authFetch(categorieEndPoint.CATEGORIE_CREATION_URL, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -560,24 +561,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
     }
   }
   const handleEditCategory = async () => {
-    if (!selectedCategory || !formData.categoryName.trim()) {
-      toast({
-        title: "Error",
-        description: "Category name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const hasExistingImage = !!selectedCategory.Images && selectedCategory.Images.length > 0
-    if (selectedImages.length === 0 && !formData.categoryImage && !hasExistingImage) {
-      toast({
-        title: "Image Required",
-        description: "Please upload at least one category image before saving this category.",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!selectedCategory) return
 
     if (formData.categoryPriority < 0 || formData.categoryPriority > 10) {
       toast({
@@ -601,7 +585,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         return
       }
 
-      const response = await fetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
+      const response = await authFetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -657,7 +641,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         return
       }
 
-      const response = await fetch(categorieEndPoint.CATEGORIES_DELETE, {
+      const response = await authFetch(categorieEndPoint.CATEGORIES_DELETE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -730,7 +714,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.log("📦 Request body:", requestBody)
 
       // Call the update API with the new status and all existing data
-      const response = await fetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
+      const response = await authFetch(categorieEndPoint.CATEGORIES_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -845,7 +829,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="categoryPriority">Priority (0-10) *</Label>
+                <Label htmlFor="categoryPriority">Priority (0-10)</Label>
                 <Input
                   id="categoryPriority"
                   type="number"
@@ -1076,7 +1060,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="editCategoryName">Category Name *</Label>
+              <Label htmlFor="editCategoryName">Category Name</Label>
               <Input
                 id="editCategoryName"
                 value={formData.categoryName}

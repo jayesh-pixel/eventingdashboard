@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -211,7 +212,7 @@ export default function EventsPage({ params }: EventsPageProps) {
   // API functions to fetch filter options
   const fetchFilterCities = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllEventCities`, {
+      const response = await authFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllEventCities`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -248,7 +249,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterOrganizers = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/organizer/getAll`, {
+      const response = await authFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/organizer/getAll`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -290,7 +291,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterVenues = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/venue/getall`, {
+      const response = await authFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/venue/getall`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -330,7 +331,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
   const fetchFilterPromoters = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/promoter/getAll`, {
+      const response = await authFetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/promoter/getAll`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${getValidToken()}`
@@ -613,7 +614,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         console.log("User ID:", user.user_id)
 
         // Make the API call
-        const response = await fetch(apiEndpoint, {
+        const response = await authFetch(apiEndpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -842,7 +843,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       // Use the getAllPaginated endpoint for search
       const searchEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllPaginated`
 
-      const response = await fetch(searchEndpoint, {
+      const response = await authFetch(searchEndpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -962,7 +963,7 @@ export default function EventsPage({ params }: EventsPageProps) {
         endDate: endDateApiCall,
       }
 
-      const response = await fetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
+      const response = await authFetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1189,7 +1190,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       }
 
       // Make the API call
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1415,7 +1416,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
       console.log('Complete approve payload being sent:', payload)
 
-      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+      const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1522,7 +1523,7 @@ export default function EventsPage({ params }: EventsPageProps) {
 
       console.log('Complete reject payload with remark being sent:', payload)
 
-      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+      const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

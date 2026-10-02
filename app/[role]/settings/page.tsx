@@ -35,6 +35,7 @@
  * - Password: { user_id, CurrentPassword, NewPassword }
  */
 
+import { authFetch } from "@/lib/auth-fetch"
 import { useState, useEffect } from "react"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
@@ -225,23 +226,16 @@ export default function SettingsPage({ params }: SettingsPageProps) {
 
   // Save (register or update) SMTP settings
   const handleSaveSmtp = async () => {
-    if (!smtpForm.host.trim() || !smtpForm.port.trim() || !smtpForm.username.trim() || !smtpForm.password.trim()) {
-      toast({
-        title: "Validation Error",
-        description: "Please fill in all SMTP fields.",
-        variant: "destructive",
-      })
-      return
-    }
-
+    // Backend SMTP validation marks every field optional — only send non-empty values
+    // (Joi rejects empty strings, so blank fields are omitted instead of sent as "")
     setSmtpLoading(true)
     try {
       const payload = {
-        Host: smtpForm.host.trim(),
-        Port: smtpForm.port.trim(),
-        Username: smtpForm.username.trim(),
-        Password: smtpForm.password.trim(),
-        Encryption: smtpForm.encryption,
+        ...(smtpForm.host.trim() ? { Host: smtpForm.host.trim() } : {}),
+        ...(smtpForm.port.trim() ? { Port: smtpForm.port.trim() } : {}),
+        ...(smtpForm.username.trim() ? { Username: smtpForm.username.trim() } : {}),
+        ...(smtpForm.password.trim() ? { Password: smtpForm.password.trim() } : {}),
+        ...(smtpForm.encryption.trim() ? { Encryption: smtpForm.encryption.trim() } : {}),
         ...(smtpId ? { smtp_id: smtpId } : {}),
       }
 
@@ -385,28 +379,10 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       return
     }
 
-    // Validation
-    if (!profileForm.FullName.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter your full name.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!profileForm.Email.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter your email address.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Email validation
+    // Validation — backend profile update only requires user_id; all fields optional
+    // Email validation (only if provided)
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(profileForm.Email)) {
+    if (profileForm.Email.trim() && !emailRegex.test(profileForm.Email)) {
       toast({
         title: "Error",
         description: "Please enter a valid email address.",
@@ -452,25 +428,29 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       }
 
       // Create FormData for multipart form data
+      // Only append non-empty values — backend Joi rejects empty strings for optional fields
       const formData = new FormData()
+      const appendIfFilled = (key: string, value: string) => {
+        if (value && value.trim()) formData.append(key, value)
+      }
       formData.append("user_id", user.user_id)
-      formData.append("FullName", profileForm.FullName)
-      formData.append("Email", profileForm.Email)
-      formData.append("Phone1", profileForm.Phone1)
-      formData.append("WhatsappNumber", profileForm.WhatsappNumber)
-      formData.append("Address", profileForm.Address)
+      appendIfFilled("FullName", profileForm.FullName)
+      appendIfFilled("Email", profileForm.Email)
+      appendIfFilled("Phone1", profileForm.Phone1)
+      appendIfFilled("WhatsappNumber", profileForm.WhatsappNumber)
+      appendIfFilled("Address", profileForm.Address)
       formData.append("Country", "India")
       formData.append("CountryIsoCode", "IN")
-      formData.append("State", profileForm.State)
-      formData.append("StateIsoCode", profileForm.StateIsoCode)
-      formData.append("City", profileForm.City)
-      formData.append("CityIsoCode", profileForm.CityIsoCode)
+      appendIfFilled("State", profileForm.State)
+      appendIfFilled("StateIsoCode", profileForm.StateIsoCode)
+      appendIfFilled("City", profileForm.City)
+      appendIfFilled("CityIsoCode", profileForm.CityIsoCode)
       
       if (profileImageFile) {
         formData.append("ProfileImage", profileImageFile)
       }
 
-      const response = await fetch(endpoint, {
+      const response = await authFetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${localStorage.getItem("authToken")}`,
@@ -657,7 +637,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="current-password">Current Password</Label>
+            <Label htmlFor="current-password">Current Password *</Label>
             <div className="relative">
               <Input
                 id="current-password"
@@ -681,7 +661,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="new-password">New Password</Label>
+            <Label htmlFor="new-password">New Password *</Label>
             <div className="relative">
               <Input
                 id="new-password"
@@ -705,7 +685,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirm-password">Confirm New Password</Label>
+            <Label htmlFor="confirm-password">Confirm New Password *</Label>
             <div className="relative">
               <Input
                 id="confirm-password"

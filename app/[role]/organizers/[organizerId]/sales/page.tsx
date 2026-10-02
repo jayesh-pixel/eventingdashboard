@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -159,7 +160,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await fetch(organizerEndpoint.GET_ORGANIZER_DATA_BY_ID_URL, {
+      const response = await authFetch(organizerEndpoint.GET_ORGANIZER_DATA_BY_ID_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +189,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
-      const response = await fetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
+      const response = await authFetch(organizerEndpoint.ORGANIZER_TOTAL_SALES_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -233,7 +234,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
-      const response = await fetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
+      const response = await authFetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -294,7 +295,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
-      const response = await fetch(organizerEndpoint.GET_ALL_ORGANIZER_PAYMENTS, {
+      const response = await authFetch(organizerEndpoint.GET_ALL_ORGANIZER_PAYMENTS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -369,7 +370,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         payload.Remark = paymentForm.remark
       }
 
-      const response = await fetch(organizerEndpoint.ADD_PAYMENT, {
+      const response = await authFetch(organizerEndpoint.ADD_PAYMENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -416,7 +417,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         throw new Error("Authentication required")
       }
 
-      const response = await fetch(organizerEndpoint.DELETE_PAYMENT, {
+      const response = await authFetch(organizerEndpoint.DELETE_PAYMENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

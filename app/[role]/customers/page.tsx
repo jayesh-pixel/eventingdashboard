@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -119,7 +120,7 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         }
       }
 
-      const response = await fetch(apiUrl, {
+      const response = await authFetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

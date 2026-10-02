@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import React from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import CreateEvent from "@/components/create-event"
@@ -64,7 +65,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           return
         }
 
-        const response = await fetch(eventEndPoint.GET_EVENTDATA_BY_ID, {
+        const response = await authFetch(eventEndPoint.GET_EVENTDATA_BY_ID, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -192,7 +193,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
         }
       }
 
-      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+      const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -313,7 +314,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
         }
       }
 
-      const response = await fetch(eventEndPoint.UPDATE_EVENT_DATA, {
+      const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -545,7 +546,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="reject-reason">Rejection Reason</Label>
+              <Label htmlFor="reject-reason">Rejection Reason <span className="text-red-500">*</span></Label>
               <Textarea
                 id="reject-reason"
                 placeholder="Enter the reason for rejection..."

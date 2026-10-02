@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import { useEffect, useState } from "react"
 import { UserPlus, Loader2, Users, Search } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -33,6 +34,7 @@ interface PromoterData {
 interface SelectedPromoter {
   promoter_id: string
   PromoterName: string
+  Username?: string
 }
 
 interface AddNewPromoterModalProps {
@@ -93,7 +95,7 @@ const AddNewPromoterModal = ({
         return
       }
 
-      const response = await fetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+      const response = await authFetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -149,7 +151,7 @@ const AddNewPromoterModal = ({
       }
 
       // Backend expects { event_id, promoterIds: [string] } — single request with all promoter IDs
-      const response = await fetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
+      const response = await authFetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

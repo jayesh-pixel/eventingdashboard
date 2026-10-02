@@ -1,5 +1,6 @@
 "use client"
 
+import { authFetch } from "@/lib/auth-fetch"
 import * as React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -135,19 +136,14 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   const [imagePreview, setImagePreview] = React.useState<string>("")
   const [uploadingImage, setUploadingImage] = React.useState(false)
   // Validation function
-  const validateForm = () => {
+  // Name is required on create only; the update API keeps the old name when it is blank
+  const validateForm = (isEdit = false) => {
     const errors: Record<string, string> = {}
-    
+
     if (!formData.name.trim()) {
-      errors.name = "Artist name is required"
+      if (!isEdit) errors.name = "Artist name is required"
     } else if (formData.name.trim().length < 5) {
       errors.name = "Artist name must be at least 5 characters"
-    }
-    
-    if (!formData.description.trim()) {
-      errors.description = "Description is required (min 5 characters)"
-    } else if (formData.description.trim().length < 5) {
-      errors.description = "Description must be at least 5 characters"
     }
     
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
@@ -232,7 +228,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
         return
       }
 
-      const response = await fetch(artistEndpoints.ALL_ARTIST_LIST, {
+      const response = await authFetch(artistEndpoints.ALL_ARTIST_LIST, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -299,7 +295,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
         formDataToSend.append("Images", selectedImage)
       }
 
-      const response = await fetch(artistEndpoints.ARTIST_CREATE, {
+      const response = await authFetch(artistEndpoints.ARTIST_CREATE, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -335,23 +331,13 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   }
 
   const updateArtist = async () => {
-    if (!validateForm() || !selectedArtist) return
-
-    const hasExistingImage = !!selectedArtist.Images && selectedArtist.Images.length > 0
-    if (!selectedImage && !hasExistingImage) {
-      toast({
-        title: "Image Required",
-        description: "Please upload an artist image before saving this artist.",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!validateForm(true) || !selectedArtist) return
 
     try {
       setLoading(true)
       const authToken = getValidToken()
 
-      const response = await fetch(artistEndpoints.ARTIST_DATA_UPDATED, {
+      const response = await authFetch(artistEndpoints.ARTIST_DATA_UPDATED, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -421,7 +407,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       formDataToSend.append("artist_id", artistId)
       formDataToSend.append("ArtistImage", selectedImage)
 
-      const response = await fetch(artistEndpoints.ARTIST_UPLOAD_IMAGE, {
+      const response = await authFetch(artistEndpoints.ARTIST_UPLOAD_IMAGE, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${authToken}`,
@@ -464,7 +450,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       setLoading(true)
       const authToken = getValidToken()
 
-      const response = await fetch(artistEndpoints.ARTIST_DELETE, {
+      const response = await authFetch(artistEndpoints.ARTIST_DELETE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -502,7 +488,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
     try {
       const authToken = getValidToken()
 
-      const response = await fetch(artistEndpoints.ARTIST_IMAGE_REMOVE, {
+      const response = await authFetch(artistEndpoints.ARTIST_IMAGE_REMOVE, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -977,7 +963,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               <h3 className="font-medium">Artist Information</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="editName">Artist Name *</Label>
+                  <Label htmlFor="editName">Artist Name</Label>
                   <Input
                     id="editName"
                     value={formData.name}
@@ -1013,7 +999,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="editPriority">Priority (0-10)</Label>
+                  <Label htmlFor="editPriority">Priority (0-10) *</Label>
                   <Input
                     id="editPriority"
                     type="number"
@@ -1046,7 +1032,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
               
               {/* Image Upload */}
               <div className="space-y-2">
-                <Label>Upload New Image *</Label>
+                <Label>Upload New Image</Label>
                 <p className="text-sm text-muted-foreground">
                   Required when replacing the artist image. Dimensions: 640x480, Max size: 500KB, Format: JPG/PNG
                 </p>
