@@ -69,6 +69,9 @@ interface TransactionReportData {
 }
 
 const ITEMS_PER_PAGE = 10
+// Bounds for collecting a server-paginated transaction report in one go.
+const TRANSACTION_PAGE_SIZE = 200
+const MAX_TRANSACTION_PAGES = 25
 
 export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   // Handle params which might be a Promise
@@ -141,13 +144,20 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
   }
 
   // Enhanced error handling for network requests
-  const handleNetworkError = async (response: Response, operation: string) => {
-    let errorDetails = ""
-    try {
-      const errorText = await response.text()
-      errorDetails = errorText || `HTTP ${response.status}`
-    } catch (e) {
-      errorDetails = `HTTP ${response.status} - Unable to read error details`
+  const handleNetworkError = async (response: Response, operation: string, serverMessage = "") => {
+    let errorDetails = serverMessage
+    if (!errorDetails) {
+      try {
+        const errorText = await response.text()
+        try {
+          errorDetails = JSON.parse(errorText)?.message || errorText
+        } catch {
+          errorDetails = errorText
+        }
+        errorDetails = errorDetails || `HTTP ${response.status}`
+      } catch (e) {
+        errorDetails = `HTTP ${response.status} - Unable to read error details`
+      }
     }
 
     const errorMessage = `${operation} failed`
@@ -168,10 +178,14 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           variant: "destructive"
         })
         break
+      case 400:
       case 404:
+      case 409:
+        // The API explains these ("Event Not Found", a validation message, ...), so show
+        // that rather than a generic line that hides what actually went wrong.
         toast({
-          title: "Resource Not Found", 
-          description: "The requested resource could not be found on the server.",
+          title: response.status === 404 ? "Not Found" : errorMessage,
+          description: errorDetails,
           variant: "destructive"
         })
         break
@@ -456,29 +470,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
       let apiEndpoint = ""
       let requestPayload: any = {}      // Determine the correct endpoint based on role and report type
-      if ((role as UserRole) === "promoter") {
-        if (reportType === "Summary") {
+      const isPromoter = (role as UserRole) === "promoter"
+      const adminRole = getNumericRole(role as UserRole)
+
+      if (reportType === "Summary") {
+        if (isPromoter) {
+          // The promoter summary endpoint validates its body strictly: limit/page are
+          // rejected, and that validation error was what surfaced as "not found".
           apiEndpoint = promoterEndPointPannel.GET_ALL_PROMOTER_EVENT_BOOKING_DATA_BY_EVENT_ID
           requestPayload = {
             promoter_id: user!.user_id,
             event_id: matchedEvent._id,
-            limit: "10",
-            page: "1"
           }
-        } else if (reportType === "Transaction") {
-          apiEndpoint = promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
-          requestPayload = {
-            promoter_id: user!.user_id,
-            event_id: matchedEvent._id,
-            limit: "10",
-            page: "1"
-          }
-        }
-      } else {
-        // For superadmin/organizer - determine AdminRole based on role
-        const adminRole = getNumericRole(role as UserRole)
-
-        if (reportType === "Summary") {
+        } else {
           apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
           requestPayload = {
             AdminRole: adminRole,
@@ -487,17 +491,19 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             limit: "10",
             page: "1"
           }
-        } else if (reportType === "Transaction") {
-          apiEndpoint = organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
-          requestPayload = {
-            AdminRole: adminRole,
-            user_id: user!.user_id,
-
-
-            event_id: matchedEvent._id,
-            limit: "10",
-            page: "1"
-          }
+        }
+      } else if (reportType === "Transaction") {
+        // Every role reads the shared bookings endpoint; a promoter is pinned to their
+        // own promoter_id. The promoter-only transaction endpoint rejected limit/page
+        // with a 404 and its rows carry no city, venue, check-in, scanner or source.
+        apiEndpoint = organizerEndpoint.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+        requestPayload = {
+          AdminRole: adminRole,
+          user_id: user!.user_id,
+          event_id: matchedEvent._id,
+          ...(isPromoter ? { promoter_id: user!.user_id } : {}),
+          limit: TRANSACTION_PAGE_SIZE.toString(),
+          page: "1"
         }
       }
 
@@ -537,12 +543,55 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
       console.log("Response status:", response.status)
 
+      // Older API builds answer "no bookings for this event" with a 404/409 carrying a
+      // JSON message. That is an empty report, not a missing resource.
       if (!response.ok) {
-        await handleNetworkError(response, "Report generation")
+        const errorBody = await response.clone().json().catch(() => null)
+        const serverMessage: string = typeof errorBody?.message === "string" ? errorBody.message : ""
+        if (/no (event )?bookings found|tickets not found/i.test(serverMessage)) {
+          setReportData([])
+          setCurrentPage(1)
+          toast({
+            title: "No Bookings Found",
+            description: `No booking data available for ${matchedEvent.EventName}. This event may not have any bookings yet.`,
+          })
+          return
+        }
+        await handleNetworkError(response, "Report generation", serverMessage)
         return
       }
 
       const data = await response.json()
+
+      // The transaction endpoint is server-paginated. The report paginates on the
+      // client, so collect every page - it used to stop at the first 10 bookings.
+      if (reportType === "Transaction" && Array.isArray(data?.data?.latestBookingData)) {
+        const totalPagesFromApi = Number(data.data.totalPages) || 1
+        const remainingPages = Math.min(totalPagesFromApi, MAX_TRANSACTION_PAGES) - 1
+
+        if (remainingPages > 0) {
+          const pages = await Promise.all(
+            Array.from({ length: remainingPages }, (_, index) =>
+              authFetch(apiEndpoint, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({ ...requestPayload, page: (index + 2).toString() }),
+              })
+                .then((pageResponse) => (pageResponse.ok ? pageResponse.json() : null))
+                .catch(() => null)
+            )
+          )
+
+          for (const pageData of pages) {
+            if (Array.isArray(pageData?.data?.latestBookingData)) {
+              data.data.latestBookingData = data.data.latestBookingData.concat(pageData.data.latestBookingData)
+            }
+          }
+        }
+      }
       console.log("📋 FULL REPORT RESPONSE DATA:", data)
       
       // Detailed analysis of response structure for debugging
@@ -734,9 +783,9 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
           bookingDate: item.BookingDateTime || item.bookingDate || item.booking_date || item.date || "N/A",
           eventName: item.EventName || item.eventName || item.event_name || "N/A",
           ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || "N/A",
-          source: item.BookingSource || item.bookingChannel || item.Source || item.source || "Online",
-          city: item.EventCityName || item.city || item.City || item.event_city || "N/A",
-          venue: item.EventVenueName || item.venue || item.Venue || item.event_venue || "N/A",
+          source: item.BookingSource || item.bookingChannel || item.Source || item.source || ((role as UserRole) === "promoter" ? "Promoter" : "Online"),
+          city: item.EventCityName || item.city || item.City || item.event_city || matchedEvent.VenueCity || "N/A",
+          venue: item.EventVenueName || item.venue || item.Venue || item.event_venue || matchedEvent.VenueName || "N/A",
           checkIn: Number(item.Check_In ?? item.CheckIn ?? item.checkIn ?? item.CheckedIn ?? 0),
           scannedBy: item.ScannerUserName || item.ScannedBy || item.scannedBy || item.scanned_by || item.ScannedByName || "N/A",
           quantity: Number(item.TicketQuantity || item.quantity || item.Quantity || 0),

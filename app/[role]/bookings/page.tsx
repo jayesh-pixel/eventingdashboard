@@ -175,6 +175,15 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   const [apiOrganizers, setApiOrganizers] = React.useState<Array<{ id: string; name: string }>>([])
   const [apiPromoters, setApiPromoters] = React.useState<Array<{ id: string; name: string }>>([])
 
+  // A promoter's dropdowns are limited to their own events (see fetchPromoterFilterOptions)
+  // instead of the platform-wide venue and city lists.
+  const isPromoterRole = (role as UserRole) === "promoter"
+  const [promoterFilterOptions, setPromoterFilterOptions] = React.useState<{
+    events: Array<{ id: string; name: string }>
+    venues: Array<{ id: string; name: string }>
+    cities: string[]
+  } | null>(null)
+
   // An organizer only ever sees their own bookings, a promoter never sees organizers.
   const canFilterByOrganizer = (role as UserRole) !== "promoter" && (role as UserRole) !== "organizer"
 
@@ -235,19 +244,21 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // so a payload that omits them silently returns every booking on the platform.
   const buildBookingScopePayload = React.useCallback(
     (filters?: BookingScopeFilters) => {
-      const payload: Record<string, any> = {}
+      const payload: Record<string, any> = {
+        AdminRole: getNumericRole(role as UserRole),
+        user_id: user?.user_id,
+      }
       const isPromoter = (role as UserRole) === "promoter"
 
       if (isPromoter) {
+        // A promoter reads the shared bookings endpoint pinned to their own promoter_id.
+        // /getPromoterLatestBookings only accepts promoter_id and rejects every
+        // search/city/venue/event/date filter with a 400, and its rows carry no
+        // booking source, check-in or scanner details.
         payload.promoter_id = user?.user_id
-      } else {
-        payload.AdminRole = getNumericRole(role as UserRole)
-        payload.user_id = user?.user_id
-
+      } else if ((role as UserRole) === "organizer" && user?.user_id) {
         // An organizer is always pinned to their own events, never the whole platform.
-        if ((role as UserRole) === "organizer" && user?.user_id) {
-          payload.organizer_id = user.user_id
-        }
+        payload.organizer_id = user.user_id
       }
 
       // The API validates searchkeyword as a min-3-character string and rejects the
@@ -289,7 +300,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // file can only ever contain what the user is actually allowed to see.
   const getBookingsListEndpoint = React.useCallback(() => {
     if ((role as UserRole) === "promoter") {
-      return promoterEndPointPannel.GET_PROMOTER_LATEST_BOOKINGS
+      return organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
     }
 
     if (bookingDataType === "summary") {
@@ -500,7 +511,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         ticketName: ticketName,
         ticketType: ticketType,
         city: city,
-        venue: venue,        ticketDate: ticketDate,
+        venue: venue,
+        ticketDate: ticketDate,
         bookingDate: bookingDate,
         createdAt: booking.createdAt || booking.created_at || bookingDate || new Date().toISOString(),
         updatedAt: booking.updatedAt || booking.updated_at || bookingDate || new Date().toISOString(),
@@ -532,7 +544,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         promoValue: booking.PromoValue ?? booking.promoValue ?? booking.Discount ?? booking.discount ?? "",
         convenienceFee: booking.ConvinienceFeeValue ?? booking.convenienceFeeValue ?? booking.ConvenienceFee ?? booking.convenienceFee ?? booking.ConvinienceFeeAmount ?? "",
         gst: booking.GST ?? booking.Gst ?? booking.gst ?? booking.GSTAmount ?? "",
-        scannedBy: booking.ScannedBy || booking.scannedBy || booking.scanned_by || booking.ScannedByName || "",
+        scannedBy: booking.ScannerUserName || booking.ScannedBy || booking.scannedBy || booking.scanned_by || booking.ScannedByName || "",
       }
     })
   }
@@ -562,10 +574,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const apiEndpoint = getBookingsListEndpoint()
       const requestPayload: any = buildBookingScopePayload(filters)
 
-      if ((role as UserRole) !== "promoter") {
-        requestPayload.page = (filters?.page ?? currentPage).toString()
-        requestPayload.limit = ITEMS_PER_PAGE.toString()
-      }
+      requestPayload.page = (filters?.page ?? currentPage).toString()
+      requestPayload.limit = ITEMS_PER_PAGE.toString()
 
       console.log("🚀 BOOKING API CALL:")
       console.log("- Active tab:", activeTab)
@@ -604,7 +614,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       const apiTotalPages = Number(responseData?.totalPages) || 0
       const apiTotalBookings = Number(responseData?.totalBookings) || 0
       const apiCurrentPage = Number(responseData?.currentPage) || filters?.page || currentPage
-      
+
       // Log the response structure for debugging
       console.log("🔍 API Response Structure:", JSON.stringify(data, null, 2))
       
@@ -937,6 +947,19 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
   // Events come from published + completed events, since bookings exist for both.
   const fetchFilterEvents = async () => {
+    const events = new Map<string, { id: string; name: string }>()
+    ;(await fetchScopedEvents()).forEach((event: any) => {
+      const id = event?._id || event?.id || event?.EventId || event?.event_id || ""
+      const name = event?.EventName || event?.eventName || event?.Name || event?.name || ""
+      if (id && name) events.set(id, { id, name })
+    })
+
+    setApiEvents(Array.from(events.values()).sort((a, b) => a.name.localeCompare(b.name)))
+  }
+
+  // Raw published + completed event rows for the current user. The API already scopes
+  // them by AdminRole, so for a promoter these are only the events they promote.
+  const fetchScopedEvents = async (): Promise<any[]> => {
     const payload = JSON.stringify(getEventsListPayload())
 
     const [published, completed] = await Promise.allSettled([
@@ -956,26 +979,62 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       throw published.reason
     }
 
-    const toEvents = (result: PromiseSettledResult<any>) =>
-      result.status === "fulfilled"
-        ? readListPayload(result.value).map((event: any) => ({
-            id: event?._id || event?.id || event?.EventId || event?.event_id || "",
-            name: event?.EventName || event?.eventName || event?.Name || event?.name || "",
-          }))
-        : []
+    const toRows = (result: PromiseSettledResult<any>) =>
+      result.status === "fulfilled" ? readListPayload(result.value) : []
 
+    return [...toRows(published), ...toRows(completed)]
+  }
+
+  // A promoter only picks from the events they promote. The website-wide venue and
+  // city lists offered every venue/city on the platform, so all three dropdowns are
+  // built from the promoter's own (already role-scoped) event rows instead.
+  const fetchPromoterFilterOptions = async () => {
     const events = new Map<string, { id: string; name: string }>()
-    ;[...toEvents(published), ...toEvents(completed)].forEach((event) => {
-      if (event.id && event.name) events.set(event.id, event)
+    const venues = new Map<string, { id: string; name: string }>()
+    const cities: string[] = []
+
+    ;(await fetchScopedEvents()).forEach((event: any) => {
+      const id = event?._id || event?.id || ""
+      const name = event?.EventName || event?.eventName || ""
+      if (id && name) events.set(id, { id, name })
+
+      // Online and to-be-announced events carry a placeholder VenueName, not a venue.
+      if (event?.VenueEventFlag == 1 && event?.venue_id && event?.VenueName) {
+        venues.set(event.venue_id, { id: event.venue_id, name: event.VenueName })
+      }
+
+      const city = event?.VenueToBeAnnounced == 1 ? event?.VenueToBeAnnouncedCity : event?.VenueCity
+      if (city && city !== "-") cities.push(city)
     })
 
-    setApiEvents(Array.from(events.values()).sort((a, b) => a.name.localeCompare(b.name)))
+    const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name)
+    setPromoterFilterOptions({
+      events: Array.from(events.values()).sort(byName),
+      venues: Array.from(venues.values()).sort(byName),
+      cities: getUniqueFilterValues(cities),
+    })
   }
 
   // Fired from the filter icon. Each request fails independently so one broken list
   // does not empty the other dropdowns - those simply fall back to the loaded bookings.
   const fetchAllFilterOptions = async () => {
     setFilterOptionsLoading(true)
+
+    if (isPromoterRole) {
+      try {
+        await fetchPromoterFilterOptions()
+      } catch (error) {
+        console.warn("Error fetching promoter filter options (handled):", error)
+        toast({
+          title: "Filter options",
+          description: "Could not load your events. Showing options from the loaded bookings.",
+          variant: "destructive",
+        })
+      } finally {
+        setFilterOptionsLoading(false)
+      }
+      return
+    }
 
     const requests: Array<[string, Promise<void>]> = [
       ["cities", fetchFilterCities()],
@@ -1014,18 +1073,24 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // API list first, values seen in the loaded bookings as a fallback, so an applied
   // filter never disappears from its dropdown.
   const cityOptions = React.useMemo(
-    () => getUniqueFilterValues([...apiCities, ...uniqueCities]),
-    [apiCities, getUniqueFilterValues, uniqueCities]
+    () =>
+      getUniqueFilterValues([
+        ...(isPromoterRole ? promoterFilterOptions?.cities ?? [] : apiCities),
+        ...uniqueCities,
+      ]),
+    [apiCities, getUniqueFilterValues, isPromoterRole, promoterFilterOptions, uniqueCities]
   )
-  const venueOptions = apiVenues
+  const venueOptions = isPromoterRole ? promoterFilterOptions?.venues ?? [] : apiVenues
   const eventOptions = React.useMemo(() => {
     const options = new Map<string, { id: string; name: string }>()
-    apiEvents.forEach((event) => options.set(event.id, event))
+    ;(isPromoterRole ? promoterFilterOptions?.events ?? [] : apiEvents).forEach((event) =>
+      options.set(event.id, event)
+    )
     bookingEventOptions.forEach((event) => {
       if (!options.has(event.id)) options.set(event.id, event)
     })
     return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
-  }, [apiEvents, bookingEventOptions])
+  }, [apiEvents, bookingEventOptions, isPromoterRole, promoterFilterOptions])
   const promoterSelectOptions = React.useMemo(() => {
     const options = new Map<string, { id: string; name: string }>()
     apiPromoters.forEach((promoter) => options.set(promoter.id, promoter))

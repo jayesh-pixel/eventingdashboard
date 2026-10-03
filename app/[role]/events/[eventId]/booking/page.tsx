@@ -588,7 +588,10 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       }
 
       const isPromoter = (role as UserRole) === "promoter"
-      let apiEndpoint = promoterEndPointPannel.GET_PROMOTER_LATEST_BOOKINGS
+      // A promoter reads the shared bookings endpoint pinned to their own promoter_id.
+      // /getPromoterLatestBookings accepts only promoter_id, so the event_id and date
+      // range this page sends were rejected with a 400.
+      let apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
 
       if (!isPromoter && bookingDataType === "summary") {
         apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
@@ -610,12 +613,12 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         requestPayload.endDate = selectedDateRange.endDate
       }
 
+      requestPayload.AdminRole = getNumericRole(role as UserRole)
+      requestPayload.user_id = user.user_id
+
       if (isPromoter) {
         requestPayload.promoter_id = user.user_id
       } else {
-        requestPayload.AdminRole = getNumericRole(role as UserRole)
-        requestPayload.user_id = user.user_id
-
         if ((role as UserRole) === "organizer") {
           requestPayload.organizer_id = user.user_id
         }
@@ -638,7 +641,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       // Transaction endpoints are server-paginated. This page filters, totals and
       // paginates on the client, so it needs the event's full booking set - asking for
       // a single page of 10 was why events with more bookings showed a short table.
-      const isPaginated = !isPromoter && bookingDataType !== "summary"
+      const isPaginated = isPromoter || bookingDataType !== "summary"
       if (isPaginated) {
         requestPayload.page = "1"
         requestPayload.limit = SERVER_PAGE_SIZE.toString()

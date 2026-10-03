@@ -172,22 +172,30 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     }
   }
 
-  // Pulls the event's transaction rows for the current role. The organizer/superadmin
-  // endpoint is server-paginated, so every page is collected - a single page of results
-  // was another reason the report undercounted against the Bookings tab.
+  // Pulls the event's transaction rows for the current role. The bookings endpoint is
+  // server-paginated, so every page is collected - a single page of results was another
+  // reason the report undercounted against the Bookings tab.
   const fetchTransactionRows = React.useCallback(
     async (searchKeyword?: string): Promise<any[]> => {
       const authToken = getValidToken()
       if (!user || !authToken || !eventId) return []
 
-      const basePayload: Record<string, any> = scopePayload()
+      // A promoter reads the shared bookings endpoint pinned to their own promoter_id.
+      // The promoter-only transaction endpoint returns no city, venue, check-in, scanner
+      // or booking source, which is why the promoter's report looked incomplete.
+      const basePayload: Record<string, any> = isPromoter
+        ? {
+            AdminRole: getNumericRole(role as UserRole),
+            user_id: user.user_id,
+            promoter_id: user.user_id,
+            event_id: eventId,
+          }
+        : scopePayload()
       if (searchKeyword) {
-        basePayload[isPromoter ? "searchKeyword" : "searchkeyword"] = searchKeyword
+        basePayload.searchkeyword = searchKeyword
       }
 
-      const endpoint = isPromoter
-        ? promoterEndPointPannel.GET_ALL_TRANSACTION_BOOKING_DATA_BY_EVENY_AND_PROMOTER_ID
-        : organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      const endpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
 
       const post = (payload: Record<string, any>) =>
         authFetch(endpoint, {
@@ -205,13 +213,6 @@ export default function EventReportPage({ params }: EventReportPageProps) {
           : Array.isArray(data?.data?.latestBookingData)
             ? data.data.latestBookingData
             : []
-
-      if (isPromoter) {
-        const response = await post(basePayload)
-        if (response.status === 404) return []
-        if (!response.ok) throw new Error("Failed to fetch transaction booking data")
-        return extract(await response.json())
-      }
 
       const firstPayload = { ...basePayload, page: "1", limit: REPORT_PAGE_SIZE.toString() }
       const response = await post(firstPayload)
@@ -240,7 +241,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
 
       return rows
     },
-    [eventId, isPromoter, scopePayload, user]
+    [eventId, isPromoter, role, scopePayload, user]
   )
 
   // Get transaction booking data
@@ -557,8 +558,9 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     customerName: transaction.CustomerName || "N/A",
     customerEmail: transaction.Email || "",
     phoneNumber: transaction.PhoneNumber,
-    bookingChannel: "Online" as const,
-    bookingStatus: transaction.Status === "2" ? "Cancelled" : "Confirmed",
+    // Every row was labelled "Online", including a promoter's own bookings.
+    bookingChannel: (transaction.BookingSource || (isPromoter ? "Promoter" : "Online")) as Booking["bookingChannel"],
+    bookingStatus: String(transaction.status ?? transaction.Status) === "2" ? "Cancelled" : "Confirmed",
     totalAmount: transaction.TotalAmount || 0,
     ticketPrice: transaction.TicketPrice,
     bookingDate: transaction.BookingDateTime || new Date().toISOString(),
@@ -587,7 +589,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     TotalAmount: transaction.TotalAmount,
     Check_In: transaction.Check_In,
     checkIn: transaction.Check_In ?? transaction.CheckIn ?? transaction.checkIn ?? 0,
-    scannedBy: transaction.ScannedBy || transaction.scannedBy || transaction.scanned_by || transaction.ScannedByName || "",
+    scannedBy: transaction.ScannerUserName || transaction.ScannedBy || transaction.scannedBy || transaction.scanned_by || transaction.ScannedByName || "",
   }))
 
   if (loading) {
@@ -726,12 +728,12 @@ export default function EventReportPage({ params }: EventReportPageProps) {
                       {storeFilterDates.map((date) => (
                         <div
                           key={date._id}
-                          onClick={() => handleDateFilter(date._id, date.EventStartDate)}
+                          onClick={() => handleDateFilter(date._id, date.EventStartDateTime || date.EventStartDate)}
                           className={`px-4 py-2 cursor-pointer hover:bg-gray-100 ${
                             selectedDate === date._id ? "bg-gray-100" : ""
                           }`}
                         >
-                          {formatDate(date.EventStartDate)}
+                          {formatDate(date.EventStartDateTime || date.EventStartDate)}
                         </div>
                       ))}
                       <div
