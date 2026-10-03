@@ -40,7 +40,7 @@ import { formatEventDate, normalizeSearchText, parseEventDateTime } from "@/lib/
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import { eventEndPoint, organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
+import { eventEndPoint, organizerEndpoint, ticketEndPoint } from "@/lib/api-endpoints"
 import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
 import { getNumericRole } from "@/lib/role-mapping"
 import { getValidToken } from "@/lib/token-utils"
@@ -153,6 +153,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   const [manualStartDate, setManualStartDate] = React.useState("")
   const [manualEndDate, setManualEndDate] = React.useState("")
   const [promoterFilter, setPromoterFilter] = React.useState("all")
+  const [isDateFilterOpen, setIsDateFilterOpen] = React.useState(false)
   const [summaryTicketFilter, setSummaryTicketFilter] = React.useState("all")
   const [summaryDateFilter, setSummaryDateFilter] = React.useState("all")
   const [summaryTicketOptions, setSummaryTicketOptions] = React.useState<string[]>([])
@@ -334,9 +335,23 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         quantity * ticketPrice
       )
       const ticketName = getStringValue(booking.TicketName, booking.ticketName, booking.ticket_name, booking.Name)
-      const ticketDate = getStringValue(booking.TicketDate, booking.ticketDate, booking.ticket_date, booking.EventDate)
+      // Bulk-ticket rows use EventStartDateTime / BatchId / CreatedAt instead.
+      const ticketDate = getStringValue(
+        booking.TicketDate,
+        booking.ticketDate,
+        booking.ticket_date,
+        booking.EventDate,
+        booking.EventStartDateTime
+      )
       const eventNameValue = getStringValue(booking.EventName, booking.eventName, booking.event_name)
-      const bookingId = getStringValue(booking.Booking_id, booking.booking_id, booking.bookingId, booking.id, booking._id)
+      const bookingId = getStringValue(
+        booking.Booking_id,
+        booking.booking_id,
+        booking.bookingId,
+        booking.BatchId,
+        booking.id,
+        booking._id
+      )
       const channel = getBookingChannel(booking)
       const promoterId = getStringValue(booking.promoter_id, booking.PromoterId, booking.promoterId)
       const statusValue = getStringValue(booking.bookingStatus, booking.BookingStatus, booking.status, booking.Status) || "Confirmed"
@@ -364,6 +379,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           booking.booking_date,
           booking.FilterationBookingDateTime,
           booking.createdAt,
+          booking.CreatedAt,
           booking.created_at
         ),
         promoterId,
@@ -393,6 +409,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   const extractBookingsArray = (data: any): any[] => {
     const candidates = [
       data?.data?.latestBookingData,
+      data?.data?.EventBulkTicketsData,
       data?.data?.TicketsData,
       data?.data?.SummaryBookingData,
       data?.data?.BookingData,
@@ -524,8 +541,10 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         nestedPromoter?._id,
         nestedPromoter?.id
       )
+      // /events/getEventPromoters answers { promoter_id, PromoterUsername }.
       const name =
         getStringValue(
+          promoter?.PromoterUsername,
           promoter?.PromoterName,
           promoter?.promoterName,
           promoter?.FullName,
@@ -592,9 +611,13 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       // /getPromoterLatestBookings accepts only promoter_id, so the event_id and date
       // range this page sends were rejected with a 400.
       let apiEndpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
+      // Bookings never carry a "Bulk" source; bulk tickets live in their own collection.
+      const isBulkTab = !isPromoter && bookingDataType === "transaction" && activeTab === "bulk"
 
       if (!isPromoter && bookingDataType === "summary") {
         apiEndpoint = organizerEndpoint.GET_ALL_SUMMARY_BOOKING_DATA_BY_EVENT_AND_ORGANIZER_ID
+      } else if (isBulkTab) {
+        apiEndpoint = ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT
       } else if (!isPromoter && activeTab === "promoter") {
         apiEndpoint = organizerEndpoint.GET_PROMOTER_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
       } else if (!isPromoter && activeTab === "online") {
@@ -608,22 +631,22 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       }
       const selectedDateRange = getSelectedDateRange()
 
-      if (selectedDateRange) {
-        requestPayload.startDate = selectedDateRange.startDate
-        requestPayload.endDate = selectedDateRange.endDate
-      }
-
-      requestPayload.AdminRole = getNumericRole(role as UserRole)
-      requestPayload.user_id = user.user_id
-
-      if (isPromoter) {
-        requestPayload.promoter_id = user.user_id
-      } else {
-        if ((role as UserRole) === "organizer") {
-          requestPayload.organizer_id = user.user_id
+      // getBulkTicketsOfEvent reads only event_id; dates are applied client-side below.
+      if (!isBulkTab) {
+        if (selectedDateRange) {
+          requestPayload.startDate = selectedDateRange.startDate
+          requestPayload.endDate = selectedDateRange.endDate
         }
 
-        if (promoterFilter !== "all") {
+        requestPayload.AdminRole = getNumericRole(role as UserRole)
+        requestPayload.user_id = user.user_id
+
+        // No organizer_id here: the bookings endpoints overwrite event_id with "all of
+        // the organizer's events" when it is present, so this page listed every event.
+        if (isPromoter) {
+          requestPayload.promoter_id = user.user_id
+        } else if (promoterFilter !== "all" && bookingDataType === "transaction" && activeTab !== "online") {
+          // The online endpoint's validator has no promoter_id and answers 400.
           requestPayload.promoter_id = promoterFilter
         }
       }
@@ -641,7 +664,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       // Transaction endpoints are server-paginated. This page filters, totals and
       // paginates on the client, so it needs the event's full booking set - asking for
       // a single page of 10 was why events with more bookings showed a short table.
-      const isPaginated = isPromoter || bookingDataType !== "summary"
+      const isPaginated = isPromoter || (bookingDataType !== "summary" && !isBulkTab)
       if (isPaginated) {
         requestPayload.page = "1"
         requestPayload.limit = SERVER_PAGE_SIZE.toString()
@@ -692,17 +715,14 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
       let normalizedBookings = normalizeBookingData(eventBookings)
 
-      if (bookingDataType === "transaction" && ["promoter", "online"].includes(activeTab)) {
-        const channel = activeTab === "promoter" ? "Promoter" : "Online"
+      if (bookingDataType === "transaction" && ["promoter", "online", "bulk"].includes(activeTab)) {
+        const channel = activeTab === "promoter" ? "Promoter" : activeTab === "bulk" ? "Bulk" : "Online"
         normalizedBookings = normalizedBookings.map((booking) => ({
           ...booking,
           bookingChannel: channel,
           source: channel,
+          ...(activeTab === "bulk" ? { promoterName: "-" } : {}),
         }))
-      }
-
-      if (bookingDataType === "transaction" && ["online", "bulk"].includes(activeTab)) {
-        normalizedBookings = normalizedBookings.filter((booking) => booking.bookingChannel.toLowerCase() === activeTab)
       }
 
       if (bookingDataType === "summary") {
@@ -719,11 +739,8 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
       setBookingsData(normalizedBookings)
       setOriginalData(normalizedBookings)
-      setTransactionTotals(
-        bookingDataType === "transaction"
-          ? extractTransactionTotals(data, normalizedBookings)
-          : { totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 }
-      )
+      // The summary endpoint returns totalQuantity / totalCheckInCount / totalPrice too.
+      setTransactionTotals(extractTransactionTotals(data, normalizedBookings))
       setCurrentPage(1)
 
       const firstEventName = normalizedBookings.find((booking) => booking.eventName && booking.eventName !== "N/A")?.eventName
@@ -757,8 +774,6 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
   React.useEffect(() => {
     const searchLower = normalizeSearchText(searchTerm).toLowerCase()
-    const selectedPromoter = promoters.find((promoter) => promoter.id === promoterFilter)
-    const selectedPromoterName = selectedPromoter?.name.toLowerCase()
     const selectedDateRange = getSelectedDateRange()
     const selectedStartTime = selectedDateRange ? new Date(selectedDateRange.startDate).getTime() : null
     const selectedEndTime = selectedDateRange ? new Date(selectedDateRange.endDate).getTime() : null
@@ -790,21 +805,13 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
           })
         })()
 
-      const matchesPromoter =
-        promoterFilter === "all" ||
-        booking.promoterId === promoterFilter ||
-        Boolean(
-          selectedPromoterName &&
-            booking.promoterName &&
-            booking.promoterName.toLowerCase() === selectedPromoterName
-        )
-
-      return matchesSearch && matchesDate && matchesPromoter
+      // The promoter filter is applied by the API (promoter_id), not here.
+      return matchesSearch && matchesDate
     })
 
     setBookingsData(filtered)
     setCurrentPage(1)
-  }, [bookingDataType, getSelectedDateRange, originalData, promoterFilter, promoters, searchTerm, summaryTicketFilter])
+  }, [bookingDataType, getSelectedDateRange, originalData, searchTerm, summaryTicketFilter])
 
   const filteredBookings = bookingsData
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
@@ -985,7 +992,9 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
 
   const getDisplayedTransactionTotals = () => {
     const shouldUseFilteredTotals =
-      activeTab === "bulk" || searchTerm.trim() !== "" || dateFilter !== "all" || promoterFilter !== "all"
+      bookingDataType === "summary"
+        ? summaryTicketFilter !== "all" || summaryDateFilter !== "all"
+        : activeTab === "bulk" || searchTerm.trim() !== "" || dateFilter !== "all" || promoterFilter !== "all"
 
     if (!shouldUseFilteredTotals) return transactionTotals
 
@@ -1263,11 +1272,11 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
                     <Input
                       value={searchTerm}
                       onChange={(event) => setSearchTerm(event.target.value)}
-                      placeholder="Search By Customer Name and Booking ID"
+                      placeholder="Search by name, booking ID, email or phone"
                       className={`${CONTROL_CLASS} pl-10`}
                     />
                   </div>
-                  {(role as UserRole) !== "promoter" && (
+                  {(role as UserRole) !== "promoter" && activeTab !== "online" && activeTab !== "bulk" && (
                     <Select value={promoterFilter} onValueChange={setPromoterFilter}>
                       <SelectTrigger className={`${CONTROL_CLASS} w-full md:w-[200px]`}>
                         <SelectValue placeholder="Promoter" />
@@ -1287,7 +1296,8 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
             </div>
           </div>
 
-          {bookingDataType === "transaction" && activeTab !== "all" && <TransactionSummaryCards />}
+          {/* Totals were hidden on the default "All" tab and in the summary view. */}
+          <TransactionSummaryCards />
 
           {bookingDataType === "transaction" && (role as UserRole) !== "promoter" && (
             <div className="flex min-w-0 flex-wrap items-center gap-4 md:gap-8">
@@ -1299,6 +1309,9 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
                   onClick={() => {
                     setActiveTab(tab)
                     setCurrentPage(1)
+                    // Online and bulk rows have no promoter, and the online endpoint
+                    // rejects promoter_id - drop the filter instead of sending it.
+                    if (tab === "online" || tab === "bulk") setPromoterFilter("all")
                   }}
                   className={
                     activeTab === tab
@@ -1311,10 +1324,20 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
               ))}
               <div className="w-full sm:ml-auto sm:w-auto">
                 <div className="flex w-full gap-3 sm:w-auto">
-                  <Button variant="outline" size="icon" type="button" className={ICON_BUTTON_CLASS}>
+                  {/* This button had no handler; it now opens the date filter beside it. */}
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    type="button"
+                    aria-label="Filter by date"
+                    onClick={() => setIsDateFilterOpen(true)}
+                    className={`${ICON_BUTTON_CLASS} ${dateFilter !== "all" ? "border-primary text-primary" : ""}`}
+                  >
                     <Filter className="h-5 w-5" />
                   </Button>
                   <Select
+                    open={isDateFilterOpen}
+                    onOpenChange={setIsDateFilterOpen}
                     value={dateFilter}
                     onValueChange={(value) => {
                       setDateFilter(value as DateFilterOption)

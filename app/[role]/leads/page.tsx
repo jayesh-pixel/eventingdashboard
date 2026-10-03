@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -18,6 +18,9 @@ import { leadsEndpoint } from "@/lib/api-endpoints"
 import { Lead, LeadsApiResponse } from "@/lib/types"
 import { apiClient } from "@/lib/api-client"
 
+const SEARCH_PAGE_SIZE = 100
+const MAX_SEARCH_PAGES = 50
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -28,73 +31,94 @@ export default function LeadsPage() {
   const [error, setError] = useState<string | null>(null)
   
   const itemsPerPage = 10
+  // Leads are fetched whole only while searching (see fetchLeads), and cached until the
+  // search box is cleared so each keystroke does not re-download every page.
+  const allLeadsCache = useRef<Lead[] | null>(null)
+
+  const fetchLeadsPage = async (page: number, limit: number) => {
+    const response = await apiClient.post<LeadsApiResponse>(leadsEndpoint.GET_ALL_PAGINATED, {
+      page: page.toString(),
+      limit: limit.toString(),
+    })
+
+    if (!response.success || !response.data) {
+      // An empty collection/page comes back as 404 "Website Leads not found".
+      if (/website leads not found/i.test(response.error || "")) {
+        return { leads: [] as Lead[], totalPages: 0, currentPage: page, totalLeads: 0 }
+      }
+      throw new Error(response.error || "Failed to fetch leads")
+    }
+
+    const responseData = response.data as any
+    if (responseData.error) {
+      throw new Error(responseData.message || "Failed to fetch leads")
+    }
+
+    const leadsData: Lead[] = responseData.WebsideLeadsData || responseData.data?.WebsideLeadsData || []
+    return {
+      leads: leadsData,
+      totalPages: Number(responseData.totalPages ?? responseData.data?.totalPages) || 1,
+      currentPage: Number(responseData.currentPage ?? responseData.data?.currentPage) || page,
+      totalLeads: Number(responseData.totalLeads ?? responseData.data?.totalLeads) || leadsData.length,
+    }
+  }
+
+  const fetchAllLeads = async () => {
+    const first = await fetchLeadsPage(1, SEARCH_PAGE_SIZE)
+    let all = first.leads
+    const pageCount = Math.min(first.totalPages, MAX_SEARCH_PAGES)
+    if (pageCount > 1) {
+      const rest = await Promise.all(
+        Array.from({ length: pageCount - 1 }, (_, index) => fetchLeadsPage(index + 2, SEARCH_PAGE_SIZE))
+      )
+      rest.forEach((result) => {
+        all = all.concat(result.leads)
+      })
+    }
+    return all
+  }
+
   const fetchLeads = async (page: number = 1, search: string = "") => {
     try {
       setLoading(true)
       setError(null)
-      
+
       // Check if user is authenticated
       const token = typeof window !== "undefined" ? localStorage.getItem("authToken") : null
       if (!token) {
         throw new Error("Authentication required. Please log in.")
       }
-      
-      const requestBody: any = { 
-        page: page.toString(), 
-        limit: itemsPerPage.toString() 
-      }
-      // NOTE: Backend getAllPaginated does NOT support search — search is done client-side
 
-      console.log('Making API request to:', leadsEndpoint.GET_ALL_PAGINATED)
-      console.log('Request body:', requestBody)
+      const term = search.trim().toLowerCase()
 
-      const response = await apiClient.post<LeadsApiResponse>(
-        leadsEndpoint.GET_ALL_PAGINATED,
-        requestBody
-      )
-
-      console.log('API Response (full):', response)
-      console.log('API Response success:', response.success)
-      console.log('API Response data:', response.data)
-
-      if (response.success && response.data) {
-        // Type assertion to handle the API client's data extraction
-        const responseData = response.data as any
-        
-        // Check if the response has an error flag
-        if (responseData.error) {
-          throw new Error(responseData.message || 'Failed to fetch leads')
+      if (term) {
+        // getAllPaginated has no search parameter, and filtering only the current page
+        // hid every match on other pages - so search over all leads and page here.
+        if (!allLeadsCache.current) {
+          allLeadsCache.current = await fetchAllLeads()
         }
+        const matches = allLeadsCache.current.filter((lead: any) =>
+          (lead.FullName || "").toLowerCase().includes(term) ||
+          (lead.Email || "").toLowerCase().includes(term) ||
+          (lead.CompanyName || "").toLowerCase().includes(term) ||
+          (lead.City || "").toLowerCase().includes(term)
+        )
+        const pageCount = Math.max(1, Math.ceil(matches.length / itemsPerPage))
+        const safePage = Math.min(Math.max(page, 1), pageCount)
 
-        // Handle both possible structures
-        const leadsData = responseData.WebsideLeadsData || responseData.data?.WebsideLeadsData || []
-        const totalPages = responseData.totalPages || responseData.data?.totalPages || 1
-        const currentPage = responseData.currentPage || responseData.data?.currentPage || 1
-        const totalLeads = responseData.totalLeads || responseData.data?.totalLeads || leadsData.length
-        
-        console.log('Leads data:', leadsData)
-        console.log('Response data structure:', responseData)
-        console.log('Number of leads:', leadsData.length)
-
-        // Backend doesn't support search — filter client-side
-        let filteredLeads = leadsData
-        if (search.trim()) {
-          const term = search.trim().toLowerCase()
-          filteredLeads = leadsData.filter((lead: any) =>
-            (lead.FullName || "").toLowerCase().includes(term) ||
-            (lead.Email || "").toLowerCase().includes(term) ||
-            (lead.CompanyName || "").toLowerCase().includes(term) ||
-            (lead.City || "").toLowerCase().includes(term)
-          )
-        }
-
-        setLeads(filteredLeads)
-        setTotalPages(totalPages)
-        setCurrentPage(currentPage)
-        setTotalLeads(search.trim() ? filteredLeads.length : totalLeads)
-      } else {
-        throw new Error(response.error || 'Failed to fetch leads')
+        setLeads(matches.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage))
+        setTotalPages(pageCount)
+        setCurrentPage(safePage)
+        setTotalLeads(matches.length)
+        return
       }
+
+      allLeadsCache.current = null
+      const result = await fetchLeadsPage(page, itemsPerPage)
+      setLeads(result.leads)
+      setTotalPages(result.totalPages || 1)
+      setCurrentPage(result.currentPage)
+      setTotalLeads(result.totalLeads)
     } catch (err: any) {
       console.error('Error fetching leads:', err)
       setError(err.message || 'Failed to load leads')
@@ -107,7 +131,8 @@ export default function LeadsPage() {
   }
 
   useEffect(() => {
-    fetchLeads(1, searchTerm)
+    const delay = setTimeout(() => fetchLeads(1, searchTerm), 400)
+    return () => clearTimeout(delay)
   }, [searchTerm])
 
   const handlePageChange = (newPage: number) => {
@@ -163,7 +188,7 @@ export default function LeadsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
           <Input
-            placeholder="Search leads..."
+            placeholder="Search by name, email, company or city"
             value={searchTerm}
             onChange={(e) => handleSearch(e.target.value)}
             className="pl-10"
@@ -184,7 +209,7 @@ export default function LeadsPage() {
             Leads 
             {!loading && (
               <span className="text-sm font-normal text-muted-foreground ml-2">
-                ({totalLeads} total)
+                ({totalLeads} {searchTerm.trim() ? "matching" : "total"})
               </span>
             )}
           </CardTitle>

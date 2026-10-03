@@ -129,6 +129,14 @@ export default function CustomersPage({ params }: CustomersPageProps) {
         body: JSON.stringify(body),
       })
 
+      // Both endpoints answer 404 "Customers not found" for an empty page/search.
+      if (response.status === 404) {
+        setCustomers([])
+        setTotalPages(1)
+        setTotalCustomers(0)
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -237,7 +245,7 @@ export default function CustomersPage({ params }: CustomersPageProps) {
               <Loader2 className="absolute right-12 top-1/2 transform -translate-y-1/2 text-primary h-4 w-4 animate-spin z-10" />
             )}
             <Input
-              placeholder="Search by customer name, email, or phone number..."
+              placeholder="Search by customer name..."
               value={searchTerm}
               onChange={handleSearchChange}
               className="pl-10 pr-20 h-12 bg-background/50 dark:bg-muted/10 border-border/40 hover:border-border/60 focus:border-primary/60 focus:ring-2 focus:ring-primary/20 text-sm sm:text-base transition-all duration-200 shadow-inner"

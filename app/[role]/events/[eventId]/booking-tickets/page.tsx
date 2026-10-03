@@ -76,9 +76,11 @@ interface TicketData {
   Price: number;
   EventStartDateTime: string;
   EventEndDateTime: string;
-  MaxQuantityAllowedPerOrder: number;
-  AvailableQuantity: number;
-  BookingMaxLimit?: number; // (optional) some APIs return this field
+  // The promoter ticket endpoints return the raw ticket document; stock left is
+  // Quantity - BookedQuantity and BookingMaxLimit is the per-order cap.
+  Quantity?: number;
+  BookedQuantity?: number;
+  BookingMaxLimit?: number;
   TicketType?: number; // from backend
 }
 
@@ -391,14 +393,17 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
   const renderTicketRow = (t: TicketData, seasonPass = false) => {
     const count = counts[t._id] || 0;
     const selected = showCount[t._id];
-    // Availability / per-order cap can be absent from the response; only apply
-    // a limit we actually know about instead of comparing against undefined.
-    const hasAvailability = typeof t.AvailableQuantity === "number";
-    const soldOut = hasAvailability && t.AvailableQuantity === 0;
-    const maxAllowed = t.BookingMaxLimit ?? t.MaxQuantityAllowedPerOrder;
+    // Same stock check the booking API runs (Quantity - BookedQuantity); only
+    // apply a limit we actually know about instead of comparing against undefined.
+    const hasAvailability = typeof t.Quantity === "number";
+    const availableQuantity = hasAvailability
+      ? Math.max((t.Quantity as number) - (t.BookedQuantity ?? 0), 0)
+      : 0;
+    const soldOut = hasAvailability && availableQuantity === 0;
+    const maxAllowed = t.BookingMaxLimit;
     const atLimit =
       (typeof maxAllowed === "number" && count >= maxAllowed) ||
-      (hasAvailability && count >= t.AvailableQuantity);
+      (hasAvailability && count >= availableQuantity);
     // Only one ticket type can be booked per order, so the others lock while a
     // quantity is being chosen.
     const locked = isAnyCountActive && !selected;
@@ -438,7 +443,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
           <div className="mt-4 border-t pt-4 space-y-1.5 text-sm text-muted-foreground">
             {t.Description && <p className="leading-snug">{t.Description}</p>}
             {seasonPass && <p>Valid for all {dates.length} days · {formatDateRange(dates)}</p>}
-            {hasAvailability && !soldOut && <p className="text-xs">{t.AvailableQuantity} available</p>}
+            {hasAvailability && !soldOut && <p className="text-xs">{availableQuantity} available</p>}
           </div>
         )}
       </div>
@@ -455,19 +460,23 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
 
   const validateCustomerForm = () => {
     const errors: Record<string, string> = {};
-    if (!customer.FullName.trim()) errors.FullName = "Full name is required";
+    // Limits mirror the backend's validateEventTicketsBookingByPromoter schema.
+    const fullName = normalizeSearchText(customer.FullName);
+    if (!fullName) errors.FullName = "Full name is required";
+    else if (fullName.length < 3 || fullName.length > 50) errors.FullName = "Full name must be 3–50 characters";
     if (!customer.PhoneNo.trim()) errors.PhoneNo = "Phone number is required";
-    else if (customer.PhoneNo.trim().length !== 10) errors.PhoneNo = "Phone number must be 10 digits";
+    else if (!/^\d{10}$/.test(customer.PhoneNo.trim())) errors.PhoneNo = "Phone number must be 10 digits";
     if (!customer.Email.trim()) errors.Email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.Email.trim())) errors.Email = "Enter a valid email";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.Email.trim()) || customer.Email.trim().length > 1024) errors.Email = "Enter a valid email";
     if (customer.Age.trim()) {
       const age = parseInt(customer.Age, 10);
       if (isNaN(age) || age < 1 || age > 120) errors.Age = "Age should be 1–120";
     }
     // WhatsApp number is optional on the backend; only check its format when provided
-    if (customer.isWhatsApp === 0 && customer.WhatsAppNo.trim() && customer.WhatsAppNo.trim().length !== 10) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
-    // Note is optional, but when provided the backend requires at least 3 characters
-    if (customer.noteDescription.trim() && customer.noteDescription.trim().length < 3) errors.noteDescription = "Note must be at least 3 characters";
+    if (customer.isWhatsApp === 0 && customer.WhatsAppNo.trim() && !/^\d{10}$/.test(customer.WhatsAppNo.trim())) errors.WhatsAppNo = "WhatsApp no. must be 10 digits";
+    // Note is optional, but when provided the backend requires 3–500 characters
+    const note = customer.noteDescription.trim();
+    if (note && (note.length < 3 || note.length > 500)) errors.noteDescription = "Note must be 3–500 characters";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };

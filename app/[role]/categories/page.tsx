@@ -34,6 +34,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
@@ -139,6 +149,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedCategory, setSelectedCategory] = React.useState<Category | null>(null)
+  const [deleteCategoryId, setDeleteCategoryId] = React.useState<string | null>(null)
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
   // Form state
@@ -167,11 +178,23 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   // Image upload state
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
+
+  // Search runs on the server across every page; filtering only the 10 loaded rows
+  // never found a category on another page. Read through a ref so the many
+  // fetchCategories(currentPage) refreshes keep the active search.
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
+  const searchKeywordRef = React.useRef("")
+  React.useEffect(() => {
+    const delay = setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 400)
+    return () => clearTimeout(delay)
+  }, [searchTerm])
+
   // API function to fetch categories
   const fetchCategories = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
       setLoading(true)
       setApiError(null)
+      const searchKeyword = searchKeywordRef.current
 
       const authToken = getValidToken()
       if (!authToken) {
@@ -188,19 +211,35 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       console.log("- Page:", page)
       console.log("- Limit:", limit)
 
-      const response = await authFetch(categorieEndPoint.CATEGORIES_PAGINATED_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          page: page,
-          limit: limit.toString(),
-        }),
-      })
+      const response = await authFetch(
+        searchKeyword ? categorieEndPoint.CATEGORIES_PAGINATED_SEARCH_URL : categorieEndPoint.CATEGORIES_PAGINATED_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            page: page,
+            limit: limit.toString(),
+            ...(searchKeyword ? { search_keyword: searchKeyword } : {}),
+          }),
+        }
+      )
 
       console.log("Response status:", response.status)
+
+      // The API answers an empty page with 404 "Category not found". That is an empty
+      // list (no categories yet, no search match, or the last row of a page deleted),
+      // not a failure - it used to drop the page onto fake sample categories.
+      if (response.status === 404) {
+        setCategories([])
+        setTotalPages(1)
+        setTotalCategories(0)
+        setUseMockData(false)
+        if (page > 1) setCurrentPage(page - 1)
+        return
+      }
 
       const data: ApiResponse = await handleApiResponse(response)
       console.log("Categories API response:", data)
@@ -229,11 +268,11 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         variant: "destructive",
       })
       
-      // Fall back to mock data
-      setCategories(mockCategories)
-      setUseMockData(true)
+      // Showing sample categories here let users edit rows that do not exist.
+      setCategories([])
+      setUseMockData(false)
       setTotalPages(1)
-      setTotalCategories(mockCategories.length)
+      setTotalCategories(0)
     } finally {
       setLoading(false)
     }
@@ -242,6 +281,22 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   React.useEffect(() => {
     fetchCategories(currentPage)
   }, [fetchCategories, currentPage])
+
+  // A new search starts from page 1.
+  const isFirstSearchRun = React.useRef(true)
+  React.useEffect(() => {
+    if (isFirstSearchRun.current) {
+      isFirstSearchRun.current = false
+      return
+    }
+    searchKeywordRef.current = debouncedSearchTerm
+    if (currentPage === 1) {
+      fetchCategories(1)
+    } else {
+      setCurrentPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm])
 
   // Helper function to get category image
   const getCategoryImage = (category: Category): string => {
@@ -261,10 +316,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   }
 
   // Filter categories based on search (now works on current page data)
-  const filteredCategories = React.useMemo(() => {
-    if (!searchTerm) return categories
-    return categories.filter((category) => category.Name.toLowerCase().includes(searchTerm.toLowerCase()))
-  }, [categories, searchTerm])
+  const filteredCategories = categories
 
   // For paginated API, we don't slice here since API handles pagination
   const currentCategories = filteredCategories
@@ -707,7 +759,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
         category_id: categoryId,
         Name: category.Name,
         Description: category.Description || "",
-        Priority: category.Priority || 1,
+        Priority: category.Priority ?? 0,
         status: newStatus,
       }
       console.log("📤 Sending request to:", categorieEndPoint.CATEGORIES_DATA_UPDATED)
@@ -770,13 +822,13 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       categoryName: category.Name,
       categoryDescription: category.Description || "",
       categoryImage: null,
-      categoryPriority: category.Priority || 1,
+      categoryPriority: category.Priority ?? 0,
     })
     setEditFormData({
       categoryId: category._id,
       categoryName: category.Name,
       categoryDescription: category.Description || "",
-      categoryPriority: category.Priority || 1,
+      categoryPriority: category.Priority ?? 0,
       categoryImages: category.Images || []
     })
     setSelectedImages([])
@@ -991,7 +1043,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteCategory(category._id)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => setDeleteCategoryId(category._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
@@ -1197,6 +1249,33 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteCategoryId} onOpenChange={() => setDeleteCategoryId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Do not delete a category that is used by any event: those events
+              will stop loading in the event lists until they are moved to another category.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteCategoryId) {
+                  handleDeleteCategory(deleteCategoryId)
+                }
+                setDeleteCategoryId(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

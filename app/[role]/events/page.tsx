@@ -194,7 +194,16 @@ export default function EventsPage({ params }: EventsPageProps) {
   const didRunPageNavEffectOnce = React.useRef(false)
 
   const isPromoterRole = role === "promoter" || (role as string) === "promoter"
-  const useClientPaging = isPromoterRole || (!!startDate && !!endDate)
+  // Only the promoter endpoint is unpaginated; date ranges are filtered server-side for every role
+  const useClientPaging = isPromoterRole
+
+  // eventNameSearchKeyword is Joi min(3) on every events endpoint, so shorter input is not sent
+  const MIN_SEARCH_LENGTH = 3
+  const searchKeyword = React.useMemo(() => {
+    const trimmed = debouncedSearchTerm.trim()
+    return trimmed.length >= MIN_SEARCH_LENGTH ? trimmed : ""
+  }, [debouncedSearchTerm])
+  const showSearchHint = searchTerm.trim().length > 0 && searchTerm.trim().length < MIN_SEARCH_LENGTH
 
   // Helper function to normalize event status for display
   const normalizeEventStatus = (status: number | string): string => {
@@ -369,12 +378,71 @@ export default function EventsPage({ params }: EventsPageProps) {
     }
   }
 
+  // Organizers and promoters only see their own events, so their city/venue/promoter options are
+  // built from those event rows instead of the platform-wide lists.
+  const fetchScopedFilterOptions = async () => {
+    try {
+      const authToken = getValidToken()
+      if (!user || !authToken) return
+
+      const endpoint = isPromoterRole
+        ? promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
+        : eventEndPoint.GET_ALL_EVENTS_DATA_BY_ADMIN
+      const response = await authFetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          AdminRole: isPromoterRole ? 4 : getNumericAdminRole(user.AdminRole || (role as UserRole)),
+          user_id: user.user_id,
+        }),
+      })
+
+      // 404 = the user has no events yet
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
+      const rows: any[] = Array.isArray(data?.data) ? data.data : []
+
+      const cities = new Set<string>()
+      const venues = new Map<string, string>()
+      const promoters = new Map<string, string>()
+      rows.forEach((row) => {
+        // TBA rows carry VenueCity "-"; their city is in VenueToBeAnnouncedCity
+        const city = Number(row.VenueToBeAnnounced) === 1 ? row.VenueToBeAnnouncedCity : row.VenueCity
+        if (city && city !== "-") cities.add(city)
+        if (Number(row.VenueEventFlag) === 1 && row.venue_id) {
+          venues.set(row.venue_id, row.VenueName || "Unknown Venue")
+        }
+        ;(row.PopUpPromoterData || []).forEach((promoter: any) => {
+          if (promoter?.promoter_id) promoters.set(promoter.promoter_id, promoter.PromoterName || "Unknown Promoter")
+        })
+      })
+
+      setFilterCities([...cities].sort())
+      setFilterVenues([...venues].map(([id, name]) => ({ id, name })))
+      setFilterPromoters([...promoters].map(([id, name]) => ({ id, name })))
+      setFilterOrganizers([])
+    } catch (error) {
+      console.warn('Error fetching filter options (handled):', error)
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to load filter options"),
+        variant: "destructive",
+      })
+    }
+  }
+
   // Function to fetch all filter options
-  // Always use the dedicated per-resource endpoints for every role:
+  // Superadmin/employee use the dedicated per-resource endpoints:
   //   /events/getAllEventCities, /organizer/getAll, /venue/getall, /promoter/getAll
   const fetchAllFilterOptions = async () => {
     setFilterOptionsLoading(true)
     try {
+      if (isPromoterRole || (role as UserRole) === "organizer") {
+        await fetchScopedFilterOptions()
+        return
+      }
       await Promise.all([
         fetchFilterCities(),
         fetchFilterOrganizers(),
@@ -405,7 +473,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         // Event basic info from new API structure
         eventName: event.EventName || event.eventName || event.Name || event.name || event.title || "Untitled Event",
         eventDescription: event.EventDescription || event.eventDescription || event.Description || event.description || "No description available",
-        eventType: event.EventType === 1 ? "Single-Day" : "Multi-Day",
+        // EventType is the booking mode (Booking=1, Registration=2, WhatsApp/free=3), not the day count
+        eventType: Number(event.EventType) === 2 ? "Registration" : Number(event.EventType) === 3 ? "Free" : "Booking",
         
         // Dates from arrangedEventDateTime array
         eventStartDate: event.arrangedEventDateTime?.[0]?.EventStartDateTime || event.eventStartDate || event.EventStartDate,
@@ -500,9 +569,25 @@ export default function EventsPage({ params }: EventsPageProps) {
     applyFilters: boolean = false,
     page: number = 1,
     limit: number = ITEMS_PER_PAGE,
+    // Search-driven fetches keep the page mounted (inline spinner) so the search box keeps focus
+    background: boolean = false,
   ) => {
+    // An empty result (backend 404) on a later page, e.g. after the last row was approved,
+    // steps back one page instead of showing an empty table
+    const handleEmptyResult = () => {
+      setAllEventsData([])
+      setOriginalData([])
+      if (!isPromoterRole && page > 1) {
+        setCurrentPage(page - 1)
+        return
+      }
+      setServerTotalPages(1)
+      setServerTotalEvents(0)
+    }
+
     try {
-      setLoading(true)
+      if (background) setSearchLoading(true)
+      else setLoading(true)
       setApiError(null)
 
       // Check if we have a user and auth token
@@ -548,10 +633,13 @@ export default function EventsPage({ params }: EventsPageProps) {
       if (isPromoterRole) {
         console.log("🎯 DEFINITELY Using PROMOTER endpoint")
         apiEndpoint = promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER
+        // The promoter dashboard endpoint is unpaginated but filters by keyword and date range
         requestPayload = {
           AdminRole: 4, // Promoter role ID
         
           user_id: user.user_id,
+          ...(searchKeyword && { eventNameSearchKeyword: searchKeyword }),
+          ...(applyFilters && startDate && endDate && { startDate, endDate }),
         }
         console.log("Promoter endpoint URL:", apiEndpoint)
         console.log("Promoter payload JSON:", JSON.stringify(requestPayload))
@@ -589,8 +677,9 @@ export default function EventsPage({ params }: EventsPageProps) {
           user_id: user.user_id,
           page: page.toString(),
           limit: limit.toString(),
-          ...(debouncedSearchTerm && debouncedSearchTerm.trim() && { eventNameSearchKeyword: debouncedSearchTerm }),
+          ...(searchKeyword && { eventNameSearchKeyword: searchKeyword }),
           // Include filter parameters if applyFilters is true
+          ...(applyFilters && startDate && endDate && { startDate, endDate }),
           ...(applyFilters && appliedCity && appliedCity !== "__all__" && { CityName: appliedCity }),
           ...(applyFilters && appliedVenue && appliedVenue !== "__all__" && { venue_id: appliedVenue }),
           // Only include organizer filter if role is not organizer
@@ -645,25 +734,33 @@ export default function EventsPage({ params }: EventsPageProps) {
           }
 
           // Handle 404 "not found" responses as empty data rather than errors
+          // (date-range misses come back as 404 with error:false "No Events Found")
           if (response.status === 404 && errorData && 
               (errorData.message?.toLowerCase().includes('not found') || 
+               errorData.message?.toLowerCase().includes('no events found') ||
                errorData.message?.toLowerCase().includes('no data'))) {
             console.log("API returned 404 - no events found, treating as empty dataset")
-            setAllEventsData([])
-            setOriginalData([])
+            handleEmptyResult()
             setUseMockData(false)
             setApiError(null)
-            setLoading(false)
             return
           }
 
           // For any other API errors, also treat as no data available
           console.log("API error - treating as no data available")
+          if (errorData?.message) {
+            toast({
+              title: "Error",
+              description: errorData.message,
+              variant: "destructive",
+            })
+          }
           setAllEventsData([])
           setOriginalData([])
+          setServerTotalPages(1)
+          setServerTotalEvents(0)
           setUseMockData(false)
           setApiError(null)
-          setLoading(false)
           return
         }
 
@@ -781,8 +878,12 @@ export default function EventsPage({ params }: EventsPageProps) {
       setApiError(null)
     } finally {
       setLoading(false)
+      setSearchLoading(false)
     }
   }
+
+  // Re-fetch the current tab/page with the applied filters (after enable/disable, approve/reject, promoter changes)
+  const refreshEvents = () => getAllEventData(activeTab, true, currentPage, ITEMS_PER_PAGE, !!searchKeyword)
   // Search with debounce
   React.useEffect(() => {
     const delay = setTimeout(() => {
@@ -792,122 +893,29 @@ export default function EventsPage({ params }: EventsPageProps) {
     return () => clearTimeout(delay)
   }, [searchTerm])
 
+  // Search goes through the active tab's own endpoint (eventNameSearchKeyword), keeping server paging.
+  // Keyed on the effective keyword, so typing 1-2 characters neither refetches nor clears the list.
+  const lastSearchKeyword = React.useRef(searchKeyword)
   React.useEffect(() => {
-    // Server-side search/pagination: always fetch page 1 when search term changes
-    // Promoter endpoint isn't paginated; keep existing data and client paging
-    if (isPromoterRole) return
+    if (lastSearchKeyword.current === searchKeyword) return
+    lastSearchKeyword.current = searchKeyword
 
-    // If we're already on page 1, fetch immediately; otherwise reset to page 1 and let the page nav effect fetch.
-    if (currentPage === 1) {
-      if (!debouncedSearchTerm || !debouncedSearchTerm.trim()) {
-        getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
-        return
-      }
-
-      searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
+    // If we're already on page 1 (or client paging), fetch immediately; otherwise reset to page 1 and let the page nav effect fetch.
+    if (isPromoterRole || currentPage === 1) {
+      if (currentPage !== 1) setCurrentPage(1)
+      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE, true)
       return
     }
 
     setCurrentPage(1)
-  }, [debouncedSearchTerm])
-  // Search events with API call for all roles
-  const searchEventsWithKeyword = async (keyword: string, page: number = 1, limit: number = ITEMS_PER_PAGE) => {
-    try {
-      setSearchLoading(true)
-      const authToken = getValidToken()
-      if (!user || !authToken) return
+  }, [searchKeyword])
 
-      // Determine the correct role ID based on user role
-      const getSearchRoleId = () => {
-        const roleStr = role as string
-        if (roleStr === "promoter") return 4
-        if (roleStr === "organizer") return 3
-        if (roleStr === "admin") return 2
-        return 1 // superadmin
-      }
-
-      const payload = {
-        AdminRole: getSearchRoleId(),
-        user_id: user.user_id,
-        page: page.toString(),
-        limit: limit.toString(),
-        eventNameSearchKeyword: keyword,
-        // Include filter parameters
-        ...(appliedCity && appliedCity !== "__all__" && { city: appliedCity }),
-        ...(appliedVenue && appliedVenue !== "__all__" && { venue_id: appliedVenue }),
-        // Only include organizer filter if role is not organizer
-        ...((role as UserRole) !== "organizer" && appliedOrganizer && appliedOrganizer !== "__all__" && { organizer_id: appliedOrganizer }),
-        ...(appliedPromoter && appliedPromoter !== "__all__" && { promoter_id: appliedPromoter })
-      }
-
-      // Use the getAllPaginated endpoint for search
-      const searchEndpoint = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'https://devapi.eventingclub.in'}/events/getAllPaginated`
-
-      const response = await authFetch(searchEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const data = await handleApiResponse(response)
-
-      // Capture pagination metadata from search response
-      if (data?.data?.totalPages !== undefined) {
-        setServerTotalPages(Number(data.data.totalPages) || 1)
-      }
-      if (data?.data?.totalEvents !== undefined) {
-        setServerTotalEvents(Number(data.data.totalEvents) || 0)
-      }
-      if (data?.data?.currentPage !== undefined) {
-        const nextCurrentPage = Number(data.data.currentPage) || page
-        if (nextCurrentPage !== currentPage) setCurrentPage(nextCurrentPage)
-      }
-      
-      // Handle the paginated response structure
-      let eventsArray = []
-      if (data && data.data && data.data.EventsData && Array.isArray(data.data.EventsData)) {
-        eventsArray = data.data.EventsData
-      } else if (data && data.data && Array.isArray(data.data)) {
-        eventsArray = data.data
-      }
-
-      const normalizedEvents = normalizeEventsData(eventsArray)
-      
-      // Sort search results by start date (latest first)
-      const sortedEvents = normalizedEvents.sort((a, b) => {
-        const dateA = new Date(a.eventStartDate || a.createdAt).getTime()
-        const dateB = new Date(b.eventStartDate || b.createdAt).getTime()
-        return dateB - dateA // Descending order (latest first)
-      })
-      
-      setAllEventsData(sortedEvents)
-      
-      console.log("Search completed:", {
-        keyword,
-        resultsCount: normalizedEvents.length,
-        payload
-      })
-    } catch (error) {
-      console.warn("Search error (handled):", error)
-      setAllEventsData([])
-      toast({
-        title: "Error",
-        description: getApiErrorMessage(error, "Failed to search events"),
-        variant: "destructive",
-      })
-    } finally {
-      setSearchLoading(false)
-    }
-  }
-
+  // Stored event times are the entered wall-clock time tagged +00:00, so the day bounds use Z too
   const handleManualDateChange = (value: string, type: "start" | "end") => {
     if (type === "start") {
-      setDraftStartDate(value ? `${value}T00:00:00` : null)
+      setDraftStartDate(value ? `${value}T00:00:00.000Z` : null)
     } else {
-      setDraftEndDate(value ? `${value}T23:59:59` : null)
+      setDraftEndDate(value ? `${value}T23:59:59.999Z` : null)
     }
   }
 
@@ -927,10 +935,6 @@ export default function EventsPage({ params }: EventsPageProps) {
       setStartDate(draftStartDate)
       setEndDate(draftEndDate)
       setAppliedDateOption(getDateRangeLabel(draftStartDate, draftEndDate))
-
-      if ((role as UserRole) === "promoter") {
-        dateFilterApiCall(draftStartDate, draftEndDate)
-      }
     } else {
       setStartDate(null)
       setEndDate(null)
@@ -951,54 +955,6 @@ export default function EventsPage({ params }: EventsPageProps) {
     setDraftEndDate(endDate)
   }
 
-  const dateFilterApiCall = async (startDateApiCall: string, endDateApiCall: string) => {
-    try {
-      const authToken = getValidToken()
-      if (!user || !authToken) return
-
-      const payload = {
-        AdminRole: 4, // Promoter role ID
-        user_id: user.user_id,
-        startDate: startDateApiCall,
-        endDate: endDateApiCall,
-      }
-
-      const response = await authFetch(promoterEndPointPannel.GET_ALL_EVENTS_DATA_BY_PROMOTER, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        const eventsArray = data.data || []
-        const normalizedEvents = normalizeEventsData(eventsArray)
-        setAllEventsData(normalizedEvents)
-        toast({
-          title: "Success",
-          description: data.message || "Events filtered successfully",
-        })
-      } else {
-        setAllEventsData([])
-        toast({
-          title: "No Data",
-          description: "No events found for the selected date range",
-        })
-      }
-    } catch (error) {
-      console.warn("Date filter error (handled):", error)
-      setAllEventsData([])
-      toast({
-        title: "Error",
-        description: "Failed to filter events by date",
-        variant: "destructive",
-      })
-    }
-  }
-
   // Initial data fetch
   const didInitialFetch = React.useRef(false)
   React.useEffect(() => {
@@ -1008,23 +964,25 @@ export default function EventsPage({ params }: EventsPageProps) {
     fetchAllFilterOptions()
   }, [])
 
-  // Refetch data when filters change
+  // Refetch data when the server-side filters change. Promoters only send the date range;
+  // their city/venue/event-name filters are applied client-side on the full list.
+  const serverFilterKey = isPromoterRole
+    ? JSON.stringify([startDate, endDate])
+    : JSON.stringify([appliedCity, appliedVenue, appliedOrganizer, appliedPromoter, startDate, endDate])
+  const lastServerFilterKey = React.useRef(serverFilterKey)
   React.useEffect(() => {
-    // When filters change, always reset to page 1 and refetch from API (non-promoter)
-    if (isPromoterRole) return
+    if (lastServerFilterKey.current === serverFilterKey) return
+    lastServerFilterKey.current = serverFilterKey
 
-    // If we're already on page 1, fetch immediately; otherwise set page to 1 and let the page nav effect fetch.
-    if (currentPage === 1) {
-      if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
-        searchEventsWithKeyword(debouncedSearchTerm, 1, ITEMS_PER_PAGE)
-      } else {
-        getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
-      }
+    // If we're already on page 1 (or client paging), fetch immediately; otherwise set page to 1 and let the page nav effect fetch.
+    if (isPromoterRole || currentPage === 1) {
+      if (currentPage !== 1) setCurrentPage(1)
+      getAllEventData(activeTab, true, 1, ITEMS_PER_PAGE)
       return
     }
 
     setCurrentPage(1)
-  }, [appliedCity, appliedVenue, appliedOrganizer, appliedPromoter])
+  }, [serverFilterKey])
 
   React.useEffect(() => {
     // Page navigation for API-paginated views
@@ -1037,21 +995,17 @@ export default function EventsPage({ params }: EventsPageProps) {
       return
     }
 
-    if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
-      searchEventsWithKeyword(debouncedSearchTerm, currentPage, ITEMS_PER_PAGE)
-    } else {
-      getAllEventData(activeTab, true, currentPage, ITEMS_PER_PAGE)
-    }
+    getAllEventData(activeTab, true, currentPage, ITEMS_PER_PAGE, !!searchKeyword)
   }, [currentPage])
   // Filter events based on filters (no tab filtering since we fetch specific data per tab)
   const filteredEvents = React.useMemo(() => {
     let events = allEventsData
 
     // When using API pagination, backend already applied most filters.
-    // Keep client-side filters only when forced into client paging (promoter/date-range).
+    // Keep client-side filters only for the unpaginated promoter list (dates/keyword are sent to the server).
     if (useClientPaging) {
       if (appliedCity && appliedCity !== "__all__") {
-        events = events.filter(event => event.city === appliedCity)
+        events = events.filter(event => event.city === appliedCity || event.VenueToBeAnnouncedCity === appliedCity)
       }
 
       if (appliedVenue && appliedVenue !== "__all__") {
@@ -1084,21 +1038,12 @@ export default function EventsPage({ params }: EventsPageProps) {
       }
     }
 
-    if (startDate && endDate) {
-      const start = new Date(startDate)
-      const end = new Date(endDate)
-      events = events.filter(event => {
-        const eventDate = new Date(event.eventStartDate)
-        return eventDate >= start && eventDate <= end
-      })
-    }
-
     return [...events].sort((a, b) => {
       const dateA = new Date(a.updatedAt || a.createdAt || 0)
       const dateB = new Date(b.updatedAt || b.createdAt || 0)
       return dateB.getTime() - dateA.getTime()
     })
-  }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedEventName, appliedOrganizer, appliedPromoter, startDate, endDate, filterVenues, filterOrganizers, filterPromoters, role])
+  }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedEventName, appliedOrganizer, appliedPromoter, filterVenues, filterOrganizers, filterPromoters, role])
 
   const totalPages = useClientPaging ? Math.ceil(filteredEvents.length / ITEMS_PER_PAGE) : serverTotalPages
   const currentEvents = useClientPaging
@@ -1157,8 +1102,9 @@ export default function EventsPage({ params }: EventsPageProps) {
   }, [currentPage, totalPages])
   const canAddEvent = (role as UserRole) === "superadmin" || (role as UserRole) === "organizer"
   const handleCreateEvent = () => {
-    // Navigate directly to standard event creation (regular event type)
-    router.push(`/${role}/events/create?type=regular`)
+    // Both the superAdmin and organizer create endpoints accept tour events (TourEvent/EventTour_id),
+    // so let the user pick the format first
+    setShowEventFormatModal(true)
   }
   const handleEventFormatSelection = (format: number) => {
     setShowEventFormatModal(false)
@@ -1212,7 +1158,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
 
       // Refresh the events data to get the updated status from the server
-      getAllEventData(activeTab)
+      refreshEvents()
 
     } catch (error) {
       console.error("Error toggling event status:", error)
@@ -1354,6 +1300,46 @@ export default function EventsPage({ params }: EventsPageProps) {
     setShowOrganizerPopup(true)
   }
 
+  // superAdmin/update runs multer, so it needs multipart data: a JSON body leaves req.files
+  // undefined and the handler crashes without responding. Mirrors the edit page's approve/reject.
+  const buildStatusUpdateFormData = (eventData: any, status: number, rejectRemark?: string) => {
+    const formData = new FormData()
+    formData.append("event_id", eventData._id)
+    formData.append("Status", String(status))
+    if (rejectRemark) formData.append("EventRejectRemark", rejectRemark)
+
+    if (eventData.EventName) formData.append("EventName", eventData.EventName)
+    if (eventData.EventDescription) formData.append("EventDescription", eventData.EventDescription)
+    if (eventData.EventTermsCondition) formData.append("EventTermsCondition", eventData.EventTermsCondition)
+    formData.append("EventLanguages", JSON.stringify(eventData.EventLanguages || []))
+
+    const isTourEvent = Number(eventData.TourEvent) === 1
+    formData.append("TourEvent", isTourEvent ? "1" : "0")
+    if (isTourEvent && eventData.EventTour_id) formData.append("EventTour_id", eventData.EventTour_id)
+
+    formData.append("VenueEventFlag", String(eventData.VenueEventFlag ?? 0))
+    formData.append("OnlineEventFlag", String(eventData.OnlineEventFlag ?? 0))
+    formData.append("VenueToBeAnnounced", String(eventData.VenueToBeAnnounced ?? 0))
+    if (eventData.EventType != null) formData.append("EventType", String(eventData.EventType))
+    if (eventData.EventVisibility != null) formData.append("EventVisibility", String(eventData.EventVisibility))
+    if (eventData.FeaturedEventFlag != null) formData.append("FeaturedEventFlag", String(eventData.FeaturedEventFlag))
+    // Omitted when unset; a default would force an age restriction on the event
+    if (eventData.BestSuitedFor) formData.append("BestSuitedFor", String(eventData.BestSuitedFor))
+    // venue_id is null for online/TBA events, which Joi.string() rejects
+    if (eventData.venue_id) formData.append("venue_id", eventData.venue_id)
+
+    if (Number(eventData.OnlineEventFlag) === 1 && eventData.Online_Event_Link) {
+      formData.append("Online_Event_Link", eventData.Online_Event_Link)
+    }
+    if (Number(eventData.VenueToBeAnnounced) === 1) {
+      if (eventData.VenueToBeAnnouncedState) formData.append("VenueToBeAnnouncedState", eventData.VenueToBeAnnouncedState)
+      if (eventData.VenueToBeAnnouncedStateIsoCode) formData.append("VenueToBeAnnouncedStateIsoCode", eventData.VenueToBeAnnouncedStateIsoCode)
+      if (eventData.VenueToBeAnnouncedCity) formData.append("VenueToBeAnnouncedCity", eventData.VenueToBeAnnouncedCity)
+      if (eventData.VenueToBeAnnouncedCityIsoCode) formData.append("VenueToBeAnnouncedCityIsoCode", eventData.VenueToBeAnnouncedCityIsoCode)
+    }
+    return formData
+  }
+
   // Handle approve event (change status to Published)
   const handleApproveEvent = async (eventId: string) => {
     try {
@@ -1376,53 +1362,13 @@ export default function EventsPage({ params }: EventsPageProps) {
 
       console.log('Complete event data for approval:', eventToApproveData)
 
-      // Create payload with complete event data
-      const payload = {
-        event_id: eventId,
-        Status: 3, // Published status (number — backend Joi expects number)
-        
-        // Include all event fields from the original data
-        EventName: eventToApproveData.EventName || eventToApproveData.eventName,
-        EventDescription: eventToApproveData.EventDescription || eventToApproveData.eventDescription,
-        EventLanguages: eventToApproveData.EventLanguages || eventToApproveData.eventLanguages || [],
-        EventTermsCondition: eventToApproveData.EventTermsCondition || eventToApproveData.eventTermsCondition || "",
-        
-        // Event flags and settings — all must be numbers
-        TourEvent: Number(eventToApproveData.TourEvent ?? eventToApproveData.tourEvent ?? 0),
-        VenueEventFlag: eventToApproveData.VenueEventFlag ?? eventToApproveData.venueEventFlag ?? 1,
-        EventType: eventToApproveData.EventType ?? eventToApproveData.eventType ?? 1,
-        OnlineEventFlag: eventToApproveData.OnlineEventFlag ?? eventToApproveData.onlineEventFlag ?? 0,
-        FeaturedEventFlag: eventToApproveData.FeaturedEventFlag ?? eventToApproveData.featuredEventFlag ?? 0,
-        VenueToBeAnnounced: eventToApproveData.VenueToBeAnnounced ?? eventToApproveData.venueToBeAnnounced ?? 0,
-        EventVisibility: eventToApproveData.EventVisibility ?? eventToApproveData.eventVisibility ?? 1,
-        
-        // Additional fields
-        BestSuitedFor: eventToApproveData.BestSuitedFor ?? eventToApproveData.bestSuitedFor ?? "21",
-        venue_id: eventToApproveData.venue_id ?? eventToApproveData.venueId,
-        
-        // Online event link if applicable
-        ...(eventToApproveData.OnlineEventFlag === 1 && {
-          Online_Event_Link: eventToApproveData.Online_Event_Link ?? eventToApproveData.onlineEventLink
-        }),
-        
-        // Venue to be announced fields if applicable
-        ...(eventToApproveData.VenueToBeAnnounced === 1 && {
-          VenueToBeAnnouncedCity: eventToApproveData.VenueToBeAnnouncedCity ?? eventToApproveData.venueToBeAnnouncedCity,
-          VenueToBeAnnouncedCityIsoCode: eventToApproveData.VenueToBeAnnouncedCityIsoCode ?? eventToApproveData.venueToBeAnnouncedCityIsoCode,
-          VenueToBeAnnouncedState: eventToApproveData.VenueToBeAnnouncedState ?? eventToApproveData.venueToBeAnnouncedState,
-          VenueToBeAnnouncedStateIsoCode: eventToApproveData.VenueToBeAnnouncedStateIsoCode ?? eventToApproveData.venueToBeAnnouncedStateIsoCode
-        })
-      }
-
-      console.log('Complete approve payload being sent:', payload)
-
       const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          // No Content-Type: the browser sets the multipart boundary
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify(payload),
+        body: buildStatusUpdateFormData(eventToApproveData, 3), // 3 = Published
       })
 
       if (!response.ok) {
@@ -1438,7 +1384,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       })
 
       // Refresh the events data
-      getAllEventData(activeTab)
+      refreshEvents()
 
     } catch (error) {
       console.error("Error approving event:", error)
@@ -1482,54 +1428,13 @@ export default function EventsPage({ params }: EventsPageProps) {
       console.log('Complete event data for rejection:', eventToRejectData)
       console.log('Rejection reason:', EventRejectRemark.trim())
 
-      // Create payload with complete event data plus rejection remark
-      const payload = {
-        event_id: eventToReject,
-        Status: 4, // Rejected status (number — backend Joi expects number)
-        EventRejectRemark: EventRejectRemark.trim(), // Rejection remark
-        
-        // Include all event fields from the original data
-        EventName: eventToRejectData.EventName || eventToRejectData.eventName,
-        EventDescription: eventToRejectData.EventDescription || eventToRejectData.eventDescription,
-        EventLanguages: eventToRejectData.EventLanguages || eventToRejectData.eventLanguages || [],
-        EventTermsCondition: eventToRejectData.EventTermsCondition || eventToRejectData.eventTermsCondition || "",
-        
-        // Event flags and settings — all must be numbers
-        TourEvent: Number(eventToRejectData.TourEvent ?? eventToRejectData.tourEvent ?? 0),
-        VenueEventFlag: eventToRejectData.VenueEventFlag ?? eventToRejectData.venueEventFlag ?? 1,
-        EventType: eventToRejectData.EventType ?? eventToRejectData.eventType ?? 1,
-        OnlineEventFlag: eventToRejectData.OnlineEventFlag ?? eventToRejectData.onlineEventFlag ?? 0,
-        FeaturedEventFlag: eventToRejectData.FeaturedEventFlag ?? eventToRejectData.featuredEventFlag ?? 0,
-        VenueToBeAnnounced: eventToRejectData.VenueToBeAnnounced ?? eventToRejectData.venueToBeAnnounced ?? 0,
-        EventVisibility: eventToRejectData.EventVisibility ?? eventToRejectData.eventVisibility ?? 1,
-        
-        // Additional fields
-        BestSuitedFor: eventToRejectData.BestSuitedFor ?? eventToRejectData.bestSuitedFor ?? "21",
-        venue_id: eventToRejectData.venue_id ?? eventToRejectData.venueId,
-        
-        // Online event link if applicable
-        ...(eventToRejectData.OnlineEventFlag === 1 && {
-          Online_Event_Link: eventToRejectData.Online_Event_Link ?? eventToRejectData.onlineEventLink
-        }),
-        
-        // Venue to be announced fields if applicable
-        ...(eventToRejectData.VenueToBeAnnounced === 1 && {
-          VenueToBeAnnouncedCity: eventToRejectData.VenueToBeAnnouncedCity ?? eventToRejectData.venueToBeAnnouncedCity,
-          VenueToBeAnnouncedCityIsoCode: eventToRejectData.VenueToBeAnnouncedCityIsoCode ?? eventToRejectData.venueToBeAnnouncedCityIsoCode,
-          VenueToBeAnnouncedState: eventToRejectData.VenueToBeAnnouncedState ?? eventToRejectData.venueToBeAnnouncedState,
-          VenueToBeAnnouncedStateIsoCode: eventToRejectData.VenueToBeAnnouncedStateIsoCode ?? eventToRejectData.venueToBeAnnouncedStateIsoCode
-        })
-      }
-
-      console.log('Complete reject payload with remark being sent:', payload)
-
       const response = await authFetch(eventEndPoint.UPDATE_EVENT_DATA, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          // No Content-Type: the browser sets the multipart boundary
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify(payload),
+        body: buildStatusUpdateFormData(eventToRejectData, 4, EventRejectRemark.trim()), // 4 = Rejected
       })
 
       if (!response.ok) {
@@ -1550,7 +1455,7 @@ export default function EventsPage({ params }: EventsPageProps) {
       setEventToReject("")
 
       // Refresh the events data
-      getAllEventData(activeTab)
+      refreshEvents()
 
     } catch (error) {
       console.error("Error rejecting event:", error)
@@ -1631,7 +1536,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                             {activeTab === "completed" && "No completed events found."}
                           </p>
                         </div>
-                        <Button variant="outline" onClick={() => getAllEventData(activeTab)} disabled={loading} className="text-sm">
+                        <Button variant="outline" onClick={() => refreshEvents()} disabled={loading} className="text-sm">
                           <RefreshCw className="h-4 w-4 mr-2" />
                           Refresh Events
                         </Button>
@@ -1682,7 +1587,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                           <div className="flex items-center gap-1 flex-nowrap overflow-hidden min-w-0">
                             <AddPromoterAndShow 
                               eventData={event} 
-                              onPromoterUpdate={() => getAllEventData(activeTab)}
+                              onPromoterUpdate={() => refreshEvents()}
                             />
                           </div>
                         ) : ((role as UserRole) === "organizer") ? (
@@ -1917,6 +1822,11 @@ export default function EventsPage({ params }: EventsPageProps) {
               />
               <div className="absolute inset-0 rounded-md bg-gradient-to-r from-primary/5 via-transparent to-primary/5 pointer-events-none" />
             </div>
+            {showSearchHint && (
+              <p className="-mt-2 text-xs text-muted-foreground">
+                Type at least {MIN_SEARCH_LENGTH} characters to search by event name.
+              </p>
+            )}
 
             {/* Comprehensive Filters Row */}
             <div className="flex flex-col gap-4">
@@ -2450,7 +2360,7 @@ export default function EventsPage({ params }: EventsPageProps) {
                         Try adjusting your search terms or filters to find the events you're looking for
                       </p>
                     </div>
-                    <Button variant="outline" onClick={() => getAllEventData(activeTab)} disabled={loading} className="text-sm">
+                    <Button variant="outline" onClick={() => refreshEvents()} disabled={loading} className="text-sm">
                       <RefreshCw className="h-4 w-4 mr-2" />
                       Refresh Events
                     </Button>                  </div>

@@ -141,18 +141,18 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
     return () => clearTimeout(delay)
   }, [searchTerm])
 
-  // Filter sales data based on search
+  // salesData supports search_keyword (EventName regex), so search runs on the server
+  // across every page instead of only the 10 events already loaded.
+  const lastSearchRef = React.useRef("")
   React.useEffect(() => {
-    if (!debouncedSearchTerm) {
-      setSalesData(originalSalesData)
-    } else {
-      const filtered = originalSalesData.filter(event =>
-        event.EventName.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-      )
-      setSalesData(filtered)
+    // The initial load below already fetched with an empty search.
+    if (lastSearchRef.current === debouncedSearchTerm) return
+    lastSearchRef.current = debouncedSearchTerm
+    if (organizerId && user) {
       setCurrentPage(1)
+      fetchSalesData(1, debouncedSearchTerm)
     }
-  }, [debouncedSearchTerm, originalSalesData])
+  }, [debouncedSearchTerm])
 
   // Fetch organizer info
   const fetchOrganizerInfo = async () => {
@@ -166,7 +166,8 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ organizer_id: organizerId }),
+        // /organizer/getById reads user_id, not organizer_id.
+        body: JSON.stringify({ user_id: organizerId }),
       })
 
       if (response.ok) {
@@ -223,7 +224,7 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
   }
 
   // Fetch sales data with pagination
-  const fetchSalesData = async (page: number = 1) => {
+  const fetchSalesData = async (page: number = 1, search: string = debouncedSearchTerm) => {
     try {
       setLoading(true)
       setApiError(null)
@@ -234,18 +235,32 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         return
       }
 
+      const payload: Record<string, string> = {
+        organizer_id: organizerId,
+        page: String(page),
+        limit: String(ITEMS_PER_PAGE),
+      }
+      if (search.trim()) {
+        payload.search_keyword = search.trim()
+      }
+
       const response = await authFetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({
-          organizer_id: organizerId,
-          page: String(page),
-          limit: String(ITEMS_PER_PAGE),
-        }),
+        body: JSON.stringify(payload),
       })
+
+      // 404 "Events not found" = organizer has no (matching) events, not a failure.
+      if (response.status === 404) {
+        setSalesData([])
+        setOriginalSalesData([])
+        setTotalPages(1)
+        setCurrentPage(1)
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`)
@@ -379,13 +394,11 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         body: JSON.stringify(payload),
       })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`)
-      }
-
-      const data = await response.json()
-      if (data.error) {
-        throw new Error(data.message || "Failed to add payment")
+      // Read the body first: a 409 carries "Pending Amount is X", which is the message
+      // the user needs when the amount is more than what is still owed.
+      const data = await response.json().catch(() => null)
+      if (!response.ok || data?.error) {
+        throw new Error(data?.message || `API error: ${response.status}`)
       }
 
       toast({
@@ -395,10 +408,13 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
 
       // Reset form
       setPaymentForm({ date: "", remark: "", amount: "" })
-      
-      // Refresh payments and total data
-      await fetchPayments(selectedEventId)
-      await fetchTotalSalesData()
+
+      // Refresh payments, totals and the table's Pending Amount column
+      await Promise.all([
+        fetchPayments(selectedEventId),
+        fetchTotalSalesData(),
+        fetchSalesData(currentPage),
+      ])
     } catch (error) {
       console.error("Error adding payment:", error)
       toast({
@@ -440,9 +456,12 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
         description: "Payment deleted successfully"
       })
 
-      // Refresh payments and total data
-      await fetchPayments(selectedEventId)
-      await fetchTotalSalesData()
+      // Refresh payments, totals and the table's Pending Amount column
+      await Promise.all([
+        fetchPayments(selectedEventId),
+        fetchTotalSalesData(),
+        fetchSalesData(currentPage),
+      ])
     } catch (error) {
       console.error("Error deleting payment:", error)
       toast({
@@ -502,24 +521,9 @@ export default function OrganizerSalesPage({ params }: OrganizerSalesPageProps) 
     }
   }, [organizerId, user])
 
-  // Pagination calculation for current page data
-  const paginatedSalesData = React.useMemo(() => {
-    if (debouncedSearchTerm) {
-      // Client-side pagination for search results
-      const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
-      const endIndex = startIndex + ITEMS_PER_PAGE
-      return salesData.slice(startIndex, endIndex)
-    }
-    // Server-side pagination for normal data
-    return salesData
-  }, [salesData, currentPage, debouncedSearchTerm])
-
-  const totalPagesForSearch = React.useMemo(() => {
-    if (debouncedSearchTerm) {
-      return Math.ceil(salesData.length / ITEMS_PER_PAGE)
-    }
-    return totalPages
-  }, [salesData.length, totalPages, debouncedSearchTerm])
+  // Search and paging both happen on the server, so the rows are already the current page.
+  const paginatedSalesData = salesData
+  const totalPagesForSearch = totalPages
 
   if (role !== "superadmin") {
     return <div className="p-6 text-muted-foreground">Access Denied. Superadmin only.</div>

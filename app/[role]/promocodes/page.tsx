@@ -1,7 +1,7 @@
 "use client"
 
 import { authFetch } from "@/lib/auth-fetch"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -39,7 +39,7 @@ import { promocodeEndPoint, eventEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeStatus, PromocodeType } from "@/lib/types"
-import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 
 const statusColors: Record<number, string> = {
@@ -58,6 +58,21 @@ const typeLabels: Record<number, string> = {
   1: "Fixed Amount",
   2: "Percentage"
 }
+
+// The backend feeds search keywords straight into `new RegExp(...)` / `$regex`,
+// so an unescaped "(" or "+" turns a search into a 500.
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
+// ExpiryDate is stored as `${date}T23:59:59.000+00:00`; rendering it in IST rolls
+// it into the next day, so show the stored calendar date in UTC.
+const formatExpiryDate = (value: string) => {
+  const date = value ? new Date(value) : null
+  if (!date || isNaN(date.getTime())) return "N/A"
+  return date.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })
+}
+
+const EVENTS_PAGE_SIZE = 50
+const STATUS_FILTER_PAGE_SIZE = 100
 
 export default function PromocodesPage() {
   const { toast } = useToast()
@@ -80,7 +95,14 @@ export default function PromocodesPage() {
   const [events, setEvents] = useState<any[]>([])
   const [selectedEvents, setSelectedEvents] = useState<string[]>([])
   const [loadingEvents, setLoadingEvents] = useState(false)
+  const [loadingMoreEvents, setLoadingMoreEvents] = useState(false)
+  const [eventsPage, setEventsPage] = useState(1)
+  const [eventsTotalPages, setEventsTotalPages] = useState(1)
   const [eventSearchTerm, setEventSearchTerm] = useState("")
+  // Selected events are kept by id so they stay listed when a search or page
+  // change swaps them out of `events`.
+  const [selectedEventRecords, setSelectedEventRecords] = useState<Record<string, any>>({})
+  const eventsRequestRef = useRef(0)
   
   // Form state for create/edit
   const [formData, setFormData] = useState({
@@ -114,10 +136,13 @@ export default function PromocodesPage() {
   }
 
   // Fetch events for selection
-  const fetchEvents = useCallback(async (): Promise<any[]> => {
+  const fetchEvents = useCallback(async (page: number = 1, keyword: string = ""): Promise<any[]> => {
     if (!user) return []
 
-    setLoadingEvents(true)
+    const requestId = ++eventsRequestRef.current
+    const append = page > 1
+    if (append) setLoadingMoreEvents(true)
+    else setLoadingEvents(true)
     try {
       const token = getValidToken()
       if (!token) {
@@ -126,11 +151,15 @@ export default function PromocodesPage() {
 
       // Use the paginated publish events endpoint to show only published events
       const numericRole = getNumericAdminRole(user.AdminRole)
-      const requestPayload = {
+      const requestPayload: any = {
         AdminRole: numericRole,
         user_id: user.user_id,
-        page: "1",
-        limit: "50",
+        page: page.toString(),
+        limit: EVENTS_PAGE_SIZE.toString(),
+      }
+      // Validator wants at least 3 characters; the keyword is used as a raw $regex.
+      if (keyword.length >= 3) {
+        requestPayload.eventNameSearchKeyword = escapeRegex(keyword)
       }
 
       const response = await authFetch(eventEndPoint.GET_PAGINATED_PUBLISH_EVENTS, {
@@ -142,7 +171,19 @@ export default function PromocodesPage() {
         body: JSON.stringify(requestPayload),
       })
 
+      // A newer search/page request has started; drop this stale response.
+      if (requestId !== eventsRequestRef.current) return []
+
+      // 404 = no published events (or none matching the search).
+      if (response.status === 404) {
+        if (!append) setEvents([])
+        setEventsPage(page)
+        setEventsTotalPages(page)
+        return []
+      }
+
       const data = await handleApiResponse(response)
+      if (requestId !== eventsRequestRef.current) return []
 
       // Extract events from the paginated response - handle different response structures
       let eventsArray: any[] = []
@@ -158,29 +199,69 @@ export default function PromocodesPage() {
         eventsArray = []
       }
 
-      setEvents(eventsArray)
+      if (append) {
+        setEvents((prev) => {
+          const seen = new Set(prev.map(getEventId))
+          return [...prev, ...eventsArray.filter((event) => !seen.has(getEventId(event)))]
+        })
+      } else {
+        setEvents(eventsArray)
+      }
+      setEventsPage(page)
+      setEventsTotalPages(Number(data.data?.totalPages) || 1)
       return eventsArray
     } catch (error) {
+      if (requestId !== eventsRequestRef.current) return []
       console.error("Error fetching events:", error)
       toast({
         title: "Error",
         description: getApiErrorMessage(error, "Failed to fetch events for selection"),
         variant: "destructive",
       })
-      setEvents([])
+      if (!append) setEvents([])
       return []
     } finally {
-      setLoadingEvents(false)
+      if (requestId === eventsRequestRef.current) {
+        setLoadingEvents(false)
+        setLoadingMoreEvents(false)
+      }
     }
   }, [user, toast])
 
+  // Searches of 3+ characters go to the server (so events beyond the first page
+  // are reachable); shorter input just filters the loaded list locally.
+  const trimmedEventSearch = eventSearchTerm.trim()
+  const serverEventKeyword = trimmedEventSearch.length >= 3 ? trimmedEventSearch : ""
+  const localEventFilter = serverEventKeyword ? "" : trimmedEventSearch.toLowerCase()
 
   // Load events when dialog opens and Specific Events is selected
   useEffect(() => {
-    if (isCreateDialogOpen && formData.CanBeUsed === "2") {
-      fetchEvents()
+    if (!isCreateDialogOpen || formData.CanBeUsed !== "2") return
+    const timer = setTimeout(() => fetchEvents(1, serverEventKeyword), serverEventKeyword ? 400 : 0)
+    return () => clearTimeout(timer)
+  }, [isCreateDialogOpen, formData.CanBeUsed, serverEventKeyword, fetchEvents])
+
+  const matchingEvents = events.filter(
+    (event) => !localEventFilter || getEventName(event).toLowerCase().includes(localEventFilter)
+  )
+  const matchingEventIds = new Set(matchingEvents.map(getEventId))
+  const visibleEvents = [
+    ...selectedEvents
+      .filter((id) => !matchingEventIds.has(id) && selectedEventRecords[id])
+      .map((id) => selectedEventRecords[id]),
+    ...matchingEvents,
+  ]
+
+  const toggleEventSelection = (event: any, checked: boolean) => {
+    const eventId = getEventId(event)
+    if (!eventId) return
+    if (checked) {
+      setSelectedEvents((prev) => (prev.includes(eventId) ? prev : [...prev, eventId]))
+      setSelectedEventRecords((prev) => ({ ...prev, [eventId]: event }))
+    } else {
+      setSelectedEvents((prev) => prev.filter((id) => id !== eventId))
     }
-  }, [isCreateDialogOpen, formData.CanBeUsed, fetchEvents])
+  }
 
 
   // Debounce search term
@@ -204,46 +285,63 @@ export default function PromocodesPage() {
         throw new Error("No valid authentication token found")
       }
 
-      const body: any = {
-        page: page.toString(),
-        limit: itemsPerPage.toString(),
-      }
-      
       // Backend has two separate endpoints:
       //   getallpaginatedData — paginated list (no search)
       //   getPaginatedSearch — paginated search by PromoCodeName (requires search_keyword)
       // Status filtering is NOT supported by the backend; we filter client-side instead.
       let endpoint = promocodeEndPoint.GET_ALL_PAGINATED_PROMOCODES_DATA
+      const baseBody: any = {}
 
       if (search.trim()) {
-        body.search_keyword = search.trim()
+        baseBody.search_keyword = escapeRegex(search.trim())
         endpoint = promocodeEndPoint.SEARCH_PROMOCODE_PAGINATED
       }
 
-      const response = await authFetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      })
-
-      const data: PromocodesApiResponse = await handleApiResponse(response)
-      
-      let fetchedPromocodes = data.data.PromocodeData || []
-
-      // Client-side status filter (backend doesn't support it)
-      if (status !== "all") {
-        const statusNum = Number(status)
-        fetchedPromocodes = fetchedPromocodes.filter((p) => p.status === statusNum)
+      // Both endpoints answer 404 when nothing matches (or the page is past the
+      // end), which is an empty result rather than an error.
+      const fetchPage = async (pageNumber: number, limit: number): Promise<PromocodesApiResponse["data"] | null> => {
+        const response = await authFetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ...baseBody, page: pageNumber.toString(), limit: limit.toString() }),
+        })
+        if (response.status === 404) return null
+        const data: PromocodesApiResponse = await handleApiResponse(response)
+        return data.data
       }
 
-      setPromocodes(fetchedPromocodes)
-      setTotalPages(data.data.totalPages || 1)
-      setCurrentPage(data.data.currentPage || 1)
-      setTotalPromocodes(data.data.totalPromocodes || 0)
-      
+      if (status === "all") {
+        const pageData = await fetchPage(page, itemsPerPage)
+        setPromocodes(pageData?.PromocodeData || [])
+        setTotalPages(pageData?.totalPages || 1)
+        setCurrentPage(pageData?.currentPage || 1)
+        setTotalPromocodes(pageData?.totalPromocodes || 0)
+      } else {
+        // Filtering a single server page would leave the pager counting unfiltered
+        // rows, so pull every code and filter + paginate here instead.
+        const firstPage = await fetchPage(1, STATUS_FILTER_PAGE_SIZE)
+        const allPromocodes = [...(firstPage?.PromocodeData || [])]
+        const serverPages = firstPage?.totalPages || 1
+        if (serverPages > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: serverPages - 1 }, (_, i) => fetchPage(i + 2, STATUS_FILTER_PAGE_SIZE))
+          )
+          rest.forEach((pageData) => allPromocodes.push(...(pageData?.PromocodeData || [])))
+        }
+
+        const statusNum = Number(status)
+        const filtered = allPromocodes.filter((p) => p.status === statusNum)
+        const filteredPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage))
+        const safePage = Math.min(Math.max(page, 1), filteredPages)
+        setPromocodes(filtered.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage))
+        setTotalPages(filteredPages)
+        setCurrentPage(safePage)
+        setTotalPromocodes(filtered.length)
+      }
+
     } catch (error) {
       console.error("Error fetching promocodes:", error)
       const errorMessage = getApiErrorMessage(error, "Failed to fetch promocodes")
@@ -436,6 +534,7 @@ export default function PromocodesPage() {
       PromocodeValidFor: "1"
     })
     setSelectedEvents([])
+    setSelectedEventRecords({})
     setEventSearchTerm("")
   }
 
@@ -615,9 +714,13 @@ export default function PromocodesPage() {
                       value={eventSearchTerm}
                       onChange={(e) => setEventSearchTerm(e.target.value)}
                       className="pl-10"
-                      disabled={loadingEvents}
                     />
                   </div>
+                  {trimmedEventSearch.length > 0 && trimmedEventSearch.length < 3 && (
+                    <p className="text-xs text-muted-foreground">
+                      Type at least 3 characters to search all published events
+                    </p>
+                  )}
 
                   {loadingEvents ? (
                     <div className="flex items-center justify-center py-4 border rounded-md">
@@ -626,21 +729,13 @@ export default function PromocodesPage() {
                     </div>
                   ) : (
                     <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
-                      {!Array.isArray(events) || events.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-2">No events available</p>
-                      ) : events.filter((event) => {
-                          const name = getEventName(event).toLowerCase()
-                          return !eventSearchTerm || name.includes(eventSearchTerm.toLowerCase())
-                        }).length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-2">No events match your search</p>
+                      {visibleEvents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-2">
+                          {trimmedEventSearch ? "No events match your search" : "No events available"}
+                        </p>
                       ) : (
                         <div className="space-y-1">
-                          {events
-                            .filter((event) => {
-                              const name = getEventName(event).toLowerCase()
-                              return !eventSearchTerm || name.includes(eventSearchTerm.toLowerCase())
-                            })
-                            .map((event) => {
+                          {visibleEvents.map((event) => {
                               const eventId = getEventId(event)
                               if (!eventId) return null
                               return (
@@ -649,13 +744,7 @@ export default function PromocodesPage() {
                                     type="checkbox"
                                     id={`event-${eventId}`}
                                     checked={selectedEvents.includes(eventId)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedEvents((prev) => (prev.includes(eventId) ? prev : [...prev, eventId]))
-                                      } else {
-                                        setSelectedEvents((prev) => prev.filter((id) => id !== eventId))
-                                      }
-                                    }}
+                                    onChange={(e) => toggleEventSelection(event, e.target.checked)}
                                     className="rounded"
                                   />
                                   <Label htmlFor={`event-${eventId}`} className="text-sm font-normal cursor-pointer">
@@ -665,6 +754,19 @@ export default function PromocodesPage() {
                               )
                             })}
                         </div>
+                      )}
+                      {eventsPage < eventsTotalPages && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="w-full mt-1"
+                          onClick={() => fetchEvents(eventsPage + 1, serverEventKeyword)}
+                          disabled={loadingMoreEvents}
+                        >
+                          {loadingMoreEvents && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+                          Load more events
+                        </Button>
                       )}
                     </div>
                   )}
@@ -835,7 +937,7 @@ export default function PromocodesPage() {
                         }
                       </TableCell>
                       <TableCell>{formatCurrency(promocode.MinCheckoutAmount)}</TableCell>
-                      <TableCell>{formatDate(promocode.ExpiryDate)}</TableCell>
+                      <TableCell>{formatExpiryDate(promocode.ExpiryDate)}</TableCell>
                       <TableCell>
                         <Badge variant={promocode.OneTimeUseFlag === 1 ? "default" : "secondary"}>
                           {promocode.OneTimeUseFlag === 1 ? "Yes" : "No"}

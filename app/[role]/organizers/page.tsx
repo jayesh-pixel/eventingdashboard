@@ -57,6 +57,7 @@ interface Organizer {
   Username: string
   Email: string | null
   Password: string
+  Address?: string
   Country: string
   CountryIsoCode: string
   State: string
@@ -145,6 +146,11 @@ interface TotalSalesRequest {
 }
 
 const ITEMS_PER_PAGE = 10
+// updateProfile Joi schema caps State/City at 20 chars (register allows 500)
+const PROFILE_ADDRESS_NAME_MAX_LENGTH = 20
+// Organizer login schema: Password min(5).max(10); the update endpoint trims and has no check
+const PASSWORD_MIN_LENGTH = 5
+const PASSWORD_MAX_LENGTH = 10
 
 export default function OrganizersPage({ params }: OrganizersPageProps) {
   // Handle params as either a Promise or direct object
@@ -195,6 +201,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     Phone1: "",
     
     // Address Info (simplified)
+    Address: "", // edit only - register schema does not accept Address
     Country: "India",
     CountryIsoCode: "IN", 
     State: "",
@@ -236,8 +243,16 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     }
     
     // Company/Club name is required when owner type is selected (create only)
-    if (!editingOrganizer && formData.OwnerType && !formData.CompanyName.trim()) {
-      errors.CompanyName = formData.OwnerType === "ownClub" ? "Club name is required" : "Company name is required"
+    if (!editingOrganizer && formData.OwnerType) {
+      const companyName = formData.CompanyName.trim()
+      const companyLabel = formData.OwnerType === "ownClub" ? "Club name" : "Company name"
+      if (!companyName) {
+        errors.CompanyName = `${companyLabel} is required`
+      } else if (companyName.length < 5) {
+        errors.CompanyName = `${companyLabel} must be at least 5 characters`
+      } else if (companyName.length > 50) {
+        errors.CompanyName = `${companyLabel} must not exceed 50 characters`
+      }
     }
     
     // Full Name validation (backend requires min 5 chars on create; optional on update)
@@ -282,15 +297,26 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       if (!formData.City || !formData.CityIsoCode) {
         errors.City = "City is required"
       }
+    } else {
+      // Only changed names are sent on update, so an unchanged legacy long name does not block saving
+      if (formData.State !== (editingOrganizer.State || "") && formData.State.trim().length > PROFILE_ADDRESS_NAME_MAX_LENGTH) {
+        errors.State = `State name "${formData.State}" is too long (max ${PROFILE_ADDRESS_NAME_MAX_LENGTH} characters) and cannot be saved`
+      }
+      if (formData.City !== (editingOrganizer.City || "") && formData.City.trim().length > PROFILE_ADDRESS_NAME_MAX_LENGTH) {
+        errors.City = `City name "${formData.City}" is too long (max ${PROFILE_ADDRESS_NAME_MAX_LENGTH} characters) and cannot be saved`
+      }
+      if (formData.Address.trim() && formData.Address.trim().length < 3) {
+        errors.Address = "Address must be at least 3 characters"
+      }
     }
 
     // Password validation (required for new organizers)
     if (!editingOrganizer) {
       if (!formData.password) {
         errors.password = "Password is required"
-      } else if (formData.password.length < 6) {
-        errors.password = "Password must be at least 6 characters"
-      } else if (formData.password.length > 10) {
+      } else if (formData.password.length < PASSWORD_MIN_LENGTH) {
+        errors.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters`
+      } else if (formData.password.length > PASSWORD_MAX_LENGTH) {
         errors.password = "Password must not exceed 10 characters (login limit)"
       }
     }
@@ -355,6 +381,16 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         },
         body: JSON.stringify(requestBody),
       })
+
+      // Backend answers 404 when there are no organizers - show an empty list, not an error
+      if (response.status === 404) {
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError(null)
+        return
+      }
 
       const data: PaginatedOrganizersResponse = await handleApiResponse(response)
       console.log("Organizers API response:", data)      // Defensive programming - handle different response structures
@@ -453,6 +489,16 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         },
         body: JSON.stringify(requestBody),
       })
+
+      // Backend answers 404 when there are no organizers - show an empty list, not an error
+      if (response.status === 404) {
+        setOrganizers([])
+        setCurrentPage(1)
+        setTotalPages(1)
+        setTotalOrganizers(0)
+        setApiError(null)
+        return
+      }
 
       const data: PaginatedOrganizersResponse = await handleApiResponse(response)
       console.log("Search response:", data)      // Defensive programming - handle different response structures
@@ -556,6 +602,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       Phone1: "",
       
       // Address Info
+      Address: "",
       Country: "India",
       CountryIsoCode: "IN",
       State: "",
@@ -593,6 +640,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         throw new Error("Authentication required")
       }
 
+      // Backend Phone1 pattern is exactly 10 digits - never send spaces/dashes
+      const phoneDigits = formData.Phone1.replace(/\D/g, "")
+
       // Prepare the payload based on the original form structure and API requirements
       const payload = {
         OwnerType: formData.OwnerType === "ownClub" ? 1 : 2, // 1 for Club, 2 for EventCompany
@@ -600,7 +650,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         FullName: formData.FullName,
         Username: formData.Username,
         Email: formData.Email?.trim() ? formData.Email.trim() : undefined,
-        Phone1: formData.Phone1?.trim() ? formData.Phone1.trim() : undefined,
+        Phone1: phoneDigits || undefined,
         Password: editingOrganizer ? undefined : formData.password,
         Country: formData.Country,
         CountryIsoCode: formData.CountryIsoCode,
@@ -622,12 +672,22 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
 
       let response
       if (editingOrganizer) {
-        // Use the updateProfile endpoint which only supports limited fields
+        // updateProfile cannot change OwnerType/CompanyName/Username; empty values are
+        // skipped below because Joi rejects empty strings and the backend keeps the old value
         const updatePayload = {
           user_id: editingOrganizer._id,
-          FullName: formData.FullName,
-          Email: formData.Email || "",
-          Phone1: formData.Phone1 || "",
+          FullName: formData.FullName.trim(),
+          Email: formData.Email.trim(),
+          Phone1: phoneDigits,
+          Address: formData.Address.trim(),
+          Country: formData.Country,
+          CountryIsoCode: formData.CountryIsoCode,
+          ...(formData.State !== (editingOrganizer.State || "") || formData.StateIsoCode !== (editingOrganizer.StateIsoCode || "")
+            ? { State: formData.State, StateIsoCode: formData.StateIsoCode }
+            : {}),
+          ...(formData.City !== (editingOrganizer.City || "") || formData.CityIsoCode !== (editingOrganizer.CityIsoCode || "")
+            ? { City: formData.City, CityIsoCode: formData.CityIsoCode }
+            : {}),
         }
 
         // Create FormData for multipart/form-data as required by the API
@@ -709,7 +769,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
     setEditingOrganizer(organizer)
     setFormData({
       // Basic Info
-      OwnerType: organizer.OwnerType === "Club" ? "ownClub" : "eventCompany",
+      // Backend stores OwnerType as the enum string "1" (Club) / "2" (EventCompany)
+      OwnerType: String(organizer.OwnerType) === "1" || organizer.OwnerType === "Club" ? "ownClub" : "eventCompany",
       CompanyName: organizer.CompanyName || "",
       FullName: organizer.FullName || "",
       Username: organizer.Username || "",
@@ -717,6 +778,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       Phone1: organizer.Phone1 || "",
       
       // Address Info
+      Address: organizer.Address || "",
       Country: organizer.Country || "India",
       CountryIsoCode: organizer.CountryIsoCode || "IN",
       State: organizer.State || "",
@@ -823,10 +885,21 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       return
     }
 
-    if (newPassword.length < 6) {
+    // Must satisfy the login rule or the organizer gets locked out
+    if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
       toast({
         title: "Error",
-        description: "Password must be at least 6 characters long",
+        description: `Password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters long`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Backend trims before hashing, so leading/trailing spaces would not match at login
+    if (newPassword !== newPassword.trim()) {
+      toast({
+        title: "Error",
+        description: "Password cannot start or end with a space",
         variant: "destructive",
       })
       return
@@ -964,18 +1037,43 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
         })
       ])
 
-      if (!salesResponse.ok || !totalSalesResponse.ok) {
+      // salesData answers 404 "Events not found" for an organizer with no events
+      if ((!salesResponse.ok && salesResponse.status !== 404) || !totalSalesResponse.ok) {
         throw new Error("Failed to fetch sales data")
       }
 
-      const salesData: SalesDataResponse = await salesResponse.json()
       const totalSalesData: TotalSalesDataResponse = await totalSalesResponse.json()
-
-      if (salesData.error || totalSalesData.error) {
-        throw new Error(salesData.message || totalSalesData.message || "Failed to fetch sales data")
+      if (totalSalesData.error) {
+        throw new Error(totalSalesData.message || "Failed to fetch sales data")
       }
 
-      setSalesData(salesData.data.EventsData)
+      let events: SalesEvent[] = []
+      if (salesResponse.ok) {
+        const salesData: SalesDataResponse = await salesResponse.json()
+        if (salesData.error) {
+          throw new Error(salesData.message || "Failed to fetch sales data")
+        }
+        events = salesData.data.EventsData || []
+
+        // salesData is paginated; fetch the remaining pages so the table matches Total Events
+        for (let page = 2; page <= (salesData.data.totalPages || 1); page++) {
+          const pageResponse = await authFetch(organizerEndpoint.ORGANIZER_SALES_DATA_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({ ...salesRequest, page: String(page) }),
+          })
+          if (!pageResponse.ok) {
+            throw new Error("Failed to fetch sales data")
+          }
+          const pageData: SalesDataResponse = await pageResponse.json()
+          events = events.concat(pageData.data?.EventsData || [])
+        }
+      }
+
+      setSalesData(events)
       setTotalSalesData(totalSalesData.data)
     } catch (error) {
       console.error("Error fetching sales data:", error)
@@ -1215,6 +1313,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     name="organizerType"
                     value="ownClub"
                     checked={formData.OwnerType === "ownClub"}
+                    disabled={!!editingOrganizer}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
@@ -1229,6 +1328,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     name="organizerType"
                     value="eventCompany"
                     checked={formData.OwnerType === "eventCompany"}
+                    disabled={!!editingOrganizer}
                     onChange={(e) => setFormData({ ...formData, OwnerType: e.target.value, CompanyName: "" })}
                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500"
                   />
@@ -1249,6 +1349,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 <Input
                   id="clubName"
                   value={formData.CompanyName}
+                  readOnly={!!editingOrganizer}
+                  disabled={!!editingOrganizer}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter your club name"
                 />
@@ -1264,6 +1366,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 <Input
                   id="companyName"
                   value={formData.CompanyName}
+                  readOnly={!!editingOrganizer}
+                  disabled={!!editingOrganizer}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
                   placeholder="Enter event company name"
                 />
@@ -1293,6 +1397,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
               <Input
                 id="organizerusername"
                 value={formData.Username}
+                readOnly={!!editingOrganizer}
+                disabled={!!editingOrganizer}
                 onChange={(e) => setFormData({ ...formData, Username: e.target.value })}
                 placeholder="Enter organizer username"
               />
@@ -1335,6 +1441,21 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Address Information - Show for both create and edit */}
             <div className="space-y-4">
               <Label className="text-sm font-medium">Address Information</Label>
+
+              {editingOrganizer && (
+                <div className="space-y-2">
+                  <Label htmlFor="organizerAddress" className="text-sm font-medium">Address</Label>
+                  <Input
+                    id="organizerAddress"
+                    value={formData.Address}
+                    onChange={(e) => setFormData({ ...formData, Address: e.target.value })}
+                    placeholder="Enter organizer address (optional)"
+                  />
+                  {formErrors.Address && (
+                    <div className="text-red-600 text-sm">{formErrors.Address}</div>
+                  )}
+                </div>
+              )}
               
               <AddAddress
                 stateIsoCode={stateIsoCode}
@@ -1357,7 +1478,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
             {/* Password - Only show for create mode */}
             {!editingOrganizer && (
               <div className="space-y-2">
-                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password <span className="text-red-500">*</span> (6-10 characters)</Label>
+                <Label htmlFor="organizerPassword" className="text-sm font-medium">Password <span className="text-red-500">*</span> (5-10 characters)</Label>
                 <div className="relative">
                   <Input
                     id="organizerPassword"
@@ -1537,8 +1658,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   type={showPassword ? "text" : "password"}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Enter new password"
+                  placeholder="Enter new password (5-10 characters)"
                   className="pr-10"
+                  maxLength={PASSWORD_MAX_LENGTH}
                 />
                 <button
                   type="button"
@@ -1562,6 +1684,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
                   className="pr-10"
+                  maxLength={PASSWORD_MAX_LENGTH}
                 />
                 <button
                   type="button"

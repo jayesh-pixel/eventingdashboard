@@ -55,10 +55,16 @@ interface ApiResponse {
     currentPage: number
     totalEventTours: number
     EventToursData?: EventTour[]
+    // getPaginatedSearch returns the rows under this key instead
+    EventTourData?: EventTour[]
   }
 }
 
 const ITEMS_PER_PAGE = 10
+// Backend limits: Name min(5).max(50) (validateEventTourCreation), create maxCount 5 (EventTourImages)
+const TOUR_NAME_MIN = 5
+const TOUR_NAME_MAX = 50
+const MAX_TOUR_IMAGES = 5
 
 export default function EventToursPage({ params }: EventToursPageProps) {
   // Handle params which might be a Promise
@@ -80,6 +86,7 @@ export default function EventToursPage({ params }: EventToursPageProps) {
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalEventTours, setTotalEventTours] = React.useState(0)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedTour, setSelectedTour] = React.useState<EventTour | null>(null)
@@ -101,23 +108,43 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         throw new Error("Authentication required")
       }
 
+      const keyword = debouncedSearchTerm.trim()
       console.log("Fetching event tours with pagination:")
       console.log("- Page:", page)
       console.log("- Limit:", limit)
+      console.log("- Search:", keyword)
 
-      const response = await authFetch(eventTourEndPoint.EVENT_TOURS_PAGINATED_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          page: page,
-          limit: limit.toString(),
-        }),
-      })
+      // Search is server-side so it covers every page, not just the loaded one
+      const response = await authFetch(
+        keyword ? eventTourEndPoint.EVENT_TOURS_PAGINATED_SEARCH_URL : eventTourEndPoint.EVENT_TOURS_PAGINATED_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            page: page,
+            limit: limit.toString(),
+            ...(keyword && { search_keyword: keyword }),
+          }),
+        }
+      )
 
       console.log("Response status:", response.status)
+
+      // The list endpoints answer 404 "Event Tour not found" when the page is empty
+      if (response.status === 404) {
+        if (page > 1) {
+          // e.g. the last tour on this page was deleted: show the previous page instead
+          setCurrentPage(page - 1)
+          return
+        }
+        setEventTours([])
+        setTotalPages(1)
+        setTotalEventTours(0)
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -131,13 +158,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       }
 
       // Set the data from API
-      setEventTours(data.data.EventToursData || [])
+      const tours = data.data.EventToursData || data.data.EventTourData || []
+      setEventTours(tours)
       setTotalPages(data.data.totalPages || 1)
       setTotalEventTours(data.data.totalEventTours || 0)
       setCurrentPage(data.data.currentPage || 1)
 
       console.log("State updated with:", {
-        eventTours: data.data.EventToursData?.length || 0,
+        eventTours: tours.length,
         totalPages: data.data.totalPages,
         totalEventTours: data.data.totalEventTours
       })
@@ -159,24 +187,25 @@ export default function EventToursPage({ params }: EventToursPageProps) {
     } finally {
       setLoading(false)
     }
-  }, [user, toast])
+  }, [user, toast, debouncedSearchTerm])
 
-  // Initial data fetch
+  // Debounce the search box before hitting the API; a new search starts from page 1
+  // (both updates land in the same render, so only one fetch runs)
+  React.useEffect(() => {
+    if (searchTerm === debouncedSearchTerm) return
+    const delay = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+      setCurrentPage(1)
+    }, 500)
+    return () => clearTimeout(delay)
+  }, [searchTerm, debouncedSearchTerm])
+
+  // Initial data fetch (also re-runs when the page or the search keyword changes)
   React.useEffect(() => {
     fetchEventTours(currentPage)
   }, [currentPage, fetchEventTours])
 
-  // Filter tours based on search (now works on current page data)
-  const filteredTours = React.useMemo(() => {
-    if (!searchTerm) return eventTours
-    return eventTours.filter(
-      (tour) =>
-        (tour.Name && tour.Name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (tour.Description && tour.Description.toLowerCase().includes(searchTerm.toLowerCase())),
-    )
-  }, [eventTours, searchTerm])
-
-  const currentTours = filteredTours
+  const currentTours = eventTours
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -192,10 +221,19 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       return
     }
 
-    if (formData.tourName.trim().length < 5) {
+    if (formData.tourName.trim().length < TOUR_NAME_MIN || formData.tourName.trim().length > TOUR_NAME_MAX) {
       toast({
         title: "Error",
-        description: "Tour name must be at least 5 characters",
+        description: `Tour name must be ${TOUR_NAME_MIN}-${TOUR_NAME_MAX} characters`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (formData.imageFiles.length > MAX_TOUR_IMAGES) {
+      toast({
+        title: "Error",
+        description: `You can upload up to ${MAX_TOUR_IMAGES} tour images`,
         variant: "destructive",
       })
       return
@@ -282,6 +320,17 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
   const handleEditTour = async () => {
     if (!selectedTour) {
+      return
+    }
+
+    // The update handler skips validateEventTourDataUpdate, so enforce its Name rule here
+    const trimmedName = formData.tourName.trim()
+    if (trimmedName.length < TOUR_NAME_MIN || trimmedName.length > TOUR_NAME_MAX) {
+      toast({
+        title: "Error",
+        description: `Tour name must be ${TOUR_NAME_MIN}-${TOUR_NAME_MAX} characters`,
+        variant: "destructive",
+      })
       return
     }
 
@@ -429,6 +478,13 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         description: "Image deleted successfully",
       })
 
+      // Keep the open edit dialog in sync (it renders from selectedTour, not the list)
+      setSelectedTour((prev) =>
+        prev && prev._id === tourId
+          ? { ...prev, Images: (prev.Images || []).filter((image) => image._id !== imageId) }
+          : prev
+      )
+
       // Refresh the event tours list
       fetchEventTours(currentPage)
 
@@ -490,6 +546,11 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         title: "Success",
         description: `Image "${imageFile.name}" uploaded successfully!`,
       })
+
+      // The upload response is the tour's full image list; show it in the open edit dialog
+      if (Array.isArray(data.data)) {
+        setSelectedTour((prev) => (prev && prev._id === tourId ? { ...prev, Images: data.data } : prev))
+      }
 
       // Refresh the event tours list to get updated images
       fetchEventTours(currentPage)
@@ -634,6 +695,16 @@ export default function EventToursPage({ params }: EventToursPageProps) {
           variant: "destructive",
         })
       }
+    }
+
+    // Tour creation accepts at most 5 images (multer maxCount); edit uploads them one at a time
+    if (isCreateDialogOpen && validFiles.length > MAX_TOUR_IMAGES) {
+      toast({
+        title: "Too Many Images",
+        description: `Only the first ${MAX_TOUR_IMAGES} images will be used.`,
+        variant: "destructive",
+      })
+      validFiles.splice(MAX_TOUR_IMAGES)
     }
 
     setFormData({ ...formData, imageFiles: validFiles })

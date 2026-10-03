@@ -31,7 +31,7 @@
  * - Role-specific settings sections
  * 
  * Form Data Schema:
- * - Profile: { user_id, FullName, Email, Phone1, WhatsappNumber, Address, State, City, ProfileImage? }
+ * - Profile: { user_id, FullName, Email, Phone1, Phone2 (WhatsApp), Address, State, City, ProfileImage? }
  * - Password: { user_id, CurrentPassword, NewPassword }
  */
 
@@ -72,16 +72,30 @@ interface UserProfile {
 interface ApiUserData {
   FullName?: string
   Email?: string
-  Phone1?: string
-  WhatsappNumber?: string
-  WhatsAppNumber?: string
+  // SuperAdmin stores phones as Number, Organizer/Promoter as String
+  Phone1?: string | number | null
+  Phone2?: string | number | null
   Address?: string
   State?: string
   StateIsoCode?: string
   City?: string
   CityIsoCode?: string
-  ProfileImage?: string
+  profile_img?: string
   [key: string]: any
+}
+
+// Backend profile Joi schemas cap State/City at 20 chars for organizer/promoter
+const ADDRESS_NAME_MAX_LENGTH = 20
+
+const toPhoneString = (value: unknown): string =>
+  value == null ? "" : String(value).replace(/\D/g, "").slice(0, 10)
+
+// profile_img is a path relative to the API server (served at BASE_URL/uploads/...)
+const toProfileImageUrl = (path?: string | null): string => {
+  if (!path) return ""
+  if (/^(https?:|data:|blob:)/i.test(path)) return path
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "")
+  return `${base}/${path.replace(/^\/+/, "")}`
 }
 
 const emptyProfile: UserProfile = {
@@ -165,19 +179,15 @@ export default function SettingsPage({ params }: SettingsPageProps) {
           const loadedProfile: UserProfile = {
             FullName: userData.FullName || "",
             Email: userData.Email || "",
-            Phone1: userData.Phone1 || "",
-            WhatsappNumber:
-              userData.WhatsappNumber ||
-              userData.WhatsAppNumber ||
-              userData.WhatsappNo ||
-              userData.WhatsAppNo ||
-              "",
+            Phone1: toPhoneString(userData.Phone1),
+            // Backend stores the WhatsApp number as Phone2
+            WhatsappNumber: toPhoneString(userData.Phone2),
             Address: userData.Address || userData.address || "",
             State: userData.State || userData.state || "",
             StateIsoCode: userData.StateIsoCode || userData.stateIsoCode || "",
             City: userData.City || userData.city || "",
             CityIsoCode: userData.CityIsoCode || userData.cityIsoCode || "",
-            ProfileImage: userData.ProfileImage || "",
+            ProfileImage: toProfileImageUrl(userData.profile_img),
           }
           setProfileForm(loadedProfile)
           setSavedProfileForm(loadedProfile)
@@ -249,6 +259,12 @@ export default function SettingsPage({ params }: SettingsPageProps) {
           title: "Success",
           description: smtpId ? "SMTP settings updated successfully." : "SMTP settings saved successfully.",
         })
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to save SMTP settings.",
+          variant: "destructive",
+        })
       }
     } catch (error: any) {
       toast({
@@ -299,10 +315,20 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       return
     }
 
-    if (passwordForm.newPassword.length < 6) {
+    // Backend change-password (and login) schemas require 5-10 characters
+    if (passwordForm.currentPassword.length < 5 || passwordForm.currentPassword.length > 10) {
       toast({
         title: "Error",
-        description: "New password must be at least 6 characters long.",
+        description: "Current password must be 5-10 characters long.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (passwordForm.newPassword.length < 5 || passwordForm.newPassword.length > 10) {
+      toast({
+        title: "Error",
+        description: "New password must be 5-10 characters long.",
         variant: "destructive",
       })
       return
@@ -409,6 +435,22 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       return
     }
 
+    if (role === "organizer" || role === "promoter") {
+      // Unchanged names are not re-sent, so only a newly picked long name is blocked
+      const tooLong = [
+        { label: "State", value: profileForm.State, saved: savedProfileForm.State },
+        { label: "City", value: profileForm.City, saved: savedProfileForm.City },
+      ].find(({ value, saved }) => value !== saved && value.trim().length > ADDRESS_NAME_MAX_LENGTH)
+      if (tooLong) {
+        toast({
+          title: "Error",
+          description: `${tooLong.label} name "${tooLong.value}" is too long (max ${ADDRESS_NAME_MAX_LENGTH} characters). Please choose a different ${tooLong.label.toLowerCase()}.`,
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     setProfileLoading(true)
 
     try {
@@ -436,15 +478,21 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       formData.append("user_id", user.user_id)
       appendIfFilled("FullName", profileForm.FullName)
       appendIfFilled("Email", profileForm.Email)
-      appendIfFilled("Phone1", profileForm.Phone1)
-      appendIfFilled("WhatsappNumber", profileForm.WhatsappNumber)
+      appendIfFilled("Phone1", toPhoneString(profileForm.Phone1))
+      appendIfFilled("Phone2", toPhoneString(profileForm.WhatsappNumber))
       appendIfFilled("Address", profileForm.Address)
       formData.append("Country", "India")
       formData.append("CountryIsoCode", "IN")
-      appendIfFilled("State", profileForm.State)
-      appendIfFilled("StateIsoCode", profileForm.StateIsoCode)
-      appendIfFilled("City", profileForm.City)
-      appendIfFilled("CityIsoCode", profileForm.CityIsoCode)
+      // Backend keeps the stored value for omitted fields; skip unchanged State/City so a
+      // legacy name over the organizer/promoter 20-char limit does not fail every save
+      if (profileForm.State !== savedProfileForm.State || profileForm.StateIsoCode !== savedProfileForm.StateIsoCode) {
+        appendIfFilled("State", profileForm.State)
+        appendIfFilled("StateIsoCode", profileForm.StateIsoCode)
+      }
+      if (profileForm.City !== savedProfileForm.City || profileForm.CityIsoCode !== savedProfileForm.CityIsoCode) {
+        appendIfFilled("City", profileForm.City)
+        appendIfFilled("CityIsoCode", profileForm.CityIsoCode)
+      }
       
       if (profileImageFile) {
         formData.append("ProfileImage", profileImageFile)
@@ -666,6 +714,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               <Input
                 id="new-password"
                 type={showNewPassword ? "text" : "password"}
+                maxLength={10}
                 value={passwordForm.newPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
               />
@@ -690,6 +739,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               <Input
                 id="confirm-password"
                 type={showConfirmPassword ? "text" : "password"}
+                maxLength={10}
                 value={passwordForm.confirmPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
               />

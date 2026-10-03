@@ -28,7 +28,7 @@ interface PromoterData {
   Username: string
   FullName?: string
   PromoterName?: string
-  email?: string
+  Email?: string | null
 }
 
 interface SelectedPromoter {
@@ -102,6 +102,13 @@ const AddNewPromoterModal = ({
           Authorization: `Bearer ${authToken}`,
         },
       })
+
+      // Backend answers 404 "Promoters not found" when there are no active promoters
+      if (response.status === 404) {
+        setApiAllPromoterData([])
+        initializeSelectedPromoters()
+        return
+      }
 
       const data = await handleApiResponse(response)
       const allPromoterData = data.data || []
@@ -198,7 +205,7 @@ const AddNewPromoterModal = ({
   const filteredPromoters = apiAllPromoterData.filter((promoter) => {
     if (!searchTerm) return true
     const name = (promoter.Username || promoter.FullName || promoter.PromoterName || "").toLowerCase()
-    const email = (promoter.email || "").toLowerCase()
+    const email = (promoter.Email || "").toLowerCase()
     const search = searchTerm.toLowerCase()
     return name.includes(search) || email.includes(search)
   })
@@ -265,9 +272,9 @@ const AddNewPromoterModal = ({
                                     <p className="text-sm font-medium truncate">
                                       {fullPromoterData?.Username || currentPromoter.Username || currentPromoter.PromoterName || fullPromoterData?.FullName || fullPromoterData?.PromoterName || "Unknown Promoter"}
                                     </p>
-                                    {fullPromoterData?.email && (
+                                    {fullPromoterData?.Email && (
                                       <p className="text-xs text-muted-foreground truncate">
-                                        {fullPromoterData.email}
+                                        {fullPromoterData.Email}
                                       </p>
                                     )}
                                   </div>
@@ -354,9 +361,9 @@ const AddNewPromoterModal = ({
                                       </Badge>
                                     )}
                                   </label>
-                                  {promoter.email && (
+                                  {promoter.Email && (
                                     <p className="text-xs text-muted-foreground mt-1 truncate">
-                                      {promoter.email}
+                                      {promoter.Email}
                                     </p>
                                   )}
                                 </div>

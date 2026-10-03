@@ -105,6 +105,12 @@ const statusLabels = {
   2: "Inactive",
 }
 
+// Promoter login schema: Password min(5).max(10); the admin updatepassword endpoint has no check
+const PASSWORD_MIN_LENGTH = 5
+const PASSWORD_MAX_LENGTH = 10
+// updateProfile Joi schema caps State/City at 20 chars (register allows 500)
+const PROFILE_ADDRESS_NAME_MAX_LENGTH = 20
+
 export default function PromotersPage({ params }: PromotersPageProps) {
   // Handle params which might be a Promise
   let resolvedParams: { role: UserRole }
@@ -229,8 +235,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
         body: JSON.stringify(requestBody),
       })
 
-      // A search with no matches is an empty result, not a page-level loading error.
-      if (response.status === 404 && searchKeyword) {
+      // Backend answers 404 when nothing matches (search or empty table) - an empty result, not an error.
+      if (response.status === 404) {
         setPromoters([])
         setTotalPages(1)
         setTotalPromoters(0)
@@ -327,7 +333,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   // const filteredPromoters = promoters // No client-side filtering needed
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
+    // Backend createdAt is "DD-MM-YYYY HH:mm:ss" (IST), which new Date() misreads as MM-DD
+    const match = /^(\d{2})-(\d{2})-(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(dateString?.trim() ?? "")
+    const date = match
+      ? new Date(+match[3], +match[2] - 1, +match[1], +(match[4] ?? 0), +(match[5] ?? 0), +(match[6] ?? 0))
+      : new Date(dateString)
+    if (Number.isNaN(date.getTime())) return dateString || 'N/A'
+    return date.toLocaleDateString('en-IN', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -613,6 +625,23 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
+    const stateChanged =
+      formData.State !== (selectedPromoter.State || "") || formData.StateIsoCode !== (selectedPromoter.StateIsoCode || "")
+    const cityChanged =
+      formData.City !== (selectedPromoter.City || "") || formData.CityIsoCode !== (selectedPromoter.CityIsoCode || "")
+    const tooLong = [
+      { label: "State", value: formData.State, changed: stateChanged },
+      { label: "City", value: formData.City, changed: cityChanged },
+    ].find(({ value, changed }) => changed && (value || "").trim().length > PROFILE_ADDRESS_NAME_MAX_LENGTH)
+    if (tooLong) {
+      toast({
+        title: "Error",
+        description: `${tooLong.label} name "${tooLong.value}" is too long (max ${PROFILE_ADDRESS_NAME_MAX_LENGTH} characters). Please choose a different ${tooLong.label.toLowerCase()}.`,
+        variant: "destructive",
+      })
+      return
+    }
+
     setSubmitting(true)
     try {
       const token = getValidToken()
@@ -625,7 +654,20 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       // Only send non-empty values — backend Joi rejects empty strings
       if (formData.FullName?.trim()) formDataToSend.append("FullName", formData.FullName)
       if (formData.Email?.trim()) formDataToSend.append("Email", formData.Email)
-      if (formData.Phone1?.trim()) formDataToSend.append("Phone1", formData.Phone1)
+      if (formData.Phone1?.trim()) formDataToSend.append("Phone1", formData.Phone1.replace(/\D/g, ""))
+      // Address: send only what changed (backend keeps omitted fields)
+      if (stateChanged && formData.State && formData.StateIsoCode) {
+        formDataToSend.append("State", formData.State)
+        formDataToSend.append("StateIsoCode", formData.StateIsoCode)
+      }
+      if (cityChanged && formData.City && formData.CityIsoCode) {
+        formDataToSend.append("City", formData.City)
+        formDataToSend.append("CityIsoCode", formData.CityIsoCode)
+      }
+      if ((stateChanged || cityChanged) && formData.Country && formData.CountryIsoCode) {
+        formDataToSend.append("Country", formData.Country)
+        formDataToSend.append("CountryIsoCode", formData.CountryIsoCode)
+      }
 
       const response = await authFetch(promoterEndpoint.UPDATE_PROMOTER_DATA_URL, {
         method: "POST",
@@ -710,10 +752,21 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
-    if (newPassword.length < 6) {
+    // Must satisfy the login rule or the promoter gets locked out
+    if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
       toast({
         title: "Error",
-        description: "Password must be at least 6 characters long",
+        description: `Password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters long`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Backend trims before hashing, so leading/trailing spaces would not match at login
+    if (newPassword !== newPassword.trim()) {
+      toast({
+        title: "Error",
+        description: "Password cannot start or end with a space",
         variant: "destructive",
       })
       return
@@ -1227,10 +1280,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   <Label className="text-sm font-medium">Created</Label>
                   <p className="text-sm text-muted-foreground">{formatDate(selectedPromoter.createdAt)}</p>
                 </div>
-                <div>
-                  <Label className="text-sm font-medium">Last Updated</Label>
-                  <p className="text-sm text-muted-foreground">{selectedPromoter.updatedAt ? formatDate(selectedPromoter.updatedAt) : 'N/A'}</p>
-                </div>
+                {/* Promoter model has no updatedAt; only show it if the API ever sends one */}
+                {selectedPromoter.updatedAt && (
+                  <div>
+                    <Label className="text-sm font-medium">Last Updated</Label>
+                    <p className="text-sm text-muted-foreground">{formatDate(selectedPromoter.updatedAt)}</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1562,8 +1618,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                     type={showPassword ? "text" : "password"}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Enter new password"
+                    placeholder="Enter new password (5-10 characters)"
                     className="pr-10"
+                    maxLength={PASSWORD_MAX_LENGTH}
                   />
                   <button
                     type="button"
@@ -1588,8 +1645,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   Generate Secure Password
                 </Button>
                 
-                {newPassword && newPassword.length < 6 && (
-                  <p className="text-sm text-red-500">Password must be at least 6 characters long</p>
+                {newPassword && newPassword.length < PASSWORD_MIN_LENGTH && (
+                  <p className="text-sm text-red-500">Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters long</p>
                 )}
               </div>
               
@@ -1615,7 +1672,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
             </Button>
             <Button 
               onClick={handlePasswordReset}
-              disabled={submitting || !newPassword || newPassword.length < 6}
+              disabled={submitting || !newPassword || newPassword.length < PASSWORD_MIN_LENGTH}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {submitting ? (

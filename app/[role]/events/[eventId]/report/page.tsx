@@ -36,8 +36,10 @@ import type { UserRole } from "@/lib/navigation"
 import { BookingsTable, type BookingColumnKey } from "@/components/bookings-table"
 
 const REPORT_SUMMARY_COLUMNS: BookingColumnKey[] = [
-  "ticketName", "quantity", "ticketPrice", "ticketDate", "totalAmount",
+  "ticketName", "quantity", "ticketPrice", "ticketDate", "totalAmount", "checkIn",
 ]
+// The promoter summary rows carry no per-ticket CheckIn.
+const PROMOTER_REPORT_SUMMARY_COLUMNS = REPORT_SUMMARY_COLUMNS.filter((column) => column !== "checkIn")
 
 const REPORT_TRANSACTION_COLUMNS: BookingColumnKey[] = [
   "name", "bookingId", "phone", "email", "bookingDateTime", "eventName", "ticketDate",
@@ -85,17 +87,13 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       return { promoter_id: user?.user_id, event_id: eventId }
     }
 
-    const payload: Record<string, any> = {
+    // No organizer_id: on the bookings endpoint it overwrites event_id with "all of the
+    // organizer's events", so this per-event report showed every event's bookings.
+    return {
       AdminRole: getNumericRole(role as UserRole),
       user_id: user?.user_id,
       event_id: eventId,
-    }
-
-    if ((role as UserRole) === "organizer" && user?.user_id) {
-      payload.organizer_id = user.user_id
-    }
-
-    return payload
+    } as Record<string, any>
   }, [eventId, isPromoter, role, user])
 
   // State management
@@ -117,10 +115,14 @@ export default function EventReportPage({ params }: EventReportPageProps) {
   const [eventTicketsData, setEventTicketsData] = React.useState<any[]>([])
   const [allTransactionBookingData, setAllTransactionBookingData] = React.useState<any[]>([])
   const [originalData, setOriginalData] = React.useState<any[]>([])
+  // Promoter summary rows have no CheckIn, so the total is summed from their transactions.
+  const [promoterSummaryCheckIn, setPromoterSummaryCheckIn] = React.useState<number | null>(null)
   
   // Search state
   const [searchTerm, setSearchTerm] = React.useState("")
   const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
+  // Keyword the transaction rows on screen were fetched with ("" = unfiltered).
+  const appliedSearchRef = React.useRef("")
   
   const [storeFilterdDatePayload, setFilterdDatePayload] = React.useState<any>({})
   const [filters, setFilters] = React.useState({
@@ -157,6 +159,15 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         setStoreFilterDates(data.data.EventDateTimeData || [])
         setEventTicketsData(data.data.TicketsData || [])
         setOriginalData(data.data.TicketsData || [])
+
+        if (isPromoter) {
+          // Not awaited: the summary table should not wait on the check-in total.
+          fetchTransactionRows()
+            .then((rows) =>
+              setPromoterSummaryCheckIn(rows.reduce((sum, row) => sum + (Number(row?.CheckIn) || 0), 0))
+            )
+            .catch(() => setPromoterSummaryCheckIn(null))
+        }
       } else {
         throw new Error("Failed to fetch event report data")
       }
@@ -251,7 +262,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       const authToken = getValidToken()
       if (!user || !authToken || !eventId) return
 
-      const rows = await fetchTransactionRows()
+      const rows = await fetchTransactionRows(appliedSearchRef.current || undefined)
       setAllTransactionBookingData(rows)
       setOriginalData(rows)
     } catch (error) {
@@ -391,6 +402,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
         { header: "Ticket Price", value: (row) => row.ticketPrice },
         { header: "Ticket Date", value: (row) => formatDate(row.ticketDate) },
         { header: "Total Amount", value: (row) => row.totalAmount },
+        ...(isPromoter ? [] : [{ header: "Check In", value: (row: any) => row.checkIn ?? 0 }]),
       ]
 
       const transactionColumns: ExportColumn<any>[] = [
@@ -454,28 +466,28 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     return () => clearTimeout(delay)
   }, [searchTerm])
 
-  // Search functionality for transaction data
+  // Search functionality for transaction data. Clearing the box (or dropping below the
+  // 3-character minimum) refetches the unfiltered list instead of leaving the old results.
   React.useEffect(() => {
-    const fetchSearchData = async () => {
-      if (selectedBookingType !== 2) return
-      
-      try {
-        if (debouncedSearchTerm.length < 3) {
-          if (debouncedSearchTerm.length > 0) {
-            toast({
-              title: "Search",
-              description: "Search keyword must be at least 3 characters long.",
-            })
-          }
-          return
-        }
+    if (selectedBookingType !== 2) return
 
+    const keyword = normalizeSearchText(debouncedSearchTerm)
+    if (keyword.length > 0 && keyword.length < 3) {
+      toast({
+        title: "Search",
+        description: "Search keyword must be at least 3 characters long.",
+      })
+    }
+    const effectiveKeyword = keyword.length >= 3 ? keyword : ""
+    if (effectiveKeyword === appliedSearchRef.current) return
+    appliedSearchRef.current = effectiveKeyword
+
+    const fetchSearchData = async () => {
+      try {
         const authToken = getValidToken()
         if (!user || !authToken || !eventId) return
 
-        setAllTransactionBookingData(
-          await fetchTransactionRows(normalizeSearchText(debouncedSearchTerm))
-        )
+        setAllTransactionBookingData(await fetchTransactionRows(effectiveKeyword || undefined))
       } catch (error) {
         console.error("Error searching transaction data:", error)
         toast({
@@ -486,9 +498,8 @@ export default function EventReportPage({ params }: EventReportPageProps) {
       }
     }
 
-    if (debouncedSearchTerm) {
-      fetchSearchData()
-    }  }, [debouncedSearchTerm, selectedBookingType, eventId, user])
+    fetchSearchData()
+  }, [debouncedSearchTerm, selectedBookingType, eventId, user])
 
   // Event date/times are stored as the entered wall clock tagged +00:00, so they
   // are rendered as stored rather than converted into the browser's timezone.
@@ -548,6 +559,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
     EventTicketType: "Summary",
     TicketPrice: ticket.TicketPrice,
     TotalAmount: ticket.TotalAmount,
+    checkIn: ticket.CheckIn ?? 0,
   }))
 
   const transformedTransactionData: Booking[] = allTransactionBookingData.map((transaction) => ({
@@ -750,7 +762,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
               <div className="relative flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                 <Input
-                  placeholder="Search by Booking ID and Customer Name"
+                  placeholder="Search by booking ID, customer name or phone"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10"
@@ -769,7 +781,10 @@ export default function EventReportPage({ params }: EventReportPageProps) {
           return Number.isFinite(n) ? n : 0
         }
         const totalQuantity = rows.reduce((sum, r) => sum + num(r.TicketQuantity ?? r.quantity), 0)
-        const totalCheckIn = rows.reduce((sum, r) => sum + num((r as any).checkIn ?? (r as any).Check_In), 0)
+        const totalCheckIn =
+          selectedBookingType === 1 && isPromoter
+            ? promoterSummaryCheckIn ?? 0
+            : rows.reduce((sum, r) => sum + num((r as any).checkIn ?? (r as any).Check_In), 0)
         const totalPrice = rows.reduce((sum, r) => sum + num(r.TotalAmount ?? r.totalAmount), 0)
         return (
           <div className="grid gap-4 md:grid-cols-3">
@@ -809,7 +824,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
               searchTerm=""
               statusFilter="all"
               channelFilter="all"
-              columns={REPORT_SUMMARY_COLUMNS}
+              columns={isPromoter ? PROMOTER_REPORT_SUMMARY_COLUMNS : REPORT_SUMMARY_COLUMNS}
               formatDate={formatDate}
               formatCurrency={formatCurrency}
               getStatusBadgeVariant={getStatusBadgeVariant}

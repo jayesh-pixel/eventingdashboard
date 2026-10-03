@@ -29,7 +29,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      token: data.token,
+      // Backend sendResponse nests the login payload (incl. token) under data
+      token: data.data?.token ?? data.token,
       user: data.data,
     })
   } catch (error) {

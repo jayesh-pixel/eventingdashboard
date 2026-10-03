@@ -24,6 +24,7 @@ import { formatEventDate, formatEventDateTime, parseEventDateTime } from "@/lib/
 import { getNumericRole } from "@/lib/role-mapping"
 import { useToast } from "@/hooks/use-toast"
 import { promoterEndpoint, promoterEndPointPannel, eventEndPoint, organizerEndpoint } from "@/lib/api-endpoints"
+import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
 import {
   Pagination,
   PaginationContent,
@@ -211,6 +212,46 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
         })
     }
   }
+  // Fallback lookup in Completed events. startDate/endDate are deliberately not sent: the
+  // API's date filter compares ObjectIds with string ids and always answers "No Events
+  // Found", so the date is matched here the same way getEventsByNameandDateTime does it.
+  const findCompletedEventByNameAndDate = async (authToken: string | null): Promise<any | null> => {
+    const keyword = eventNameInput.trim()
+    if (keyword.length < 3) return null // eventNameSearchKeyword is Joi min(3)
+
+    try {
+      const response = await authFetch(eventEndPoint.GET_ALL_COMPLETED_EVENTS_DATA, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          AdminRole: getNumericRole(role as UserRole),
+          user_id: user!.user_id,
+          eventNameSearchKeyword: keyword,
+        }),
+      })
+      if (!response.ok) return null
+
+      const result = await response.json()
+      const events: any[] = Array.isArray(result?.data) ? result.data : []
+      const requestedDate = new Date(dateInput).toISOString().split("T")[0]
+
+      return (
+        events.find((event) =>
+          (event.arrangedEventDateTime || []).some((dateTime: any) => {
+            const start = new Date(dateTime?.EventStartDateTime)
+            return !Number.isNaN(start.getTime()) && start.toISOString().split("T")[0] === requestedDate
+          })
+        ) || null
+      )
+    } catch (error) {
+      console.warn("Completed events lookup failed (handled):", error)
+      return null
+    }
+  }
+
   // Search for events by name and date using API
   const handleSearchEvent = async () => {
     // Input validation
@@ -296,13 +337,25 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
 
       console.log("Response status:", response.status)
 
-      if (!response.ok) {
-        await handleNetworkError(response, "Event search")
-        return
+      let data: any = null
+
+      // For a superadmin, getEventsByNameandDateTime only looks at Published/InReview/
+      // Rejected events, so a Completed event can never be found there.
+      if (response.status === 404 && (role as UserRole) === "superadmin") {
+        const completedEvent = await findCompletedEventByNameAndDate(authToken)
+        if (completedEvent) {
+          data = { error: false, data: completedEvent }
+        }
       }
 
-      const data = await response.json()
-      console.log("Search response data:", data)      
+      if (!data) {
+        if (!response.ok) {
+          await handleNetworkError(response, "Event search")
+          return
+        }
+        data = await response.json()
+      }
+      console.log("Search response data:", data)
       
       // Check for API-level errors - but distinguish between real errors and "no data" responses
       if (data.error === true) {
@@ -739,8 +792,9 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
             ticketPrice: ticketPrice,
             ticketDate: item.TicketDate || item.ticketDate || item.ticket_date || null,
             totalRevenue: totalRevenue,
-            checkIn: Number(item.CheckIn ?? item.Check_In ?? item.checkIn ?? item.CheckedIn ?? item.TotalCheckIn ?? item.totalCheckIn ?? 0),
-            bookingType: item.EventTicketType === 1 || item.eventTicketType === 1 ? "Promoter" : item.EventTicketType === 2 || item.eventTicketType === 2 ? "Online" : item.BookingType || item.bookingType || "N/A",
+            // Summary rows carry no booking type. CheckIn is present on the admin/organizer
+            // summary but not the promoter one, so keep it null there rather than a fake 0.
+            checkIn: item.CheckIn ?? item.checkIn ?? null,
           }
         })
         
@@ -850,6 +904,55 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Exports every row of the generated report (all pages), with the columns on screen.
+  const handleExportReport = () => {
+    if (!matchedEvent || reportData.length === 0) return
+
+    const formatTicketDate = (value: any) =>
+      value && value !== "N/A" ? formatEventDate(value, undefined, []) : "N/A"
+
+    const columns: ExportColumn<any>[] =
+      reportType === "Summary"
+        ? [
+            { header: "Ticket Name", value: (r) => r.ticketName || r.ticketType },
+            { header: "Quantity", value: (r) => r.quantitySold },
+            { header: "Ticket Price", value: (r) => r.ticketPrice },
+            { header: "Ticket Date", value: (r) => formatTicketDate(r.ticketDate) },
+            { header: "Total Amount", value: (r) => r.totalRevenue },
+            { header: "Check In", value: (r) => r.checkIn ?? "-" },
+          ]
+        : [
+            { header: "Name", value: (r) => r.customerName },
+            { header: "Booking ID", value: (r) => r.bookingId },
+            { header: "Phone No.", value: (r) => r.phoneNumber },
+            { header: "Email", value: (r) => r.email },
+            { header: "Booking Date & Time", value: (r) => formatEventDateTime(r.bookingDate) },
+            { header: "Event", value: (r) => r.eventName },
+            { header: "Ticket Date", value: (r) => formatTicketDate(r.ticketDate) },
+            { header: "Sources", value: (r) => r.source },
+            { header: "City", value: (r) => r.city },
+            { header: "Venue", value: (r) => r.venue },
+            { header: "Quantity", value: (r) => r.quantity },
+            { header: "Check In", value: (r) => r.checkIn },
+            { header: "Scanned By", value: (r) => r.scannedBy },
+            { header: "Ticket Name", value: (r) => r.ticketName },
+            { header: "Ticket Type", value: (r) => r.ticketType },
+            { header: "Ticket Price", value: (r) => r.ticketPrice },
+            { header: "Total Amount", value: (r) => r.amount },
+            { header: "Status", value: (r) => r.status },
+            { header: "Remark", value: (r) => r.remark },
+          ]
+
+    const safeEventName = (matchedEvent.EventName || "event").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "")
+    downloadBookingsWorkbook(
+      reportData,
+      columns,
+      `${safeEventName}-${reportType.toLowerCase()}-report-${exportTimestamp()}.xlsx`,
+      `${reportType} Report`
+    )
+    showSuccessToast("Export Successful", `Exported ${reportData.length} row${reportData.length === 1 ? "" : "s"}.`)
   }
 
   // Handle viewing transaction details
@@ -977,7 +1080,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                 {currentReportData.length} record(s) found
               </CardDescription>
             </div>
-            <Button variant="outline" size="sm" disabled={loading}>
+            <Button variant="outline" size="sm" disabled={loading} onClick={handleExportReport}>
               <Download className="mr-2 h-4 w-4" /> Export Report
             </Button>
           </CardHeader>
@@ -1003,7 +1106,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                           <TableHead className="text-right">Ticket Price</TableHead>
                           <TableHead className="text-center">Ticket Date</TableHead>
                           <TableHead className="text-right">Total Amount</TableHead>
-                          <TableHead className="text-center">Booking Type</TableHead>
+                          <TableHead className="text-center">Check In</TableHead>
                         </>
                       )}                      {reportType === "Transaction" && (
                         <>
@@ -1033,11 +1136,7 @@ export default function GlobalReportsPage({ params }: GlobalReportsPageProps) {
                             <TableCell className="text-right">₹{(item.ticketPrice || 0).toLocaleString()}</TableCell>
                             <TableCell className="text-center">{formatEventDate(item.ticketDate, undefined, [])}</TableCell>
                             <TableCell className="text-right">₹{(item.totalRevenue || 0).toLocaleString()}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge variant={item.bookingType === "Promoter" ? "default" : item.bookingType === "Online" ? "secondary" : "outline"}>
-                                {item.bookingType}
-                              </Badge>
-                            </TableCell>
+                            <TableCell className="text-center">{item.checkIn ?? "-"}</TableCell>
                           </>
                         )}                        {reportType === "Transaction" && (
                           <>

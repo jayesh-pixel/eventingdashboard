@@ -208,7 +208,7 @@ export function BookingsTable({
     referenceId: {
       header: "Reference ID",
       thClass: "w-32 text-left",
-      render: (b) => trunc(val(b, ["referenceId", "ReferenceId", "Reference_id", "reference_id"]) || "-", undefined),
+      render: (b) => trunc(val(b, ["referenceId", "Transaction_id", "ReferenceId", "Reference_id", "reference_id"]) || "-", undefined),
     },
     ticketPrice: {
       header: "Ticket Price",
@@ -218,12 +218,12 @@ export function BookingsTable({
     promocode: {
       header: "Promocode",
       thClass: "w-28 text-left",
-      render: (b) => trunc(val(b, ["promocode", "Promocode", "CustomerPromocode", "PromoCodeName"]) || "-", undefined),
+      render: (b) => trunc(val(b, ["promocode", "PromocodeName", "Promocode", "CustomerPromocode", "PromoCodeName"]) || "-", undefined),
     },
     promoValue: {
       header: "Promo Value",
       thClass: "w-24 text-right",
-      render: (b) => trunc(val(b, ["promoValue", "PromoValue", "discount", "Discount"]) || "-", undefined, "right"),
+      render: (b) => trunc(val(b, ["promoValue", "PromocodeValue", "PromoValue", "discount", "Discount"]) || "-", undefined, "right"),
     },
     convenienceFee: {
       header: "Convenience Fee",

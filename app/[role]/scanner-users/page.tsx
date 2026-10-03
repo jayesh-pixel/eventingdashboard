@@ -38,7 +38,6 @@ import { formatEventDate } from "@/lib/utils"
 import { eventEndPoint } from "@/lib/api-endpoints"
 import { organizerEndpoint } from "@/lib/api-endpoints"
 import { ScannerUser, ScannerUsersApiResponse, ScannerUserType, ScannerUserStatus } from "@/lib/types"
-import { apiClient } from "@/lib/api-client"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { useToast } from "@/hooks/use-toast"
@@ -61,6 +60,10 @@ const userTypeLabels = {
   1: "Event Scanner",
   2: "Organizer Scanner"
 } as const
+
+// Scanner login schema: Password min(5).max(10); updatePassword itself has no validator
+const PASSWORD_MIN_LENGTH = 5
+const PASSWORD_MAX_LENGTH = 10
 
 export default function ScannerUsersPage() {
   const { toast } = useToast()
@@ -118,6 +121,11 @@ export default function ScannerUsersPage() {
         },        body: JSON.stringify(payload),
       })
 
+      if (response.status === 404) {
+        setEvents([])
+        return
+      }
+
       const data = await handleApiResponse(response)
       console.log('Events API Response:', data)
       if (data.data) {
@@ -162,6 +170,12 @@ export default function ScannerUsersPage() {
         },
       })
 
+      // Backend answers 404 when there are no active organizers
+      if (response.status === 404) {
+        setOrganizers([])
+        return
+      }
+
       const data = await handleApiResponse(response)
       console.log('Organizers API Response:', data)
       if (data.data) {
@@ -187,32 +201,37 @@ export default function ScannerUsersPage() {
     try {      setLoading(true)
       setError(null)
       
-      const response = await apiClient.get<ScannerUsersApiResponse>(scannerUserEndpoint.GET_ALL)
-      
-      console.log('Scanner Users API Response:', response)
+      // authFetch (not apiClient) so the 404 status is visible: the backend answers
+      // 404 "Scanner Users not found" when there are none, which is an empty list
+      const response = await authFetch(scannerUserEndpoint.GET_ALL, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      })
 
-      if (response.success && response.data) {
-        if (response.data.error) {
-          throw new Error(response.data.message || 'Failed to fetch scanner users')
-        }
-        // Handle both possible response structures
-        let users: ScannerUser[]
-        if (Array.isArray(response.data)) {
-          // Direct array format
-          users = response.data
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Nested format
-          users = response.data.data
-        } else {
-          throw new Error('Invalid response format')
-        }
-        
-        console.log('Parsed users:', users)
-        setScannerUsers(users)
-        setFilteredUsers(users)
-      } else {
-        throw new Error(response.error || 'Failed to fetch scanner users')
+      if (response.status === 404) {
+        setScannerUsers([])
+        setFilteredUsers([])
+        return
       }
+
+      const data: ScannerUsersApiResponse = await handleApiResponse(response)
+      console.log('Scanner Users API Response:', data)
+
+      // Handle both possible response structures
+      let users: ScannerUser[]
+      if (Array.isArray(data)) {
+        // Direct array format
+        users = data
+      } else if (Array.isArray(data?.data)) {
+        // Nested format
+        users = data.data
+      } else {
+        throw new Error('Invalid response format')
+      }
+
+      console.log('Parsed users:', users)
+      setScannerUsers(users)
+      setFilteredUsers(users)
     } catch (err: any) {
       console.error('Error fetching scanner users:', err)
       setError(err.message || 'Failed to load scanner users')
@@ -407,6 +426,66 @@ export default function ScannerUsersPage() {
   const handleEditUser = async () => {
     if (!selectedUser) return
 
+    if ((formData.userType === "1" && loadingEvents) || (formData.userType === "2" && loadingOrganizers)) {
+      toast({
+        title: "Please wait",
+        description: "Still loading the available assignments. Try again in a moment.",
+      })
+      return
+    }
+
+    // The backend rejects the whole update if any id is not a Published+Enabled event /
+    // Active organizer. Previously assigned ids missing from the loaded lists can't be
+    // seen or unticked, so drop them and let the user review before saving again.
+    const isEventScanner = formData.userType === "1"
+    const selectedIds = isEventScanner ? formData.selectedEvents : formData.selectedOrganizers
+    const availableIds = new Set((isEventScanner ? events : organizers).map((item: any) => item._id))
+    const staleCount = selectedIds.filter(id => !availableIds.has(id)).length
+    if (staleCount > 0) {
+      const remaining = selectedIds.filter(id => availableIds.has(id))
+      setFormData(prev => isEventScanner
+        ? { ...prev, selectedEvents: remaining }
+        : { ...prev, selectedOrganizers: remaining })
+      toast({
+        title: "Assignments changed",
+        description: isEventScanner
+          ? `${staleCount} previously assigned event(s) are no longer published/enabled and were removed from the selection. Review and click Update again.`
+          : `${staleCount} previously assigned organizer(s) are no longer active and were removed from the selection. Review and click Update again.`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    const newPassword = formData.password
+    if (newPassword) {
+      if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
+        toast({
+          title: "Error",
+          description: `Password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters long`,
+          variant: "destructive",
+        })
+        return
+      }
+      // Backend trims before hashing, so leading/trailing spaces would not match at login
+      if (newPassword !== newPassword.trim()) {
+        toast({
+          title: "Error",
+          description: "Password cannot start or end with a space",
+          variant: "destructive",
+        })
+        return
+      }
+      // updatePassword only finds Active scanner users
+      if (selectedUser.status !== 1) {
+        toast({
+          title: "Error",
+          description: "Enable this scanner user before changing the password",
+          variant: "destructive",
+        })
+        return
+      }
+    }
+
     if (formData.userType === "1" && formData.selectedEvents.length === 0) {
       toast({
         title: "Error",
@@ -449,9 +528,37 @@ export default function ScannerUsersPage() {
 
       const data = await handleApiResponse(response)
 
+      if (newPassword) {
+        try {
+          const passwordResponse = await authFetch(scannerUserEndpoint.UPDATE_PASSWORD, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${authToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              scanneruser_id: selectedUser._id,
+              new_password: newPassword,
+              CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
+              createduser_id: user?.user_id || "",
+            }),
+          })
+          await handleApiResponse(passwordResponse)
+        } catch (passwordError) {
+          // Assignments were saved; keep the dialog open so the password can be retried
+          toast({
+            title: "Password not changed",
+            description: `Assignments were updated, but the password change failed: ${getApiErrorMessage(passwordError, "Unknown error")}`,
+            variant: "destructive",
+          })
+          await fetchScannerUsers()
+          return
+        }
+      }
+
       toast({
         title: "Success",
-        description: "Scanner user updated successfully",
+        description: newPassword ? "Scanner user and password updated successfully" : "Scanner user updated successfully",
       })
       setIsEditDialogOpen(false)
       resetForm()
@@ -584,7 +691,8 @@ export default function ScannerUsersPage() {
                     type="password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Enter password"
+                    placeholder="Enter password (5-10 characters)"
+                    maxLength={PASSWORD_MAX_LENGTH}
                   />
                 </div>
               </div>
@@ -866,6 +974,7 @@ export default function ScannerUsersPage() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Leave blank to keep current password"
+                  maxLength={PASSWORD_MAX_LENGTH}
                 />
               </div>
             </div>
@@ -1136,8 +1245,8 @@ export default function ScannerUsersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
+            {/* Backend Status enum: Active = 1, Inactive = 2 (set by Disable) */}
             <SelectItem value="1">Active</SelectItem>
-            <SelectItem value="0">Inactive</SelectItem>
             <SelectItem value="2">Disabled</SelectItem>
           </SelectContent>
         </Select>

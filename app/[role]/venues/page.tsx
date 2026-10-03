@@ -34,6 +34,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
@@ -85,6 +95,24 @@ interface ApiResponse {
 
 const ITEMS_PER_PAGE = 10
 
+// Same anchored pattern as the API's isValidGoogleMapsIframe (helpers/commonFunctions.js);
+// anything else is rejected with 400 "Invalid Google Maps iframe URL".
+const GOOGLE_MAPS_IFRAME_REGEX =
+  /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"><\/iframe>$/
+const GOOGLE_MAPS_EMBED_URL_REGEX = /^https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+$/
+const MAP_LOCATION_ERROR =
+  'Map Location must be the Google Maps embed code: in Google Maps choose Share > Embed a map > Copy HTML and paste the whole <iframe ...></iframe>.'
+
+// Trims the pasted value and wraps a bare embed URL in the iframe markup Google's
+// "Embed a map" dialog produces, which is the only shape the API accepts.
+const normalizeMapLocation = (value: string): string => {
+  const trimmed = value.trim()
+  if (GOOGLE_MAPS_EMBED_URL_REGEX.test(trimmed)) {
+    return `<iframe src="${trimmed}" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
+  }
+  return trimmed
+}
+
 export default function VenuesPage({ params }: VenuesPageProps) {
   // Handle params which might be a Promise
   let resolvedParams: { role: UserRole }
@@ -110,6 +138,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = React.useState(false)
   const [selectedVenue, setSelectedVenue] = React.useState<Venue | null>(null)
+  const [deleteVenueId, setDeleteVenueId] = React.useState<string | null>(null)
   const [apiError, setApiError] = React.useState<string | null>(null)
 
   // Image upload state
@@ -272,6 +301,17 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         body: JSON.stringify(body),
       })
 
+      // The API answers an empty page with 404 "Venue not found" (no venues yet, no search
+      // match, or the last row of a page deleted). Treat it as an empty list, otherwise the
+      // previous rows stay on screen behind an error toast.
+      if (response.status === 404) {
+        setVenues([])
+        setTotalPages(1)
+        setTotalVenues(0)
+        if (page > 1) setCurrentPage(page - 1)
+        return
+      }
+
       const data: ApiResponse = await handleApiResponse(response)
 
       setVenues(data.data.VenueData || [])
@@ -340,10 +380,30 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    const mapLocation = normalizeMapLocation(formData.mapLocation)
+    if (!GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
+      toast({
+        title: "Error",
+        description: MAP_LOCATION_ERROR,
+        variant: "destructive",
+      })
+      return
+    }
+
     if (selectedImages.length === 0) {
       toast({
         title: "Error",
         description: "Please upload at least one venue image",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // The create API accepts at most 5 "Images"; a 6th fails in multer with "Unexpected field".
+    if (selectedImages.length > 5) {
+      toast({
+        title: "Error",
+        description: "You can upload at most 5 venue images",
         variant: "destructive",
       })
       return
@@ -375,7 +435,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       // so we derive a code from the city name (first 3 chars uppercased)
       const cityCode = (selectedCity?.name || formData.city || '').replace(/\s/g, '').substring(0, 3).toUpperCase() || 'OTH'
       formDataPayload.append('CityIsoCode', cityCode)
-      formDataPayload.append('Map_Location', formData.mapLocation)
+      formDataPayload.append('Map_Location', mapLocation)
       formDataPayload.append('Priority', formData.priority.toString())
 
       // Append images
@@ -423,6 +483,19 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    // Only send Map_Location when it changed: the API re-validates whatever it receives,
+    // so an unchanged older value would block saving unrelated fields.
+    const mapLocation = normalizeMapLocation(formData.mapLocation)
+    const mapLocationChanged = mapLocation !== (selectedVenue.Map_Location || "").trim()
+    if (mapLocationChanged && mapLocation && !GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
+      toast({
+        title: "Error",
+        description: MAP_LOCATION_ERROR,
+        variant: "destructive",
+      })
+      return
+    }
+
     setLoading(true)
     try {
       const authToken = getValidToken()
@@ -446,7 +519,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         CountryIsoCode: "IN",
         StateIsoCode: selectedState?.iso2 || "",
         CityIsoCode: (selectedCity?.name || formData.city || "").replace(/\s/g, "").substring(0, 3).toUpperCase() || "OTH",
-        Map_Location: formData.mapLocation,
+        Map_Location: mapLocationChanged && mapLocation ? mapLocation : undefined,
         Priority: formData.priority,
       }
 
@@ -611,9 +684,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         const formData = new FormData()
         // API expects the file field name to be `VenueImage`
         formData.append('VenueImage', image)
+        // Only venue_id: the API's Joi schema rejects any other field ("AdminRole" is not allowed).
         formData.append('venue_id', venueId)
-        formData.append('AdminRole', getNumericAdminRole(user?.AdminRole || role).toString())
-        formData.append('user_id', user?.user_id || '')
 
         const response = await authFetch(venueEndPoint.VENUE_UPLOAD_IMAGE, {
           method: "POST",
@@ -623,14 +695,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           body: formData,
         })
 
-        if (!response.ok) {
-          throw new Error(`Failed to upload image: ${response.status}`)
-        }
-
-        const result = await response.json()
-        if (result.error) {
-          throw new Error(result.message || "Failed to upload image")
-        }
+        // Surfaces the API's own message instead of a bare status code.
+        await handleApiResponse(response)
       }
 
       return true
@@ -807,9 +873,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   id="mapLocation"
                   value={formData.mapLocation}
                   onChange={(e) => setFormData({ ...formData, mapLocation: e.target.value })}
-                  placeholder="Enter map embed code or location URL"
+                  placeholder="Paste the Google Maps embed (iframe) code"
                   rows={2}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare https://www.google.com/maps/embed?pb=... link is also accepted.
+                </p>
               </div>
 
               {/* Image Upload Section */}
@@ -967,7 +1036,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                                 Edit
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                onClick={() => handleDeleteVenue(venue._id)}
+                                onClick={() => setDeleteVenueId(venue._id)}
                                 className="text-red-600"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
@@ -1261,9 +1330,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 id="editMapLocation"
                 value={formData.mapLocation}
                 onChange={(e) => setFormData({ ...formData, mapLocation: e.target.value })}
-                placeholder="Enter map embed code or location URL"
+                placeholder="Paste the Google Maps embed (iframe) code"
                 rows={2}
               />
+              <p className="text-xs text-muted-foreground">
+                Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare https://www.google.com/maps/embed?pb=... link is also accepted.
+              </p>
             </div>
 
             {/* Existing Images Section */}
@@ -1344,6 +1416,33 @@ export default function VenuesPage({ params }: VenuesPageProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteVenueId} onOpenChange={() => setDeleteVenueId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this venue?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Do not delete a venue that is used by any event: those events
+              will stop loading in the event lists until they are moved to another venue.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteVenueId) {
+                  handleDeleteVenue(deleteVenueId)
+                }
+                setDeleteVenueId(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -157,7 +157,12 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       }
       
       // Event flags and settings
-      formData.append("TourEvent", (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString())
+      const isTourEvent = Number(eventData.TourEvent ?? eventData.tourEvent) === 1
+      formData.append("TourEvent", isTourEvent ? "1" : "0")
+      // The update handler looks the tour up again whenever TourEvent=1
+      if (isTourEvent && eventData.EventTour_id) {
+        formData.append("EventTour_id", eventData.EventTour_id)
+      }
       formData.append("VenueEventFlag", (eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1).toString())
       formData.append("EventType", (eventData.EventType ?? eventData.eventType ?? 1).toString())
       formData.append("OnlineEventFlag", (eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0).toString())
@@ -166,7 +171,11 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       formData.append("EventVisibility", (eventData.EventVisibility ?? eventData.eventVisibility ?? 1).toString())
       
       // Additional fields
-      formData.append("BestSuitedFor", (eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21").toString())
+      // Omitted when unset; a default here would force an age restriction on the event
+      const bestSuitedFor = eventData.BestSuitedFor ?? eventData.bestSuitedFor
+      if (bestSuitedFor) {
+        formData.append("BestSuitedFor", String(bestSuitedFor))
+      }
       
       if (eventData.venue_id || eventData.venueId) {
         formData.append("venue_id", eventData.venue_id ?? eventData.venueId)
@@ -278,7 +287,12 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       }
       
       // Event flags and settings
-      formData.append("TourEvent", (eventData.TourEvent ?? eventData.tourEvent ?? 0).toString())
+      const isTourEvent = Number(eventData.TourEvent ?? eventData.tourEvent) === 1
+      formData.append("TourEvent", isTourEvent ? "1" : "0")
+      // The update handler looks the tour up again whenever TourEvent=1
+      if (isTourEvent && eventData.EventTour_id) {
+        formData.append("EventTour_id", eventData.EventTour_id)
+      }
       formData.append("VenueEventFlag", (eventData.VenueEventFlag ?? eventData.venueEventFlag ?? 1).toString())
       formData.append("EventType", (eventData.EventType ?? eventData.eventType ?? 1).toString())
       formData.append("OnlineEventFlag", (eventData.OnlineEventFlag ?? eventData.onlineEventFlag ?? 0).toString())
@@ -287,7 +301,11 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       formData.append("EventVisibility", (eventData.EventVisibility ?? eventData.eventVisibility ?? 1).toString())
       
       // Additional fields
-      formData.append("BestSuitedFor", (eventData.BestSuitedFor ?? eventData.bestSuitedFor ?? "21").toString())
+      // Omitted when unset; a default here would force an age restriction on the event
+      const bestSuitedFor = eventData.BestSuitedFor ?? eventData.bestSuitedFor
+      if (bestSuitedFor) {
+        formData.append("BestSuitedFor", String(bestSuitedFor))
+      }
       
       if (eventData.venue_id || eventData.venueId) {
         formData.append("venue_id", eventData.venue_id ?? eventData.venueId)
@@ -520,7 +538,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       {/* Content */}
       <div className="py-6">
         <CreateEvent
-          eventSelectionFlag={eventData?.EventFormat || eventData?.eventFormat || 0}
+          eventSelectionFlag={Number(eventData?.TourEvent) === 1 ? 1 : 0}
           setEventCreationModal={handleEventUpdated}
           role={role}
           editMode={true}

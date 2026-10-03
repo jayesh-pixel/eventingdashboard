@@ -16,6 +16,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { Banner, BannersApiResponse } from "@/lib/types"
 import { getNumericAdminRole } from "@/lib/api-constants"
+import { formatEventDateTime } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,10 @@ const statusLabels = {
   0: "Inactive",
   1: "Active",
 }
+
+// Upload limits enforced by the API's multer config (helpers/MulterConfig.js).
+const ALLOWED_BANNER_TYPES = ['image/jpeg', 'image/png']
+const MAX_BANNER_SIZE = 1 * 1024 * 1024
 
 export default function BannersPage({ params }: BannersPageProps) {
   // Handle params which might be a Promise
@@ -160,6 +165,12 @@ export default function BannersPage({ params }: BannersPageProps) {
         },
       })
 
+      // The API answers "no banners" with 404; show the empty state, not an error dialog.
+      if (response.status === 404) {
+        setBanners([])
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -196,30 +207,29 @@ export default function BannersPage({ params }: BannersPageProps) {
     )
   }, [banners, debouncedSearchTerm])
 
+  // createdAt comes back as "DD-MM-YYYY HH:mm:ss" (IST), which new Date() reads with day
+  // and month swapped or as Invalid Date; FilterationDateTime is the same IST wall clock
+  // stored as UTC. formatEventDateTime handles both without shifting the time.
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatEventDateTime(dateString)
   }
 
   // Image validation functions
+  const validateImageTypeAndSize = (file: File): string | null => {
+    if (!ALLOWED_BANNER_TYPES.includes(file.type)) {
+      return `File "${file.name}" must be JPG or PNG format`
+    }
+    if (file.size > MAX_BANNER_SIZE) {
+      return `File "${file.name}" must be 1 MB or smaller`
+    }
+    return null
+  }
+
   const validateImageFile = (file: File, imageType: 'desktop' | 'mobile'): Promise<string | null> => {
     return new Promise((resolve) => {
-      // Check file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml']
-      if (!allowedTypes.includes(file.type)) {
-        resolve(`File "${file.name}" must be JPG, PNG, or SVG format`)
-        return
-      }
-
-      // Check file size (2MB = 2 * 1024 * 1024 bytes)
-      const maxSize = 2 * 1024 * 1024
-      if (file.size > maxSize) {
-        resolve(`File "${file.name}" must be smaller than 2 MB`)
+      const typeOrSizeError = validateImageTypeAndSize(file)
+      if (typeOrSizeError) {
+        resolve(typeOrSizeError)
         return
       }
 
@@ -736,12 +746,12 @@ export default function BannersPage({ params }: BannersPageProps) {
             <div className="grid gap-2">
               <Label htmlFor="desktopImage">Desktop Banner Image *</Label>
               <p className="text-xs text-muted-foreground">
-                Required: JPG, PNG, or SVG • Max 2MB • Dimensions: 2000x500 pixels
+                Required • Max 1MB, JPG/PNG • Dimensions: 2000x500 pixels
               </p>
               <Input
                 id="desktopImage"
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                accept="image/jpeg,image/png"
                 onChange={async (e) => {
                   const file = e.target.files?.[0] || null
                   if (file) {
@@ -767,12 +777,12 @@ export default function BannersPage({ params }: BannersPageProps) {
             <div className="grid gap-2">
               <Label htmlFor="mobileImage">Mobile Banner Image *</Label>
               <p className="text-xs text-muted-foreground">
-                Required: JPG, PNG, or SVG • Max 2MB • Dimensions: 1920x1080 pixels
+                Required • Max 1MB, JPG/PNG • Dimensions: 1920x1080 pixels
               </p>
               <Input
                 id="mobileImage"
                 type="file"
-                accept="image/jpeg,image/jpg,image/png,image/svg+xml"
+                accept="image/jpeg,image/png"
                 onChange={async (e) => {
                   const file = e.target.files?.[0] || null
                   if (file) {
@@ -874,13 +884,17 @@ export default function BannersPage({ params }: BannersPageProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="editDesktopImage">Desktop Banner Image</Label>
+              <p className="text-xs text-muted-foreground">Max 1MB, JPG/PNG</p>
               <Input
                 id="editDesktopImage"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null
-                  setFormData(prev => ({ ...prev, desktopImage: file }))
+                  const error = file ? validateImageTypeAndSize(file) : null
+                  setImageValidationErrors(error ? [error] : [])
+                  if (error) e.target.value = ""
+                  setFormData(prev => ({ ...prev, desktopImage: error ? null : file }))
                 }}
               />
               {formData.desktopImage ? (
@@ -895,13 +909,17 @@ export default function BannersPage({ params }: BannersPageProps) {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="editMobileImage">Mobile Banner Image</Label>
+              <p className="text-xs text-muted-foreground">Max 1MB, JPG/PNG</p>
               <Input
                 id="editMobileImage"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null
-                  setFormData(prev => ({ ...prev, mobileImage: file }))
+                  const error = file ? validateImageTypeAndSize(file) : null
+                  setImageValidationErrors(error ? [error] : [])
+                  if (error) e.target.value = ""
+                  setFormData(prev => ({ ...prev, mobileImage: error ? null : file }))
                 }}
               />
               {formData.mobileImage ? (
@@ -914,6 +932,18 @@ export default function BannersPage({ params }: BannersPageProps) {
                 </p>
               )}
             </div>
+            {imageValidationErrors.length > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <ul className="list-disc list-inside">
+                    {imageValidationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <DialogFooter>
             <Button 

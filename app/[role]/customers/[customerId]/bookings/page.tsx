@@ -21,6 +21,9 @@ interface CustomerBookingsPageProps {
   params: Promise<{ role: UserRole; customerId: string }> | { role: UserRole; customerId: string }
 }
 
+const BOOKINGS_PAGE_SIZE = 50
+const MAX_BOOKING_PAGES = 40
+
 export default function CustomerBookingsPage({ params }: CustomerBookingsPageProps) {
   const resolvedParams = React.use(params instanceof Promise ? params : Promise.resolve(params))
   const { role, customerId } = resolvedParams
@@ -45,7 +48,9 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await authFetch(websiteCustomer.GET_ALL_PAGINATED_CUSTOMERS_DATA, {
+      // The paginated list ignores customer_id and only returned page 1, so any
+      // customer beyond the first 10 had no info card.
+      const response = await authFetch(websiteCustomer.GET_CUSTOMER_DATA_BY_ID, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${authToken}`,
@@ -61,17 +66,12 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
       }
 
       const data = await response.json()
-      
-      console.log("Customer info response:", data)
-      
+
       if (data.error) {
         throw new Error(data.message || "Failed to fetch customer info")
       }
 
-      // Find the specific customer from the customerData array
-      const customer = data.data?.customerData?.find((c: any) => c._id === customerId)
-      console.log("Found customer:", customer)
-      setCustomerInfo(customer || null)
+      setCustomerInfo(data.data || null)
       
     } catch (error) {
       console.error("Error fetching customer info:", error)
@@ -93,33 +93,53 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
         throw new Error("Authentication required")
       }
 
-      const response = await authFetch(websiteCustomer.GET_CUSTOMER_BOOKINGS, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          customer_id: customerId,
-          page: 1,
-          limit: 10 // Get more bookings for the dedicated page
+      const fetchPage = async (page: number) => {
+        const response = await authFetch(websiteCustomer.GET_CUSTOMER_BOOKINGS, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${authToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            customer_id: customerId,
+            page,
+            limit: BOOKINGS_PAGE_SIZE,
+          })
         })
-      })
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+
+        return response.json()
       }
 
-      const data = await response.json()
-      
-      console.log("Customer bookings response:", data)
-      
+      const data = await fetchPage(1)
+
+      // No bookings comes back as 200 with error:true "No Event Bookings Found".
       if (data.error) {
+        if (/no event bookings found/i.test(data.message || "")) {
+          setCustomerBookings([])
+          setFilteredBookings([])
+          return
+        }
         throw new Error(data.message || "Failed to fetch customer bookings")
       }
 
-      setCustomerBookings(data.data?.BookingsData || [])
-      setFilteredBookings(data.data?.BookingsData || [])
+      // The endpoint is paginated; walk every page so the history is complete.
+      let bookings: CustomerBooking[] = data.data?.BookingsData || []
+      const totalPages = Math.min(Number(data.data?.totalPages) || 1, MAX_BOOKING_PAGES)
+      if (totalPages > 1) {
+        const pages = await Promise.all(
+          Array.from({ length: totalPages - 1 }, (_, index) => fetchPage(index + 2).catch(() => null))
+        )
+        pages.forEach((pageData) => {
+          if (pageData && !pageData.error) bookings = bookings.concat(pageData.data?.BookingsData || [])
+        })
+      }
+
+      setCustomerBookings(bookings)
+      setFilteredBookings(bookings)
       
     } catch (error) {
       console.error("Error fetching customer bookings:", error)
@@ -172,9 +192,9 @@ export default function CustomerBookingsPage({ params }: CustomerBookingsPagePro
     return `₹${amount?.toLocaleString() || 'N/A'}`
   }
 
-  // Get registration type
+  // Get registration type — backend: CustomerType = { WebsiteRegistration: 1, AdminPanelRegistration: 2 }
   const getRegistrationType = (type: number) => {
-    return type === 1 ? "Website" : "Mobile"
+    return type === 1 ? "Website" : "Admin Panel"
   }
 
   if (role !== "superadmin") {

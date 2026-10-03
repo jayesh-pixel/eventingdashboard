@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Plus, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -8,6 +8,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import AddNewPromoterModal from "./add-new-promoter-modal"
  import { useAuth } from "@/lib/auth-context"
 import type { UserRole } from "@/lib/navigation"
+import { authFetch } from "@/lib/auth-fetch"
+import { getValidToken } from "@/lib/token-utils"
+import { promoterEndpoint } from "@/lib/api-endpoints"
 
 interface PromoterData {
   _id: string
@@ -40,6 +43,12 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
   const [openAddPromoterModal, setOpenAddPromoterModal] = useState(false)
   const [openModalPromoterData, setOpenModalPromoterData] = useState<any[]>([])
 
+  // Re-sync when the parent re-fetches the event (useState only reads its initial value)
+  useEffect(() => {
+    setEventId(eventData._id)
+    setPromoters(eventData.PopUpPromoterData || eventData.EventPromoter || [])
+  }, [eventData])
+
   // Check if user has permission to manage promoters (only SuperAdmin)
   const userRole = user?.AdminRole?.toLowerCase() as UserRole
   const canManagePromoters = userRole === "superadmin"
@@ -53,8 +62,42 @@ const AddPromoterAndShow = ({ eventData, onPromoterUpdate }: AddPromoterAndShowP
     setOpenModalPromoterData(promoterData)
   }
 
-  const handlePromoterUpdate = (newPromoters: any[]) => {
-    setPromoters(newPromoters)
+  // /events/addpromoter returns EventPromoter, which only holds promoter ids; attach the names
+  // (from the promoters already shown, else from the promoter list) so the avatars stay labelled
+  const resolvePromoterNames = async (assigned: any[]): Promise<any[]> => {
+    const names = new Map<string, string>()
+    promoters.forEach((promoter: PromoterData) => {
+      const name = promoter.PromoterName || promoter.Username || promoter.FullName
+      if (promoter.promoter_id && name) names.set(promoter.promoter_id, name)
+    })
+
+    if (assigned.some((promoter) => !names.has(promoter.promoter_id))) {
+      try {
+        const authToken = getValidToken()
+        const response = await authFetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+        if (response.ok) {
+          const data = await response.json()
+          ;(data.data || []).forEach((promoter: any) => {
+            const name = promoter.Username || promoter.FullName
+            if (promoter._id && name) names.set(promoter._id, name)
+          })
+        }
+      } catch (error) {
+        console.warn("Could not resolve promoter names (handled):", error)
+      }
+    }
+
+    return assigned.map((promoter) => ({
+      ...promoter,
+      PromoterName: promoter.PromoterName || names.get(promoter.promoter_id),
+    }))
+  }
+
+  const handlePromoterUpdate = async (newPromoters: any[]) => {
+    setPromoters(await resolvePromoterNames(newPromoters || []))
     // Call the parent callback to refresh the entire events list
     if (onPromoterUpdate) {
       onPromoterUpdate()

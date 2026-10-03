@@ -32,6 +32,7 @@ export const categorieEndPoint = {
   CATEGORIE_CREATION_URL: BASE_URL + "/category/create",
   CATEGORIES_DATA_URL: BASE_URL + "/category/getall",
   CATEGORIES_PAGINATED_URL: BASE_URL + "/category/getallpaginatedData",
+  CATEGORIES_PAGINATED_SEARCH_URL: BASE_URL + "/category/getPaginatedSearch",
   CATEGORIES_DATA_BY_ID_URL: BASE_URL + "/category/getbyId",
   CATEGORIES_UPLOAD_IMAGE: BASE_URL + "/category/upload/image",
   CATEGORIES_IMAGE_REMOVE: BASE_URL + "/category/deleteCategory/image",
@@ -45,6 +46,7 @@ export const genreEndPoint = {
   GENRE_CREATION_URL: BASE_URL + "/genre/create",
   GENRE_DATA_URL: BASE_URL + "/genre/getall",
   GENRE_PAGINATED_URL: BASE_URL + "/genre/getallpaginatedData",
+  GENRE_PAGINATED_SEARCH_URL: BASE_URL + "/genre/getPaginatedSearch",
   GENRE_DATA_BY_ID_URL: BASE_URL + "/genre/getById",
   GENRE_UPLOAD_IMAGE: BASE_URL + "/genre/upload/image",
   GENRE_IMAGE_REMOVE: BASE_URL + "/genre/deleteGenre/image",
@@ -81,6 +83,7 @@ export const eventTourEndPoint = {
   EVENT_TOUR_ENABLE: BASE_URL + "/eventtour/enable",
   EVENT_TOUR_DISABLE: BASE_URL + "/eventtour/disable",
   GET_ACTIVE_EVENT_TOURS: BASE_URL + "/eventtour/getActiveEventTours",
+  EVENT_TOURS_PAGINATED_SEARCH_URL: BASE_URL + "/eventtour/getPaginatedSearch",
 }
 
 // Organizer API Endpoints
@@ -251,6 +254,8 @@ export const websiteCustomer = {
   GET_ALL_PAGINATED_CUSTOMERS_DATA: BASE_URL + "/websitecustomers/getAllPaginatedCustomersData",
   CUSTOMER_SEARCH_PAGINATED: BASE_URL + "/websitecustomers/getCustomerDataBySearchKeywordPaginated",
   GET_CUSTOMER_BOOKINGS: BASE_URL + "/websitecustomers/getCustomerBookings",
+  // Lives under the website prefix; POST { customer_id }
+  GET_CUSTOMER_DATA_BY_ID: BASE_URL + "/webiste/customer/getCustomerDataById",
 }
 
 // Promocode API

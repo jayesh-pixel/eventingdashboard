@@ -26,6 +26,7 @@ import { getValidToken } from "@/lib/token-utils"
 import type { UserRole } from "@/lib/navigation"
 import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
+import { eventEndPoint, eventTourEndPoint } from "@/lib/api-endpoints"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { AddressSelector } from "@/components/address-selector"
 import { 
@@ -75,6 +76,7 @@ interface SelectOption {
 }
 
 interface EventDateTime {
+  _id?: string // set for dates already saved on the event (edit mode)
   EventStartDate: string
   EventStartTime: string
   EventEndDate: string
@@ -197,6 +199,21 @@ const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string,
       otherwise: (schema) => schema.notRequired()
     }),
 
+  // The organizer create/update validators cap the TBA state/city names at 20 characters
+  stateName: Yup.string()
+    .when("locationType", {
+      is: (value: string) => value === "tba" && userRole === "organizer",
+      then: (schema) => schema.max(20, "State name must be at most 20 characters"),
+      otherwise: (schema) => schema.notRequired()
+    }),
+
+  cityName: Yup.string()
+    .when("locationType", {
+      is: (value: string) => value === "tba" && userRole === "organizer",
+      then: (schema) => schema.max(20, "City name must be at most 20 characters"),
+      otherwise: (schema) => schema.notRequired()
+    }),
+
   // BookingPhoneNumber / WhatsAppPhoneNumber are optional on the backend (10-digit pattern only)
   bookingphonenumber: Yup.string()
     .matches(/^[0-9]{10}$/, { message: "Phone number must be 10 digits", excludeEmptyString: true }),
@@ -271,6 +288,14 @@ export default function CreateEvent({
     return status === 4 || status === "4" || status === "Rejected"
   }
 
+  // superAdmin/update only accepts Status Draft/Published/Rejected, so "Update" re-sends the current
+  // status when it is one of those. InReview events get Approve/Reject instead; a Completed event
+  // can only be re-sent as Published (the completion cron marks it Completed again once its dates are past).
+  const existingStatus = Number(existingEventData?.EventStatus)
+  const superAdminUpdateStatus = ([EventStatus.Draft, EventStatus.Published, EventStatus.ReviewRejected] as number[]).includes(existingStatus)
+    ? existingStatus
+    : EventStatus.Published
+
   // State for external data
   const [venues, setVenues] = React.useState<SelectOption[]>([])
   const [organizers, setOrganizers] = React.useState<SelectOption[]>([])
@@ -279,8 +304,6 @@ export default function CreateEvent({
   const [genres, setGenres] = React.useState<SelectOption[]>([])
   const [eventTours, setEventTours] = React.useState<SelectOption[]>([])
   const [languageOptions, setLanguageOptions] = React.useState<SelectOption[]>([])
-  const [states, setStates] = React.useState<SelectOption[]>([])
-  const [cities, setCities] = React.useState<SelectOption[]>([])
 
   // Loading states
   const [loadingVenues, setLoadingVenues] = React.useState(false)
@@ -290,8 +313,6 @@ export default function CreateEvent({
   const [loadingGenres, setLoadingGenres] = React.useState(false)
   const [loadingEventTours, setLoadingEventTours] = React.useState(false)
   const [loadingLanguages, setLoadingLanguages] = React.useState(false)
-  const [loadingStates, setLoadingStates] = React.useState(false)
-  const [loadingCities, setLoadingCities] = React.useState(false)
 
   // Image state
   const [carouselImages, setCarouselImages] = React.useState<File[]>([])
@@ -299,6 +320,11 @@ export default function CreateEvent({
   const [existingCarouselImages, setExistingCarouselImages] = React.useState<Array<{image_path: string, _id: string}>>([])
   const [galleryImages, setGalleryImages] = React.useState<File[]>([])
   const [galleryImagePreviews, setGalleryImagePreviews] = React.useState<string[]>([])
+  const [existingGalleryImages, setExistingGalleryImages] = React.useState<Array<{image_path: string, _id: string}>>([])
+  // Id of the saved carousel/gallery image whose delete request is in flight (edit mode)
+  const [deletingImageId, setDeletingImageId] = React.useState<string | null>(null)
+  // Event dates as last saved on the server, used to diff date/time changes in edit mode
+  const savedEventDatesRef = React.useRef<EventDateTime[]>([])
   const [venueLayoutImage, setVenueLayoutImage] = React.useState<File | null>(null)
   const [venueLayoutPreview, setVenueLayoutPreview] = React.useState<string>("")
   // Modal states
@@ -390,6 +416,7 @@ export default function CreateEvent({
       }
 
       return {
+        _id: item._id,
         EventStartDate: startDateTime.date,
         EventStartTime: startDateTime.time,
         EventEndDate: endDateTime.date,
@@ -625,11 +652,17 @@ export default function CreateEvent({
     fetchArtists()
     fetchGenres()
     fetchLanguages()
-    fetchStates()
     if (eventSelectionFlag === 1) {
       fetchEventTours()
     }
   }, [eventSelectionFlag, role])
+
+  // Remember the saved dates/images so edit-mode changes can be sent through their own endpoints
+  React.useEffect(() => {
+    if (!editMode || !existingEventData) return
+    savedEventDatesRef.current = transformEventDateTime(existingEventData.EventDateTime || existingEventData.arrangedEventDateTime || [])
+    setExistingGalleryImages(existingEventData.EventGalleryImages || [])
+  }, [editMode, existingEventData])
   // API fetch functions
   const fetchVenues = async () => {
     try {
@@ -641,7 +674,8 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      // An empty list comes back as 404; still offer the "Create new" option
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const venueOptions = data.data.map((venue: any) => ({
         value: venue._id || venue.id,
         label: venue.Name || "Unnamed Venue"
@@ -668,7 +702,7 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const organizerOptions = data.data.map((organizer: any) => {
         const label =  organizer.Username || organizer.FullName || organizer.Name || "Unnamed Organizer"
         console.log(`Organizer: ${organizer._id}, CompanyName: ${organizer.CompanyName}, Username: ${organizer.Username}, FullName: ${organizer.FullName}, Selected Label: ${label}`)
@@ -700,7 +734,7 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const categoryOptions = data.data.map((category: any) => ({
         value: category._id || category.id,
         label: category.Name || "Unnamed Category"
@@ -728,7 +762,7 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const artistOptions = data.data.map((artist: any) => ({
         value: artist._id || artist.id,
         label: artist.Name || "Unnamed Artist"
@@ -756,7 +790,7 @@ export default function CreateEvent({
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const genreOptions = data.data.map((genre: any) => ({
         value: genre._id || genre.id,
         label: genre.Name || "Unnamed Genre"
@@ -780,11 +814,12 @@ export default function CreateEvent({
       const authToken = getValidToken()
       if (!authToken) return
 
-      const response = await authFetch(getApiEndpoint("/eventtour/getall"), {
+      // Only enabled tours can be linked; 404 just means there are none yet
+      const response = await authFetch(eventTourEndPoint.GET_ACTIVE_EVENT_TOURS, {
         headers: { Authorization: `Bearer ${authToken}` }
       })
 
-      const data = await handleApiResponse(response)
+      const data = response.status === 404 ? { data: [] } : await handleApiResponse(response)
       const tourOptions = data.data.map((tour: any) => ({
         value: tour._id || tour.id,
         label: tour.Name || "Unnamed Tour"
@@ -799,31 +834,6 @@ export default function CreateEvent({
       })
     } finally {
       setLoadingEventTours(false)
-    }
-  }
-
-  const fetchStates = async () => {
-    try {
-      setLoadingStates(true)
-      // This would typically be a static list or API call
-      // For now, using common Indian states
-      const indianStates = [
-        { value: "MH", label: "Maharashtra" },
-        { value: "KA", label: "Karnataka" },
-        { value: "TN", label: "Tamil Nadu" },
-        { value: "DL", label: "Delhi" },
-        { value: "GJ", label: "Gujarat" },
-        { value: "RJ", label: "Rajasthan" },
-        { value: "UP", label: "Uttar Pradesh" },
-        { value: "WB", label: "West Bengal" },
-        { value: "AP", label: "Andhra Pradesh" },
-        { value: "TS", label: "Telangana" }
-      ]
-      setStates(indianStates)
-    } catch (error) {
-      console.error("Error fetching states:", error)
-    } finally {
-      setLoadingStates(false)
     }
   }
 
@@ -854,41 +864,38 @@ export default function CreateEvent({
     }
   }
 
-  const fetchCities = async (stateIsoCode: string) => {
-    try {
-      setLoadingCities(true)
-      // This would typically be an API call based on state
-      // For now, using sample cities
-      const sampleCities = {
-        "MH": [
-          { value: "MUM", label: "Mumbai" },
-          { value: "PUN", label: "Pune" },
-          { value: "NAG", label: "Nagpur" }
-        ],
-        "KA": [
-          { value: "BLR", label: "Bangalore" },
-          { value: "MYS", label: "Mysore" },
-          { value: "MAN", label: "Mangalore" }
-        ],
-        "DL": [
-          { value: "DEL", label: "New Delhi" },
-          { value: "GUR", label: "Gurgaon" },
-          { value: "NOI", label: "Noida" }
-        ]
+  // Backend upload limits (helpers/MulterConfig.js + the create routes' maxCount)
+  const MAX_UPLOAD_IMAGES = 5
+  const MAX_UPLOAD_IMAGE_BYTES = 1024 * 1024
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png"]
+
+  // Validates files picked in the inline create modals; returns only the acceptable ones
+  const pickUploadImages = (fileList: FileList | null): File[] => {
+    const files = Array.from(fileList || [])
+    const valid = files.filter((file) => {
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        toast({ title: "Invalid File", description: `${file.name}: only JPEG or PNG images are allowed.`, variant: "destructive" })
+        return false
       }
-      setCities(sampleCities[stateIsoCode as keyof typeof sampleCities] || [])
-    } catch (error) {
-      console.error("Error fetching cities:", error)
-    } finally {
-      setLoadingCities(false)
+      if (file.size > MAX_UPLOAD_IMAGE_BYTES) {
+        toast({ title: "File Too Large", description: `${file.name}: image size must be 1MB or less.`, variant: "destructive" })
+        return false
+      }
+      return true
+    })
+    if (valid.length > MAX_UPLOAD_IMAGES) {
+      toast({ title: "Too Many Images", description: `Only the first ${MAX_UPLOAD_IMAGES} images will be uploaded.`, variant: "destructive" })
     }
+    return valid.slice(0, MAX_UPLOAD_IMAGES)
   }
+
   // Image handling functions
   const validateImage = (file: File, requiredDimensions?: { width: number; height: number }) => {
     return new Promise<boolean>((resolve) => {
       const maxSize = 500 * 1024 // 500KB
-      
-      if (!/\.(jpe?g|png)$/i.test(file.name)) {
+
+      // The backend checks the MIME type, not the extension
+      if (!/\.(jpe?g|png)$/i.test(file.name) || !ALLOWED_IMAGE_TYPES.includes(file.type)) {
         toast({
           title: "Invalid File",
           description: "Please select a JPEG or PNG image.",
@@ -932,11 +939,18 @@ export default function CreateEvent({
   const handleCarouselImageAdd = async (files: FileList | null) => {
     if (!files) return
 
+    // The create endpoints accept at most 5 carousel images (edit mode uploads them one by one)
+    let remainingSlots = editMode ? Infinity : MAX_UPLOAD_IMAGES - carouselImages.length
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+      if (remainingSlots <= 0) {
+        toast({ title: "Too Many Images", description: `You can upload up to ${MAX_UPLOAD_IMAGES} carousel images.`, variant: "destructive" })
+        break
+      }
       const isValid = await validateImage(file, { width: 612, height: 408 })
-      
+
       if (isValid) {
+        remainingSlots--
         setCarouselImages(prev => [...prev, file])
         
         const reader = new FileReader()
@@ -951,11 +965,17 @@ export default function CreateEvent({
   const handleGalleryImageAdd = async (files: FileList | null) => {
     if (!files) return
 
+    let remainingSlots = editMode ? Infinity : MAX_UPLOAD_IMAGES - galleryImages.length
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
+      if (remainingSlots <= 0) {
+        toast({ title: "Too Many Images", description: `You can upload up to ${MAX_UPLOAD_IMAGES} gallery images.`, variant: "destructive" })
+        break
+      }
       const isValid = await validateImage(file)
-      
+
       if (isValid) {
+        remainingSlots--
         setGalleryImages(prev => [...prev, file])
         
         const reader = new FileReader()
@@ -989,6 +1009,155 @@ export default function CreateEvent({
   const removeGalleryImage = (index: number) => {
     setGalleryImages(prev => prev.filter((_, i) => i !== index))
     setGalleryImagePreviews(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Edit mode: saved images are removed on the server right away (the update endpoints ignore images)
+  const deleteSavedImage = async (kind: "carousel" | "gallery", imageId: string) => {
+    if (!eventId) return
+    const authToken = getValidToken()
+    if (!authToken) {
+      toast({ title: "Authentication Error", description: "Please log in again", variant: "destructive" })
+      return
+    }
+    try {
+      setDeletingImageId(imageId)
+      const endpoint = kind === "carousel" ? eventEndPoint.DELETE_EVENT_CAROUSEL_IMAGE : eventEndPoint.DELETE_EVENT_GALLERY_IMAGE
+      const response = await authFetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ event_id: eventId, image_id: imageId }),
+      })
+      const data = await handleApiResponse(response)
+      if (kind === "carousel") {
+        setExistingCarouselImages(prev => prev.filter(img => img._id !== imageId))
+      } else {
+        setExistingGalleryImages(prev => prev.filter(img => img._id !== imageId))
+      }
+      toast({ title: "Success", description: data.message || "Image deleted successfully" })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: getApiErrorMessage(error, "Failed to delete image"),
+        variant: "destructive"
+      })
+    } finally {
+      setDeletingImageId(null)
+    }
+  }
+
+  // Edit mode: new images go through the single-image upload endpoints
+  const uploadNewImages = async (authToken: string): Promise<string[]> => {
+    const errors: string[] = []
+    const uploads: Array<{ kind: "carousel" | "gallery"; files: File[] }> = [
+      { kind: "carousel", files: carouselImages },
+      { kind: "gallery", files: galleryImages },
+    ]
+    for (const { kind, files } of uploads) {
+      const uploaded: File[] = []
+      for (const file of files) {
+        const formData = new FormData()
+        formData.append("event_id", eventId as string)
+        formData.append(kind === "carousel" ? "CarouselImages" : "GalleryImage", file)
+        try {
+          const response = await authFetch(kind === "carousel" ? eventEndPoint.UPDATE_EVENT_CAROUSEL_IMAGE : eventEndPoint.UPDATE_EVENT_GALLERY_IMAGE, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${authToken}` },
+            body: formData,
+          })
+          const data = await handleApiResponse(response)
+          uploaded.push(file)
+          // Both endpoints return the event's full image list after the upload
+          if (Array.isArray(data.data)) {
+            if (kind === "carousel") setExistingCarouselImages(data.data)
+            else setExistingGalleryImages(data.data)
+          }
+        } catch (error) {
+          errors.push(`${kind === "carousel" ? "Carousel" : "Gallery"} image "${file.name}": ${getApiErrorMessage(error, "upload failed")}`)
+        }
+      }
+      // Drop the uploaded files from the pending list so a retry doesn't upload them twice
+      const keep = files.map((file) => !uploaded.includes(file))
+      if (kind === "carousel") {
+        setCarouselImages(prev => prev.filter((_, i) => keep[i] ?? true))
+        setCarouselImagePreviews(prev => prev.filter((_, i) => keep[i] ?? true))
+      } else {
+        setGalleryImages(prev => prev.filter((_, i) => keep[i] ?? true))
+        setGalleryImagePreviews(prev => prev.filter((_, i) => keep[i] ?? true))
+      }
+    }
+    return errors
+  }
+
+  // Edit mode: the update endpoints ignore EventDateTime, so apply date changes through the
+  // add/update/delete DateTime endpoints. Adds run before deletes because the backend refuses to
+  // delete an event's last date. Returns the error messages of the calls that failed.
+  const syncEventDateTimes = async (events: EventDateTime[], authToken: string): Promise<string[]> => {
+    const errors: string[] = []
+    const saved = savedEventDatesRef.current
+    const nextEvents = events.map((event) => ({ ...event }))
+    const postDateTime = async (endpoint: string, body: Record<string, string>) => {
+      const response = await authFetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ event_id: eventId, ...body }),
+      })
+      return handleApiResponse(response)
+    }
+    const describe = (event: EventDateTime) => `${event.EventStartDate} ${event.EventStartTime.slice(0, 5)}`
+    const payloadOf = (event: EventDateTime) => ({
+      EventStartDate: event.EventStartDate,
+      EventStartTime: event.EventStartTime,
+      EventEndDate: event.EventEndDate,
+      EventEndTime: event.EventEndTime,
+    })
+
+    for (const event of nextEvents) {
+      if (event._id) continue
+      try {
+        const data = await postDateTime(eventEndPoint.CREATE_NEW_EVENT_DATE_AND_TIME, payloadOf(event))
+        event._id = data?.data?._id
+        if (event._id) saved.push({ ...event })
+      } catch (error) {
+        errors.push(`Add date ${describe(event)}: ${getApiErrorMessage(error, "failed")}`)
+      }
+    }
+
+    for (const event of nextEvents) {
+      const original = event._id ? saved.find((item) => item._id === event._id) : undefined
+      if (!original) continue
+      const changed = (["EventStartDate", "EventStartTime", "EventEndDate", "EventEndTime"] as const)
+        .some((key) => original[key] !== event[key])
+      if (!changed) continue
+      try {
+        await postDateTime(eventEndPoint.UPDATE_EVENT_DATE_AND_TIME, { eventDateTime_Id: event._id as string, ...payloadOf(event) })
+        Object.assign(original, payloadOf(event))
+      } catch (error) {
+        errors.push(`Update date ${describe(event)}: ${getApiErrorMessage(error, "failed")}`)
+      }
+    }
+
+    const keptIds = new Set(nextEvents.map((event) => event._id).filter(Boolean))
+    for (const original of [...saved]) {
+      if (!original._id || keptIds.has(original._id)) continue
+      try {
+        await postDateTime(eventEndPoint.EVENT_DELETE_DATE_AND_TIME, { eventDateTime_Id: original._id })
+        saved.splice(saved.indexOf(original), 1)
+      } catch (error) {
+        errors.push(`Remove date ${describe(original)}: ${getApiErrorMessage(error, "failed")}`)
+        // Still on the server, so keep showing it
+        nextEvents.push({ ...original })
+      }
+    }
+
+    savedEventDatesRef.current = saved
+    formikSetFieldValue?.("events", nextEvents)
+    return errors
   }
 
   // Date/Time handling
@@ -1197,6 +1366,8 @@ export default function CreateEvent({
     }
 
     const updatedEvent: EventDateTime = {
+      // Keep the saved date's id so edit mode updates it instead of re-adding it
+      _id: editingEventIndex !== null ? values.events[editingEventIndex]?._id : undefined,
       EventStartDate: tempEventDate.startDate,
       EventStartTime: normalizedStartTime,
       EventEndDate: tempEventDate.endDate,
@@ -1297,7 +1468,7 @@ export default function CreateEvent({
 
       // Validate images - carousel images are only required by the create endpoints
       // (the update endpoints do not accept carousel images at all)
-      if (!editMode && carouselImages.length === 0) {
+      if (carouselImages.length === 0 && (!editMode || existingCarouselImages.length === 0)) {
         toast({
           title: "Validation Error",
           description: "Please upload at least one carousel image",
@@ -1306,8 +1477,9 @@ export default function CreateEvent({
         return
       }
 
-      // Validate EventDateTime - create endpoints require at least one event date/time
-      if (!editMode && (!values.events || values.events.length === 0)) {
+      // Validate EventDateTime - an event always needs at least one date/time (the backend
+      // also refuses to delete an event's last date)
+      if (!values.events || values.events.length === 0) {
         toast({
           title: "Validation Error",
           description: "Please add at least one event date and time",
@@ -1324,15 +1496,15 @@ export default function CreateEvent({
         submitData.append("event_id", eventId)
       }
       
-      // Add carousel images (only if new ones are uploaded)
-      if (carouselImages.length > 0) {
+      // Carousel/gallery images are only accepted by the create endpoints; the update endpoints'
+      // multer only allows VenueLayout, so edit mode uploads them separately (uploadNewImages)
+      if (!editMode && carouselImages.length > 0) {
         carouselImages.forEach((image, index) => {
           submitData.append("CarouselImages", image, `carousel_${index}.${image.name.split('.').pop()}`)
         })
       }
 
-      // Add gallery images if any
-      if (galleryImages.length > 0) {
+      if (!editMode && galleryImages.length > 0) {
         galleryImages.forEach((image, index) => {
           submitData.append("GalleryImages", image, `gallery_${index}.${image.name.split('.').pop()}`)
         })
@@ -1360,12 +1532,19 @@ export default function CreateEvent({
         submitData.append("FeaturedEventFlag", values.isFeatured ? "1" : "0")
       }
       
-      // ConvinienceFeeUnit and ConvinienceFeeValue - always include so they are not lost on update
-      submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
-      submitData.append("ConvinienceFeeValue", String(values.feevalue != null ? values.feevalue : 0))
-      
+      // Convenience fee fields only exist in the superAdmin create/update validators;
+      // the organizer validators reject them
+      if (role === "superadmin") {
+        submitData.append("ConvinienceFeeUnit", (values.feeunit || ConvinienceFeeUnit.Percentage).toString())
+        submitData.append("ConvinienceFeeValue", String(values.feevalue != null ? values.feevalue : 0))
+      }
+
       // Set the correct status value based on the eventStatus parameter
       submitData.append("Status", eventStatus.toString())
+      // superAdmin/update requires a remark whenever Status is Rejected
+      if (editMode && eventStatus === EventStatus.ReviewRejected && existingEventData?.EventRejectRemark) {
+        submitData.append("EventRejectRemark", existingEventData.EventRejectRemark)
+      }
 
       // Add conditional fields only if they have values
       // Always append video URL even if empty (backend expects this field)
@@ -1545,15 +1724,39 @@ export default function CreateEvent({
       } else {
         eventEndpoint = role === "superadmin" ? "/events/superAdmin/create" : "/events/organizer/create"
       }
-        const response = await authFetch(getApiEndpoint(eventEndpoint), {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: submitData,
-      })
 
-      const data = await handleApiResponse(response)
+      // Edit mode: images and dates go through their own endpoints. They run before the main
+      // update because adding/removing dates is refused once the event is Published.
+      const editErrors: string[] = []
+      if (editMode && eventId) {
+        editErrors.push(...await uploadNewImages(authToken))
+        editErrors.push(...await syncEventDateTimes(values.events, authToken))
+      }
+
+      let data: any
+      try {
+        const response = await authFetch(getApiEndpoint(eventEndpoint), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: submitData,
+        })
+        data = await handleApiResponse(response)
+      } catch (error) {
+        throw new Error([getApiErrorMessage(error, editMode ? "Failed to update event" : "Failed to create event"), ...editErrors].join(" • "))
+      }
+
+      if (editErrors.length > 0) {
+        // Stay on the page: the failed changes are still in the form and can be retried
+        toast({
+          title: "Event saved, but some changes failed",
+          description: editErrors.join(" • "),
+          variant: "destructive"
+        })
+        return
+      }
+
       toast({
         title: "Success",
         description: data.message || (editMode ? "Event updated successfully" : "Event created successfully"),
@@ -2071,11 +2274,8 @@ export default function CreateEvent({
                                 variant="destructive"
                                 size="sm"
                                 className="absolute top-1 right-1 h-6 w-6 p-0"
-                                onClick={() => {
-                                  setExistingCarouselImages(prev => 
-                                    prev.filter(img => img._id !== image._id)
-                                  )
-                                }}
+                                disabled={deletingImageId !== null}
+                                onClick={() => deleteSavedImage("carousel", image._id)}
                               >
                                 <X className="h-3 w-3" />
                               </Button>
@@ -2361,51 +2561,24 @@ export default function CreateEvent({
                             Venue details will be announced later. Please provide state and city information.
                           </div>
                           
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                              <Label>State {!editMode && <span className="text-red-500">*</span>}</Label>
-                              <Select
-                                options={states}
-                                value={states.find(s => s.value === values.stateIsoCode)}
-                                onChange={(selected) => {
-                                  setFieldValue("stateIsoCode", selected?.value || "")
-                                  setFieldValue("stateName", selected?.label || "")
-                                  if (selected?.value) {
-                                    fetchCities(selected.value)
-                                  }
-                                }}
-                                placeholder="Select state..."
-                                isLoading={loadingStates}
-                                className="basic-single"
-                                classNamePrefix="select"
-                                styles={getSelectStyles()}
-                              />
-                              {touched.stateIsoCode && errors.stateIsoCode && (
-                                <p className="text-sm text-red-600">{errors.stateIsoCode}</p>
-                              )}
-                            </div>
-
-                            <div className="space-y-2">
-                              <Label>City {!editMode && <span className="text-red-500">*</span>}</Label>
-                              <Select
-                                options={cities}
-                                value={cities.find(c => c.value === values.cityIsoCode)}
-                                onChange={(selected) => {
-                                  setFieldValue("cityIsoCode", selected?.value || "")
-                                  setFieldValue("cityName", selected?.label || "")
-                                }}
-                                placeholder="Select city..."
-                                isLoading={loadingCities}
-                                isDisabled={!values.stateIsoCode}
-                                className="basic-single"
-                                classNamePrefix="select"
-                                styles={getSelectStyles()}
-                              />
-                              {touched.cityIsoCode && errors.cityIsoCode && (
-                                <p className="text-sm text-red-600">{errors.cityIsoCode}</p>
-                              )}
-                            </div>
-                          </div>
+                          {/* Same state/city source as the venue/organizer forms; keys map to VenueToBeAnnounced* */}
+                          <AddressSelector
+                            stateIsoCode={values.stateIsoCode}
+                            setStateIsoCode={(value) => setFieldValue("stateIsoCode", value)}
+                            stateName={values.stateName}
+                            setStateName={(value) => setFieldValue("stateName", value)}
+                            cityIsoCode={values.cityIsoCode}
+                            setCityIsoCode={(value) => setFieldValue("cityIsoCode", value)}
+                            cityName={values.cityName}
+                            setCityName={(value) => setFieldValue("cityName", value)}
+                            required={!editMode}
+                          />
+                          {(touched.stateIsoCode || touched.stateName) && (errors.stateIsoCode || errors.stateName) && (
+                            <p className="text-sm text-red-600">{errors.stateIsoCode || errors.stateName}</p>
+                          )}
+                          {(touched.cityIsoCode || touched.cityName) && (errors.cityIsoCode || errors.cityName) && (
+                            <p className="text-sm text-red-600">{errors.cityIsoCode || errors.cityName}</p>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2926,7 +3099,38 @@ export default function CreateEvent({
                         </label>
                       </div>
                     </div>
-                    
+
+                    {/* Saved gallery images (edit mode) */}
+                    {editMode && existingGalleryImages.length > 0 && (
+                      <div className="mt-4">
+                        <h4 className="text-sm font-medium text-foreground mb-2">Current Images</h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          {existingGalleryImages.map((image, index) => (
+                            <div key={image._id} className="relative">
+                              <img
+                                src={`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'}/${image.image_path}`}
+                                alt={`Existing Gallery ${index + 1}`}
+                                className="w-full h-24 object-cover rounded"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = "/placeholder.jpg"
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                size="sm"
+                                className="absolute top-1 right-1 h-6 w-6 p-0"
+                                disabled={deletingImageId !== null}
+                                onClick={() => deleteSavedImage("gallery", image._id)}
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {galleryImagePreviews.length > 0 && (
                       <div className="mt-4 grid grid-cols-3 gap-4">
                         {galleryImagePreviews.map((image, index) => (
@@ -3081,8 +3285,8 @@ export default function CreateEvent({
                 ) : (
                   <>
                     {/* Normal Save/Publish Buttons */}
-                    {/* Show "Save as Draft" only if NOT (superadmin in edit mode) AND NOT (organizer with rejected event) */}
-                    {!(role === "superadmin" && editMode) && !(role === "organizer" && editMode && isEventRejected()) && (
+                    {/* Show "Save as Draft" only if NOT (superadmin editing a non-draft) AND NOT (organizer with rejected event) */}
+                    {!(role === "superadmin" && editMode && existingStatus !== EventStatus.Draft) && !(role === "organizer" && editMode && isEventRejected()) && (
                       <Button
                         type="button"
                         variant="outline"
@@ -3091,17 +3295,24 @@ export default function CreateEvent({
                         Save as Draft
                       </Button>
                     )}
-                    <Button
-                      type="button"
-                      onClick={() => validateAndSubmit(role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
-                    >
-                      {role === "organizer" 
-                        ? "Send to Review" 
-                        : (editMode && role === "superadmin") 
-                          ? "Update" 
-                          : "Publish Event"
-                      }
-                    </Button>
+                    {/* SuperAdmin editing a Published/Rejected event: "Update" keeps its current status */}
+                    {role === "superadmin" && editMode && existingStatus !== EventStatus.Draft && (
+                      <Button
+                        type="button"
+                        variant={existingStatus === EventStatus.ReviewRejected ? "outline" : "default"}
+                        onClick={() => validateAndSubmit(superAdminUpdateStatus)}
+                      >
+                        Update
+                      </Button>
+                    )}
+                    {!(role === "superadmin" && editMode && existingStatus !== EventStatus.Draft && existingStatus !== EventStatus.ReviewRejected) && (
+                      <Button
+                        type="button"
+                        onClick={() => validateAndSubmit(role === "organizer" ? EventStatus.InReview : EventStatus.Published)}
+                      >
+                        {role === "organizer" ? "Send to Review" : "Publish Event"}
+                      </Button>
+                    )}
                   </>
                 )}
               </div>
@@ -3275,7 +3486,7 @@ export default function CreateEvent({
                       type="file"
                       accept="image/jpeg,image/png"
                       multiple
-                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                      onChange={(e) => setFieldValue("Images", pickUploadImages(e.target.files))}
                     />
                     {touched.Images && errors.Images && (
                       <p className="text-sm text-red-600">{String(errors.Images)}</p>
@@ -3600,7 +3811,7 @@ export default function CreateEvent({
                       type="file"
                       accept="image/jpeg,image/png"
                       multiple
-                      onChange={(e) => setFieldValue("CategoryImages", Array.from(e.target.files || []))}
+                      onChange={(e) => setFieldValue("CategoryImages", pickUploadImages(e.target.files))}
                     />
                     {touched.CategoryImages && errors.CategoryImages && (
                       <p className="text-sm text-red-600">{String(errors.CategoryImages)}</p>
@@ -3725,7 +3936,7 @@ export default function CreateEvent({
                       type="file"
                       accept="image/jpeg,image/png"
                       multiple
-                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                      onChange={(e) => setFieldValue("Images", pickUploadImages(e.target.files))}
                     />
                     {touched.Images && errors.Images && (
                       <p className="text-sm text-red-600">{String(errors.Images)}</p>
@@ -3758,7 +3969,7 @@ export default function CreateEvent({
                 Images: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Genre name is required").min(2, "Genre name must be at least 2 characters"),
+                Name: Yup.string().required("Genre name is required").min(3, "Genre name must be at least 3 characters").max(50, "Genre name must not exceed 50 characters"),
                 Description: Yup.string().trim().required("Genre description is required"),
                 Images: Yup.array().min(1, "At least one genre image is required")
               })}
@@ -3831,7 +4042,7 @@ export default function CreateEvent({
                       type="file"
                       accept="image/jpeg,image/png"
                       multiple
-                      onChange={(e) => setFieldValue("Images", Array.from(e.target.files || []))}
+                      onChange={(e) => setFieldValue("Images", pickUploadImages(e.target.files))}
                     />
                     {touched.Images && errors.Images && (
                       <p className="text-sm text-red-600">{String(errors.Images)}</p>
@@ -3865,7 +4076,7 @@ export default function CreateEvent({
               }}
               // Backend (validateEventTourCreation) only accepts Name + Description, plus EventTourImages files
               validationSchema={Yup.object({
-                Name: Yup.string().required("Tour name is required").min(3, "Tour name must be at least 3 characters"),
+                Name: Yup.string().required("Tour name is required").min(5, "Tour name must be at least 5 characters").max(50, "Tour name must not exceed 50 characters"),
                 Description: Yup.string().trim().required("Tour description is required"),
                 EventTourImages: Yup.array().min(1, "At least one tour image is required")
               })}
@@ -3940,7 +4151,7 @@ export default function CreateEvent({
                       type="file"
                       accept="image/jpeg,image/png"
                       multiple
-                      onChange={(e) => setFieldValue("EventTourImages", Array.from(e.target.files || []))}
+                      onChange={(e) => setFieldValue("EventTourImages", pickUploadImages(e.target.files))}
                     />
                     {touched.EventTourImages && errors.EventTourImages && (
                       <p className="text-sm text-red-600">{String(errors.EventTourImages)}</p>

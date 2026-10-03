@@ -91,6 +91,13 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 // blocked here before the request was ever made.
 const MAX_BULK_TICKETS_PER_BATCH = 50
 
+// getAllEventTickets / getTicketsByFilter page their results (10 rows by default),
+// so the list is fetched page by page at this size until every ticket is loaded.
+const TICKETS_PAGE_SIZE = 100
+
+// BulkTicketStatus on the backend: Booked = 1, Cancelled = 2.
+const BULK_TICKET_CANCELLED = 2
+
 // Extended interfaces to handle both old and new API response structures
 interface ExtendedNormalTicket extends NormalTicket {
   // New field names from backend response
@@ -227,6 +234,12 @@ export default function TicketsPage() {
   const [activeTab, setActiveTab] = React.useState("normal")
   const [nameFilter, setNameFilter] = React.useState<string>("all")
   const [dateFilter, setDateFilter] = React.useState<string>("all")
+  // TicketNamesArray from the unfiltered list endpoints, so the name filter keeps
+  // offering every name even while a filter narrows the rows.
+  const [normalTicketNames, setNormalTicketNames] = React.useState<string[]>([])
+  const [bulkTicketNames, setBulkTicketNames] = React.useState<string[]>([])
+  const [pendingBulkCancel, setPendingBulkCancel] = React.useState<{ batchId: string; ticketName: string } | null>(null)
+  const [bulkCancelling, setBulkCancelling] = React.useState(false)
   
   // Track which tabs have been loaded to avoid unnecessary API calls
   const [loadedTabs, setLoadedTabs] = React.useState<Set<string>>(new Set())
@@ -284,10 +297,13 @@ export default function TicketsPage() {
   // explain itself instead of silently greying out. Price 0 is valid here —
   // complimentary bulk tickets are a normal case.
   const bulkFormIssues = React.useMemo(() => {
+    // Length/pattern rules mirror validateBulkTicketBooking on the backend.
     const issues: string[] = []
-    if (!bulkFormData.TicketName.trim()) issues.push("Ticket name")
-    if (!bulkFormData.CustomerName.trim()) issues.push("Customer name")
-    if (!bulkFormData.PhoneNumber.trim()) issues.push("Phone number")
+    const ticketName = bulkFormData.TicketName.trim()
+    const customerName = bulkFormData.CustomerName.trim().replace(/\s+/g, " ")
+    if (ticketName.length < 2 || ticketName.length > 50) issues.push("Ticket name (2-50 characters)")
+    if (customerName.length < 2 || customerName.length > 50) issues.push("Customer name (2-50 characters)")
+    if (!/^\d{10}$/.test(bulkFormData.PhoneNumber.replace(/\D/g, ""))) issues.push("Phone number (10 digits)")
     if (!bulkFormData.Email.trim()) issues.push("Email")
     if (!bulkFormData.EventDateTime_id) {
       issues.push(eventDateTimes.length === 0 ? "Event date (none loaded for this event)" : "Event date")
@@ -706,7 +722,8 @@ export default function TicketsPage() {
           // Determine ticket type based on event type and date times
           let automaticTicketType = 1 // Default to Single Day
           const eventDateTimes = data.data.EventDateTime || []
-          const isMultiDate = eventDateTimes.length > 1 || data.data.EventType === 2
+          // EventType 2 is "Registration", not multi-day — only the date count matters
+          const isMultiDate = eventDateTimes.length > 1
           
           setIsMultiDateEvent(isMultiDate)
           
@@ -770,6 +787,37 @@ export default function TicketsPage() {
     }
   }
 
+  const requestTicketsPage = (url: string, payload: Record<string, any>, page: number, authToken: string) =>
+    authFetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ ...payload, page, limit: TICKETS_PAGE_SIZE }),
+    })
+
+  // Pages 2..totalPages of a ticket list whose first page is already in hand.
+  const fetchRemainingTicketPages = async (
+    url: string,
+    payload: Record<string, any>,
+    totalPages: unknown,
+    authToken: string,
+    pickRows: (data: any) => any[] | undefined,
+  ): Promise<any[]> => {
+    const pages = Number(totalPages) || 1
+    if (pages <= 1) return []
+    const rest = await Promise.all(
+      Array.from({ length: pages - 1 }, async (_, i) => {
+        const response = await requestTicketsPage(url, payload, i + 2, authToken)
+        if (!response.ok) throw new Error(`Failed to load tickets page ${i + 2} (HTTP ${response.status})`)
+        const json = await response.json()
+        return pickRows(json?.data) || []
+      })
+    )
+    return rest.flat()
+  }
+
   const fetchNormalTickets = async () => {
     try {
       setLoading(true)
@@ -777,7 +825,7 @@ export default function TicketsPage() {
       if (!user || !authToken) return
 
       console.log("Fetching normal tickets for eventId:", eventId)
-      
+
       const payload = {
         event_id: eventId,
         AdminRole: getNumericRole(role),
@@ -786,14 +834,7 @@ export default function TicketsPage() {
 
       console.log("Normal tickets API Payload:", JSON.stringify(payload, null, 2))
 
-      const normalTicketsResponse = await authFetch(ticketEndPoint.GET_ALL_EVENT_TICKETS, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(payload),
-      })
+      const normalTicketsResponse = await requestTicketsPage(ticketEndPoint.GET_ALL_EVENT_TICKETS, payload, 1, authToken)
 
       console.log("Normal tickets response status:", normalTicketsResponse.status)
 
@@ -811,7 +852,17 @@ export default function TicketsPage() {
               console.log("First ticket availability (EventTicketStatus):", normalData.data.EventTicketsData[0].EventTicketStatus)
               console.log("First ticket availability (EventTicketAvailability):", normalData.data.EventTicketsData[0].EventTicketAvailability)
             }
-            setNormalTickets(normalData.data.EventTicketsData || [])
+            const remainingTickets = await fetchRemainingTicketPages(
+              ticketEndPoint.GET_ALL_EVENT_TICKETS,
+              payload,
+              normalData.data.totalPages,
+              authToken,
+              (data) => data?.EventTicketsData,
+            )
+            setNormalTickets([...(normalData.data.EventTicketsData || []), ...remainingTickets])
+            if (Array.isArray(normalData.data.TicketNamesArray)) {
+              setNormalTicketNames(normalData.data.TicketNamesArray.filter(Boolean))
+            }
             applyPromoterNamesFromTicketsResponse(normalData.data.EventPromotersData)
           } else {
             console.log("Using old response structure - direct data")
@@ -856,7 +907,6 @@ export default function TicketsPage() {
 
       // Add name filter if not "all"
       if (nameFilter !== "all") {
-        filterPayload.name = nameFilter
         filterPayload.ticketName = nameFilter
       }
 
@@ -867,28 +917,32 @@ export default function TicketsPage() {
 
       console.log("Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
-      const response = await authFetch(`${BASE_URL}/eventstickets/getTicketsByFilter`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify(filterPayload),
-      })
+      const response = await requestTicketsPage(ticketEndPoint.SEARCH_TICKETS, filterPayload, 1, authToken)
 
       console.log("Filter API response status:", response.status)
+
+      // getTicketsByFilter answers 404 "Tickets not found" when nothing matches
+      if (response.status === 404) {
+        setNormalTickets([])
+        return
+      }
 
       if (response.ok) {
         const data = await response.json()
         console.log("Filter API response data:", JSON.stringify(data, null, 2))
-        
+
         if (!data.error && data.data) {
           // API returns data.TicektsData (note the typo in API)
-          const ticketsData = data.data.TicektsData || data.data.TicketsData || []
+          const pickRows = (d: any) => d?.TicektsData || d?.TicketsData
+          const remainingTickets = await fetchRemainingTicketPages(
+            ticketEndPoint.SEARCH_TICKETS,
+            filterPayload,
+            data.data.totalPages,
+            authToken,
+            pickRows,
+          )
+          const ticketsData = [...(pickRows(data.data) || []), ...remainingTickets]
           console.log("Filtered tickets count:", ticketsData.length)
-          if (ticketsData.length > 0) {
-            console.log("First filtered ticket sample:", JSON.stringify(ticketsData[0], null, 2))
-          }
           setNormalTickets(ticketsData)
         } else {
           console.error("Filter API returned error:", data)
@@ -897,6 +951,8 @@ export default function TicketsPage() {
       } else {
         const errorText = await response.text()
         console.error("Filter API call failed:", response.status, errorText)
+        // Don't leave the previous (unfiltered) rows looking like a filter result
+        setNormalTickets([])
         toast({
           title: "Error",
           description: "Failed to load filtered tickets",
@@ -918,7 +974,9 @@ export default function TicketsPage() {
   // getBulkTicketsOfEvent answers 404 / { error: true, message: "...not found" } for an
   // event that simply has no bulk tickets yet, so that case is an empty list, not a
   // failure. Anything else is surfaced with the backend's own message.
-  const parseBulkTicketsResponse = async (response: Response): Promise<ExtendedBulkTicket[]> => {
+  const parseBulkTicketsResponse = async (
+    response: Response,
+  ): Promise<{ tickets: ExtendedBulkTicket[]; ticketNames?: string[] }> => {
     let payload: any = null
     try {
       payload = await response.json()
@@ -931,7 +989,7 @@ export default function TicketsPage() {
     if (!response.ok || payload?.error) {
       if (response.status === 404 || /not\s*found/i.test(message)) {
         console.log("No bulk tickets for this event yet:", message || response.status)
-        return []
+        return { tickets: [], ticketNames: [] }
       }
       if (response.status === 401 || response.status === 403) {
         throw new Error("Your session has expired. Please sign in again.")
@@ -940,9 +998,15 @@ export default function TicketsPage() {
     }
 
     const data = payload?.data
-    if (Array.isArray(data?.EventBulkTicketsData)) return data.EventBulkTicketsData
-    if (Array.isArray(data)) return data
-    return []
+    // getBulkTicketsOfEvent wraps rows with TicketNamesArray; getBulkTicketsByFilter returns a bare array
+    if (Array.isArray(data?.EventBulkTicketsData)) {
+      return {
+        tickets: data.EventBulkTicketsData,
+        ticketNames: Array.isArray(data.TicketNamesArray) ? data.TicketNamesArray.filter(Boolean) : undefined,
+      }
+    }
+    if (Array.isArray(data)) return { tickets: data }
+    return { tickets: [] }
   }
 
   const fetchBulkTickets = async () => {
@@ -968,9 +1032,10 @@ export default function TicketsPage() {
 
       console.log("Bulk tickets response status:", bulkTicketsResponse.status)
 
-      const tickets = await parseBulkTicketsResponse(bulkTicketsResponse)
+      const { tickets, ticketNames } = await parseBulkTicketsResponse(bulkTicketsResponse)
       console.log("Bulk tickets loaded:", tickets.length)
       setBulkTickets(tickets)
+      if (ticketNames) setBulkTicketNames(ticketNames)
     } catch (error) {
       console.error("Error fetching bulk tickets:", error)
       setBulkTickets([])
@@ -990,20 +1055,23 @@ export default function TicketsPage() {
       const authToken = getValidToken()
       if (!user || !authToken) return
 
-      // Build filter payload for bulk tickets
+      // getBulkTicketsByFilter reads { event_id, TicketName, eventDateTime } where
+      // eventDateTime is an EventDateTime _id; send only the active filters.
       const filterPayload: any = {
         event_id: eventId,
       }
 
-      // Add name filter if not "all"
       if (nameFilter !== "all") {
-        filterPayload.name = nameFilter
-        filterPayload.ticketName = nameFilter
+        filterPayload.TicketName = nameFilter
+      }
+
+      if (dateFilter !== "all") {
+        filterPayload.eventDateTime = dateFilter
       }
 
       console.log("Bulk Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
-      const response = await authFetch(ticketEndPoint.GET_ALL_BULK_TICKETS_BY_EVENT, {
+      const response = await authFetch(ticketEndPoint.SEARCH_BULK_TICKETS, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1014,7 +1082,7 @@ export default function TicketsPage() {
 
       console.log("Bulk Filter API response status:", response.status)
 
-      const tickets = await parseBulkTicketsResponse(response)
+      const { tickets } = await parseBulkTicketsResponse(response)
       console.log("Filtered bulk tickets count:", tickets.length)
       setBulkTickets(tickets)
     } catch (error) {
@@ -1374,7 +1442,8 @@ export default function TicketsPage() {
           event_id: eventId,
           TicketName: bulkFormData.TicketName.trim(),
           CustomerName: bulkFormData.CustomerName.trim().replace(/\s+/g, " "),
-          PhoneNumber: bulkFormData.PhoneNumber.trim(),
+          // Joi expects exactly 10 digits, so strip spaces/dashes the user typed
+          PhoneNumber: bulkFormData.PhoneNumber.replace(/\D/g, ""),
           Email: bulkFormData.Email.trim(),
           EventDateTime_id: bulkFormData.EventDateTime_id,
           Quantity: bulkFormData.TotalQuantity.toString(),
@@ -1682,11 +1751,21 @@ export default function TicketsPage() {
     }
   }
 
+  // Reload the bulk list through the filter API when a Name/Date filter is active
+  const refreshBulkTickets = () => {
+    if (nameFilter !== "all" || dateFilter !== "all") {
+      fetchBulkTicketsByFilter()
+    } else {
+      fetchBulkTickets()
+    }
+  }
+
   // Helper functions for bulk ticket actions
   const handleCancelBulkTicket = async (batchId: string) => {
     try {
       const authToken = getValidToken()
       if (!user || !authToken) return
+      setBulkCancelling(true)
 
       console.log("🚫 Cancelling bulk ticket:", { batchId })
 
@@ -1705,12 +1784,12 @@ export default function TicketsPage() {
       const data = await response.json()
       console.log("📝 Cancel bulk ticket API response:", data)
 
-      if (response.ok) {
+      if (response.ok && !data?.error) {
         // Update the bulk ticket status locally immediately for better UX
-        setBulkTickets(prevTickets => 
-          prevTickets.map(ticket => 
+        setBulkTickets(prevTickets =>
+          prevTickets.map(ticket =>
             (ticket.BatchId === batchId || ticket._id === batchId)
-              ? { ...ticket, Status: 2, BulkTicketStatus: 2, IsCancelled: true }  // Status 2 typically means cancelled
+              ? { ...ticket, Status: BULK_TICKET_CANCELLED, BulkTicketStatus: BULK_TICKET_CANCELLED }
               : ticket
           )
         )
@@ -1719,11 +1798,9 @@ export default function TicketsPage() {
           title: "Success",
           description: data.message || "Bulk ticket cancelled successfully",
         })
-        
-        // Reload the page after a short delay to ensure backend has processed
-        setTimeout(() => {
-          window.location.reload()
-        }, 1000)
+
+        // Re-read the list (a full page reload would drop back to the Normal tab)
+        refreshBulkTickets()
       } else {
         throw new Error(data.message || "Failed to cancel bulk ticket")
       }
@@ -1734,6 +1811,9 @@ export default function TicketsPage() {
         description: error instanceof Error ? error.message : "Failed to cancel bulk ticket",
         variant: "destructive",
       })
+    } finally {
+      setBulkCancelling(false)
+      setPendingBulkCancel(null)
     }
   }
 
@@ -1824,17 +1904,8 @@ export default function TicketsPage() {
     if (!user || !eventId || activeTab !== "bulk") return
 
     // No debounce needed since we're using dropdowns
-    // Check if any filters are active (bulk tickets only have name filter)
-    const hasActiveFilters = nameFilter !== "all"
-    
-    if (hasActiveFilters) {
-      // Use filter API when filters are active
-      fetchBulkTicketsByFilter()
-    } else {
-      // Use regular fetch when no filters are active
-      fetchBulkTickets()
-    }
-  }, [nameFilter, activeTab, eventId, user])
+    refreshBulkTickets()
+  }, [nameFilter, dateFilter, activeTab, eventId, user])
 
   // Handle tab changes - load data only when switching to a new tab
   const handleTabChange = (newTab: string) => {
@@ -2049,13 +2120,16 @@ export default function TicketsPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Names</SelectItem>
-                  {/* Get unique ticket names from current tickets */}
-                  {Array.from(new Set(
-                    (activeTab === "normal" ? normalTickets : bulkTickets).map((ticket: any) => 
-                      activeTab === "normal" 
-                        ? (ticket.Name || ticket.TicketName)
-                        : (ticket.TicketName || ticket.BulkTicketName)
-                    ).filter(Boolean)
+                  {/* Names come from the unfiltered list's TicketNamesArray; fall back to
+                      the loaded rows only if the backend didn't send one */}
+                  {Array.from(new Set<string>(
+                    (activeTab === "normal" ? normalTicketNames : bulkTicketNames).length > 0
+                      ? (activeTab === "normal" ? normalTicketNames : bulkTicketNames)
+                      : (activeTab === "normal" ? normalTickets : bulkTickets).map((ticket: any) =>
+                          activeTab === "normal"
+                            ? (ticket.Name || ticket.TicketName)
+                            : (ticket.TicketName || ticket.BulkTicketName)
+                        ).filter(Boolean)
                   )).map((name) => (
                     <SelectItem key={name} value={name}>
                       {name}
@@ -2146,10 +2220,11 @@ export default function TicketsPage() {
                     ) : (                      filteredNormalTickets.map((ticket) => {
                         const extendedTicket = ticket as ExtendedNormalTicket
                         
-                        // Get the event date for this ticket
-                        const ticketEventDate = eventDateTimes.find(
-                          (edt) => edt._id === ticket.EventDateTime_id
-                        )
+                        // The list API resolves TicketDate per ticket (season passes have no
+                        // EventDateTime_id); fall back to a lookup for older payloads.
+                        const ticketDate: string | undefined =
+                          (ticket as any).TicketDate ??
+                          eventDateTimes.find((edt) => edt._id === ticket.EventDateTime_id)?.EventStartDateTime
                         
                         // Calculate pending quantity (remaining tickets)
                         const totalQuantity = extendedTicket.Quantity || ticket.TicketQuantity || 0
@@ -2183,9 +2258,7 @@ export default function TicketsPage() {
                               {formatCurrency(extendedTicket.Price || ticket.TicketPrice || 0)}
                             </TableCell>
                             <TableCell>
-                              {ticketEventDate 
-                                ? formatDate(ticketEventDate.EventStartDateTime)
-                                : 'N/A'}
+                              {ticketDate ? formatDate(ticketDate) : 'N/A'}
                             </TableCell>
                             <TableCell>
                               {pendingQuantity}
@@ -2348,25 +2421,33 @@ export default function TicketsPage() {
                         const quantity = extendedTicket.Quantity || ticket.MaxBulkTicketPerTransaction || 0
                         const totalAmount = ticketPrice * quantity
                         
-                        // Check if bulk ticket is disabled
-                        const statusValue = extendedTicket.Status ?? 
-                                           extendedTicket.BulkTicketStatus ?? 
-                                           ticket.Status ?? 
+                        // BulkTicketStatus: 1 = Booked, 2 = Cancelled
+                        const statusValue = extendedTicket.Status ??
+                                           extendedTicket.BulkTicketStatus ??
+                                           ticket.Status ??
                                            ticket.BulkTicketStatus ??
                                            1
-                        const isDisabled = statusValue === 0
-                        
+                        const isCancelled = Number(statusValue) === BULK_TICKET_CANCELLED
+
+                        // Each batch carries its own date; the end time comes from the event's date list
+                        const batchDateTime = eventDateTimes.find((edt) => edt._id === extendedTicket.EventDateTime_id)
+                        const batchStart = extendedTicket.EventStartDateTime || batchDateTime?.EventStartDateTime
+                        const batchEnd = batchDateTime?.EventEndDateTime
+
                         return (
-                          <TableRow key={ticket._id || ticket.BatchId} className={isDisabled ? "bg-red-50 hover:bg-red-50" : ""}>
-                            <TableCell className={`font-medium ${isDisabled ? "border-l-4 border-l-red-600" : ""}`}>
+                          <TableRow key={ticket._id || ticket.BatchId} className={isCancelled ? "bg-red-50 hover:bg-red-50" : ""}>
+                            <TableCell className={`font-medium ${isCancelled ? "border-l-4 border-l-red-600" : ""}`}>
                               {ticket.BatchId || ticket._id || 'N/A'}
+                              {isCancelled && (
+                                <Badge variant="destructive" className="ml-2">Cancelled</Badge>
+                              )}
                             </TableCell>
                             <TableCell>
-                              {eventData?.eventName || eventData?.EventName || 'N/A'}
+                              {extendedTicket.EventName || eventData?.eventName || eventData?.EventName || 'N/A'}
                             </TableCell>
                             <TableCell>
-                              {eventDateTimes.length > 0 ? (
-                                `${formatEventDate(eventDateTimes[0].EventStartDateTime, undefined, [])} ${formatEventTime(eventDateTimes[0].EventStartDateTime, { hour: '2-digit', minute: '2-digit' }, [])} - ${formatEventTime(eventDateTimes[0].EventEndDateTime, { hour: '2-digit', minute: '2-digit' }, [])}`
+                              {batchStart ? (
+                                `${formatEventDate(batchStart, undefined, [])} ${formatEventTime(batchStart, { hour: '2-digit', minute: '2-digit' }, [])}${batchEnd ? ` - ${formatEventTime(batchEnd, { hour: '2-digit', minute: '2-digit' }, [])}` : ''}`
                               ) : 'N/A'}
                             </TableCell>
                             <TableCell>
@@ -2379,7 +2460,7 @@ export default function TicketsPage() {
                               {extendedTicket.Email || ticket.Email || 'N/A'}
                             </TableCell>
                             <TableCell>
-                              {extendedTicket.PhoneNo || ticket.PhoneNo || 'N/A'}
+                              {extendedTicket.PhoneNumber ?? extendedTicket.PhoneNo ?? 'N/A'}
                             </TableCell>
                             <TableCell>
                               {quantity}
@@ -2412,6 +2493,18 @@ export default function TicketsPage() {
                                     <Download className="mr-2 h-4 w-4" />
                                     Download Report
                                   </DropdownMenuItem>
+                                  {!isCancelled && (ticket.BatchId || ticket._id) && (
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onClick={() => setPendingBulkCancel({
+                                        batchId: ticket.BatchId || ticket._id || '',
+                                        ticketName: extendedTicket.TicketName || ticket.BulkTicketName || '',
+                                      })}
+                                    >
+                                      <X className="mr-2 h-4 w-4" />
+                                      Cancel Tickets
+                                    </DropdownMenuItem>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -3250,6 +3343,46 @@ export default function TicketsPage() {
             >
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {pendingStatusChange?.action === 'disable' ? 'Disable' : 'Enable'} Ticket
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Ticket Cancel Confirmation Modal */}
+      <Dialog
+        open={pendingBulkCancel !== null}
+        onOpenChange={(open) => {
+          if (!open && !bulkCancelling) setPendingBulkCancel(null)
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel Bulk Tickets</DialogTitle>
+            <DialogDescription>
+              {pendingBulkCancel && (
+                <>
+                  Are you sure you want to cancel every ticket in batch "{pendingBulkCancel.batchId}"
+                  {pendingBulkCancel.ticketName ? ` (${pendingBulkCancel.ticketName})` : ""}? This cannot be undone.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPendingBulkCancel(null)}
+              disabled={bulkCancelling}
+            >
+              Keep Tickets
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => pendingBulkCancel && handleCancelBulkTicket(pendingBulkCancel.batchId)}
+              disabled={bulkCancelling}
+            >
+              {bulkCancelling && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Cancel Tickets
             </Button>
           </div>
         </DialogContent>

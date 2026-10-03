@@ -150,7 +150,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       errors.email = "Please enter a valid email address"
     }
     
-    if (formData.phoneNo && !/^\d{10}$/.test(formData.phoneNo.replace(/\D/g, ''))) {
+    // PhoneNo is stored as a Number, so an edited artist's value may not be a string.
+    if (formData.phoneNo && !/^\d{10}$/.test(String(formData.phoneNo).replace(/\D/g, ''))) {
       errors.phoneNo = "Phone number must be exactly 10 digits"
     }
 
@@ -236,6 +237,15 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
         },
       })
 
+      // The API answers "no artists" with 404 "Artist not found"; that is an empty list,
+      // otherwise deleting the last artist left it on screen behind an error toast.
+      if (response.status === 404) {
+        setArtists([])
+        setTotalPages(1)
+        setCurrentPage(1)
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
       }
@@ -247,8 +257,11 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       }
 
       const artistsArray = Array.isArray(data.data) ? data.data : [data.data]
+      const pages = Math.max(1, Math.ceil(artistsArray.length / ITEMS_PER_PAGE))
       setArtists(artistsArray)
-      setTotalPages(Math.ceil(artistsArray.length / ITEMS_PER_PAGE))
+      setTotalPages(pages)
+      // Deleting the only artist on the last page would otherwise leave an empty page selected.
+      setCurrentPage((page) => Math.min(page, pages))
 
     } catch (error) {
       console.error("Failed to fetch artists:", error)
@@ -279,7 +292,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       const formDataToSend = new FormData()
       formDataToSend.append("Name", formData.name)
       if (formData.email) formDataToSend.append("Email", formData.email)
-      if (formData.phoneNo) formDataToSend.append("PhoneNo", formData.phoneNo)
+      // The API stores PhoneNo as a Number; "987-654-3210" failed the cast.
+      if (formData.phoneNo) formDataToSend.append("PhoneNo", String(formData.phoneNo).replace(/\D/g, ""))
       formDataToSend.append("Description", formData.description || "")
       
       // Add priority from form data
@@ -346,7 +360,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
           artist_id: selectedArtist._id,
           Name: formData.name,
           Email: formData.email,
-          PhoneNo: formData.phoneNo,
+          PhoneNo: formData.phoneNo ? String(formData.phoneNo).replace(/\D/g, "") : formData.phoneNo,
           Description: formData.description,
           Priority: formData.priority,
         }),
@@ -552,7 +566,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
     setFormData({
       name: artist.Name || "",
       email: artist.Email || "",
-      phoneNo: artist.PhoneNo || "",
+      phoneNo: artist.PhoneNo != null ? String(artist.PhoneNo) : "",
       description: artist.Description || "",
       priority: artist.Priority || 0,
     })

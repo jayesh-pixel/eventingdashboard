@@ -33,6 +33,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import type { UserRole } from "@/lib/navigation"
@@ -147,6 +157,7 @@ export default function GenresPage({ params }: GenresPageProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   const [selectedGenre, setSelectedGenre] = React.useState<Genre | null>(null)
+  const [deleteGenreId, setDeleteGenreId] = React.useState<string | null>(null)
   const [useMockData, setUseMockData] = React.useState(false)
   const [apiError, setApiError] = React.useState<string | null>(null)
 
@@ -174,6 +185,16 @@ export default function GenresPage({ params }: GenresPageProps) {
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
 
+  // Search runs on the server across every page; filtering only the 10 loaded rows
+  // never found a genre on another page. Read through a ref so the many
+  // fetchGenres(currentPage) refreshes keep the active search.
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = React.useState("")
+  const searchKeywordRef = React.useRef("")
+  React.useEffect(() => {
+    const delay = setTimeout(() => setDebouncedSearchTerm(searchTerm.trim()), 400)
+    return () => clearTimeout(delay)
+  }, [searchTerm])
+
   // API function to fetch genres
   const fetchGenres = React.useCallback(async (page: number = 1, limit: number = ITEMS_PER_PAGE) => {
     try {
@@ -181,32 +202,47 @@ export default function GenresPage({ params }: GenresPageProps) {
       setApiError(null)
 
       const authToken = getValidToken()
+      // The user loads asynchronously; this callback re-runs once it is available.
+      // Sample genres used to flash in here and could be edited as if they were real.
       if (!user || !authToken) {
-        console.warn("No user or auth token available, using mock data")
-        setGenres(mockGenres)
-        setUseMockData(true)
-        setTotalPages(1)
-        setTotalGenres(mockGenres.length)
         return
       }
+
+      const searchKeyword = searchKeywordRef.current
 
       console.log("Fetching genres with pagination:")
       console.log("- Page:", page)
       console.log("- Limit:", limit)
 
-      const response = await authFetch(genreEndPoint.GENRE_PAGINATED_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          page: page,
-          limit: limit.toString(),
-        }),
-      })
+      const response = await authFetch(
+        searchKeyword ? genreEndPoint.GENRE_PAGINATED_SEARCH_URL : genreEndPoint.GENRE_PAGINATED_URL,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            page: page,
+            limit: limit.toString(),
+            ...(searchKeyword ? { search_keyword: searchKeyword } : {}),
+          }),
+        }
+      )
 
       console.log("Response status:", response.status)
+
+      // The API answers an empty page with 404 "Genre not found". That is an empty list
+      // (no genres yet, no search match, or the last row of a page deleted), not a
+      // failure - it used to drop the page onto fake sample genres.
+      if (response.status === 404) {
+        setGenres([])
+        setTotalPages(1)
+        setTotalGenres(0)
+        setUseMockData(false)
+        if (page > 1) setCurrentPage(page - 1)
+        return
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`)
@@ -233,16 +269,16 @@ export default function GenresPage({ params }: GenresPageProps) {
     } catch (error) {
       console.error("Genres fetch failed:", error)
       setApiError("Could not fetch genres from server")
-      
-      // Fall back to mock data
-      setGenres(mockGenres)
-      setUseMockData(true)
+
+      // Showing sample genres here let users edit rows that do not exist.
+      setGenres([])
+      setUseMockData(false)
       setTotalPages(1)
-      setTotalGenres(mockGenres.length)
-      
+      setTotalGenres(0)
+
       toast({
         title: "API Error",
-        description: "Could not fetch genres from server. Using sample data instead.",
+        description: error instanceof Error ? error.message : "Could not fetch genres from server.",
         variant: "destructive",
       })
     } finally {
@@ -254,6 +290,22 @@ export default function GenresPage({ params }: GenresPageProps) {
   React.useEffect(() => {
     fetchGenres(currentPage)
   }, [currentPage, fetchGenres])
+
+  // A new search starts from page 1.
+  const isFirstSearchRun = React.useRef(true)
+  React.useEffect(() => {
+    if (isFirstSearchRun.current) {
+      isFirstSearchRun.current = false
+      return
+    }
+    searchKeywordRef.current = debouncedSearchTerm
+    if (currentPage === 1) {
+      fetchGenres(1)
+    } else {
+      setCurrentPage(1)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearchTerm])
 
   // Helper function to get genre image
   const getGenreImage = (genre: Genre): string => {
@@ -273,10 +325,7 @@ export default function GenresPage({ params }: GenresPageProps) {
   }
 
   // Filter genres based on search (now works on current page data)
-  const filteredGenres = React.useMemo(() => {
-    if (!searchTerm) return genres
-    return genres.filter((genre) => genre.Name.toLowerCase().includes(searchTerm.toLowerCase()))
-  }, [genres, searchTerm])
+  const filteredGenres = genres
 
   // For paginated API, we don't slice here since API handles pagination
   const currentGenres = filteredGenres
@@ -436,7 +485,8 @@ export default function GenresPage({ params }: GenresPageProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update genre",
+        // Surface the API's reason, e.g. 409 "Genre Name Already Exists".
+        description: error instanceof Error ? error.message : "Failed to update genre",
         variant: "destructive",
       })
     } finally {
@@ -874,7 +924,7 @@ Actions
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => handleDeleteGenre(genre._id)} className="text-red-600">
+                          <DropdownMenuItem onClick={() => setDeleteGenreId(genre._id)} className="text-red-600">
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
@@ -1033,6 +1083,33 @@ Actions
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteGenreId} onOpenChange={() => setDeleteGenreId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this genre?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. Do not delete a genre that is used by any event: those events
+              cannot be saved again until another genre is selected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteGenreId) {
+                  handleDeleteGenre(deleteGenreId)
+                }
+                setDeleteGenreId(null)
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
