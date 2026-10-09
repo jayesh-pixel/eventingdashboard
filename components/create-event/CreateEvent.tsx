@@ -27,6 +27,7 @@ import type { UserRole } from "@/lib/navigation"
 import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { eventEndPoint, eventTourEndPoint } from "@/lib/api-endpoints"
+import { GOOGLE_MAPS_EMBED_ERROR, normalizeGoogleMapsEmbed } from "@/lib/google-maps"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { AddressSelector } from "@/components/address-selector"
 import { 
@@ -3351,7 +3352,11 @@ export default function CreateEvent({
                 CityIsoCode: Yup.string().required("City is required"),
                 State: Yup.string().required("State is required"),
                 StateIsoCode: Yup.string().required("State is required"),
-                Map_Location: Yup.string().required("Map location (Google Maps embed iframe) is required"),
+                Map_Location: Yup.string()
+                  .required("Map location (Google Maps embed iframe) is required")
+                  .test("google-maps-embed", GOOGLE_MAPS_EMBED_ERROR, value =>
+                    !value || Boolean(normalizeGoogleMapsEmbed(value)),
+                  ),
                 Images: Yup.array().min(1, "At least one venue image is required"),
                 // Make these fields optional
                 PinCode: Yup.string(),
@@ -3387,7 +3392,11 @@ export default function CreateEvent({
                   payload.append("CountryIsoCode", "IN")
                   payload.append("StateIsoCode", values.StateIsoCode)
                   payload.append("CityIsoCode", values.CityIsoCode)
-                  payload.append("Map_Location", values.Map_Location.trim())
+                  const mapLocation = normalizeGoogleMapsEmbed(values.Map_Location)
+                  if (!mapLocation) {
+                    throw new Error(GOOGLE_MAPS_EMBED_ERROR)
+                  }
+                  payload.append("Map_Location", mapLocation)
                   payload.append("Priority", "1")
                   values.Images.forEach((image) => payload.append("Images", image))
 
@@ -3478,6 +3487,9 @@ export default function CreateEvent({
                     {touched.Map_Location && errors.Map_Location && (
                       <p className="text-sm text-red-600">{errors.Map_Location}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare embed URL is also accepted.
+                    </p>
                   </div>
 
                   <div className="space-y-2">

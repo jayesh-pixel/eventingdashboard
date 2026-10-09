@@ -52,6 +52,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { GOOGLE_MAPS_EMBED_ERROR, normalizeGoogleMapsEmbed } from "@/lib/google-maps"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
@@ -94,24 +95,6 @@ interface ApiResponse {
 }
 
 const ITEMS_PER_PAGE = 10
-
-// Same anchored pattern as the API's isValidGoogleMapsIframe (helpers/commonFunctions.js);
-// anything else is rejected with 400 "Invalid Google Maps iframe URL".
-const GOOGLE_MAPS_IFRAME_REGEX =
-  /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"><\/iframe>$/
-const GOOGLE_MAPS_EMBED_URL_REGEX = /^https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+$/
-const MAP_LOCATION_ERROR =
-  'Map Location must be the Google Maps embed code: in Google Maps choose Share > Embed a map > Copy HTML and paste the whole <iframe ...></iframe>.'
-
-// Trims the pasted value and wraps a bare embed URL in the iframe markup Google's
-// "Embed a map" dialog produces, which is the only shape the API accepts.
-const normalizeMapLocation = (value: string): string => {
-  const trimmed = value.trim()
-  if (GOOGLE_MAPS_EMBED_URL_REGEX.test(trimmed)) {
-    return `<iframe src="${trimmed}" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
-  }
-  return trimmed
-}
 
 export default function VenuesPage({ params }: VenuesPageProps) {
   // Handle params which might be a Promise
@@ -380,11 +363,11 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
-    const mapLocation = normalizeMapLocation(formData.mapLocation)
-    if (!GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
+    const mapLocation = normalizeGoogleMapsEmbed(formData.mapLocation)
+    if (!mapLocation) {
       toast({
         title: "Error",
-        description: MAP_LOCATION_ERROR,
+        description: GOOGLE_MAPS_EMBED_ERROR,
         variant: "destructive",
       })
       return
@@ -485,12 +468,16 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
     // Only send Map_Location when it changed: the API re-validates whatever it receives,
     // so an unchanged older value would block saving unrelated fields.
-    const mapLocation = normalizeMapLocation(formData.mapLocation)
-    const mapLocationChanged = mapLocation !== (selectedVenue.Map_Location || "").trim()
-    if (mapLocationChanged && mapLocation && !GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
+    const originalMapLocation = (selectedVenue.Map_Location || "").trim()
+    const enteredMapLocation = formData.mapLocation.trim()
+    const mapLocationChanged = enteredMapLocation !== originalMapLocation
+    const mapLocation = mapLocationChanged && enteredMapLocation
+      ? normalizeGoogleMapsEmbed(enteredMapLocation)
+      : undefined
+    if (mapLocationChanged && enteredMapLocation && !mapLocation) {
       toast({
         title: "Error",
-        description: MAP_LOCATION_ERROR,
+        description: GOOGLE_MAPS_EMBED_ERROR,
         variant: "destructive",
       })
       return
