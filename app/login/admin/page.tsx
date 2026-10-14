@@ -10,7 +10,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
-import { authEndpoints } from "@/lib/api-endpoints"
 import { Loader2, Eye, EyeOff, UserCheck } from "lucide-react"
 import { Logo } from "@/components/logo"
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, getLengthError } from "@/lib/credential-limits"
@@ -39,10 +38,10 @@ export default function AdminLoginPage() {
     }
     setIsLoading(true)
     try {
-      const response = await fetch(authEndpoints.LOGIN_API, {
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Username: username, Password: password }),
+        body: JSON.stringify({ role: "superadmin", username, password }),
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.message || "Login failed")

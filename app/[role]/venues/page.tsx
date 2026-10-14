@@ -52,6 +52,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { formatDate, handleApiResponse, getApiErrorMessage } from "@/lib/utils"
+import { GOOGLE_MAPS_EMBED_ERROR, normalizeGoogleMapsEmbed } from "@/lib/google-maps"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || ""
 
@@ -94,39 +95,6 @@ interface ApiResponse {
 }
 
 const ITEMS_PER_PAGE = 10
-
-// Same anchored pattern as the API's isValidGoogleMapsIframe (helpers/commonFunctions.js);
-// anything else is rejected with 400 "Invalid Google Maps iframe URL". The policy is the one
-// this page shipped with on 3 Oct. The API source has an uncommitted switch to
-// "strict-origin-when-cross-origin" - if the live API is on that, change MAPS_REFERRER_POLICY.
-const MAPS_REFERRER_POLICY = "no-referrer-when-downgrade"
-const GOOGLE_MAPS_IFRAME_REGEX =
-  /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"><\/iframe>$/
-const GOOGLE_MAPS_EMBED_URL_REGEX = /^https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+$/
-const MAP_LOCATION_ERROR =
-  'Map Location must be the Google Maps embed code: in Google Maps choose Share > Embed a map > Copy HTML and paste the whole <iframe ...></iframe>.'
-
-const buildMapIframe = (src: string, width = "600", height = "450") =>
-  `<iframe src="${src}" width="${width}" height="${height}" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="${MAPS_REFERRER_POLICY}"></iframe>`
-
-// Trims the pasted value and rebuilds a bare embed URL, or Google's "Embed a map" HTML
-// (whose referrerpolicy/attribute order differs from what the API matches), in the
-// only shape the API accepts.
-const normalizeMapLocation = (value: string): string => {
-  const trimmed = value.trim()
-  if (GOOGLE_MAPS_EMBED_URL_REGEX.test(trimmed)) {
-    return buildMapIframe(trimmed)
-  }
-  if (/^<iframe\b[^>]*>\s*<\/iframe>$/i.test(trimmed)) {
-    const src = trimmed.match(/\ssrc="(https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+)"/)?.[1]
-    if (src) {
-      const width = trimmed.match(/\swidth="(\d+)"/)?.[1]
-      const height = trimmed.match(/\sheight="(\d+)"/)?.[1]
-      return buildMapIframe(src, width, height)
-    }
-  }
-  return trimmed
-}
 
 // Joi validateVenueCreation / validateVenueUpdateData limits.
 const NAME_MIN = 3
@@ -426,16 +394,16 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       errors.location = `Select a city in ${formData.state || "the selected state"}`
     }
 
-    const mapLocation = normalizeMapLocation(formData.mapLocation)
+    const enteredMapLocation = formData.mapLocation.trim()
     if (!isEdit) {
-      if (!mapLocation) errors.mapLocation = "Map location is required"
-      else if (!GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) errors.mapLocation = MAP_LOCATION_ERROR
+      if (!enteredMapLocation) errors.mapLocation = "Map location is required"
+      else if (!normalizeGoogleMapsEmbed(enteredMapLocation)) errors.mapLocation = GOOGLE_MAPS_EMBED_ERROR
     } else if (
-      mapLocation &&
-      mapLocation !== (selectedVenue?.Map_Location || "").trim() &&
-      !GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)
+      enteredMapLocation &&
+      enteredMapLocation !== (selectedVenue?.Map_Location || "").trim() &&
+      !normalizeGoogleMapsEmbed(enteredMapLocation)
     ) {
-      errors.mapLocation = MAP_LOCATION_ERROR
+      errors.mapLocation = GOOGLE_MAPS_EMBED_ERROR
     }
 
     setFieldErrors(errors)
@@ -449,7 +417,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const handleCreateVenue = async () => {
     if (!validateFields(false)) return
 
-    const mapLocation = normalizeMapLocation(formData.mapLocation)
+    const mapLocation = normalizeGoogleMapsEmbed(formData.mapLocation) || ""
 
     if (selectedImages.length === 0) {
       toast({
@@ -549,8 +517,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
 
     // Only send Map_Location when it changed: the API re-validates whatever it receives,
     // so an unchanged older value would block saving unrelated fields.
-    const mapLocation = normalizeMapLocation(formData.mapLocation)
-    const mapLocationChanged = mapLocation !== (selectedVenue.Map_Location || "").trim()
+    const originalMapLocation = (selectedVenue.Map_Location || "").trim()
+    const enteredMapLocation = formData.mapLocation.trim()
+    const mapLocationChanged = enteredMapLocation !== originalMapLocation
+    const mapLocation = mapLocationChanged && enteredMapLocation
+      ? normalizeGoogleMapsEmbed(enteredMapLocation)
+      : undefined
 
     setLoading(true)
     try {
@@ -822,7 +794,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   }
 
   // Shown while typing so an over-long value or a non-embed map link turns red before submit.
-  const liveMapLocation = normalizeMapLocation(formData.mapLocation)
+  const liveMapLocation = formData.mapLocation.trim()
   const mapLocationEdited = isEditDialogOpen
     ? liveMapLocation !== (selectedVenue?.Map_Location || "").trim()
     : true
@@ -832,7 +804,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   // Both location errors mean "no city chosen yet", so drop them once a city is picked.
   const locationError = formData.city.trim() ? "" : fieldErrors.location
   const mapLocationError = liveMapLocation
-    ? mapLocationEdited && !GOOGLE_MAPS_IFRAME_REGEX.test(liveMapLocation) ? MAP_LOCATION_ERROR : ""
+    ? mapLocationEdited && !normalizeGoogleMapsEmbed(liveMapLocation) ? GOOGLE_MAPS_EMBED_ERROR : ""
     : fieldErrors.mapLocation
 
   if (role !== "superadmin") {

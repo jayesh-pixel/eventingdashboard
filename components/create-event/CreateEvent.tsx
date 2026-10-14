@@ -28,6 +28,7 @@ import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib
 import { getLengthError, getPasswordError, getUsernameError } from "@/lib/credential-limits"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { eventEndPoint, eventTourEndPoint } from "@/lib/api-endpoints"
+import { GOOGLE_MAPS_EMBED_ERROR, normalizeGoogleMapsEmbed } from "@/lib/google-maps"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
 import { AddressSelector } from "@/components/address-selector"
 import { 
@@ -156,12 +157,6 @@ const nameSafetyTest = (value: string | undefined) => !value || isServerRegexSaf
 
 // helpers/commonFunctions.js isValidYouTubeUrl: any other EventVedioUrl is rejected
 const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/(watch\?v=)?([a-zA-Z0-9_-]{11})/
-
-// isValidGoogleMapsIframe only accepts Google's "Embed a map" HTML verbatim. The API source pins
-// referrerpolicy to strict-origin-when-cross-origin while Google now emits no-referrer-when-downgrade,
-// so both are let through here and the server has the final word on that attribute.
-const GOOGLE_MAPS_IFRAME_REGEX =
-  /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="(strict-origin-when-cross-origin|no-referrer-when-downgrade)"><\/iframe>$/
 
 // Joi's email() also requires a real top-level domain, which Yup's email() does not
 const EMAIL_WITH_TLD_REGEX = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
@@ -3405,8 +3400,11 @@ export default function CreateEvent({
                 CityIsoCode: Yup.string().required("City is required"),
                 State: Yup.string().required("State is required"),
                 StateIsoCode: Yup.string().required("State is required"),
-                Map_Location: Yup.string().trim().required("Map location (Google Maps embed iframe) is required")
-                  .matches(GOOGLE_MAPS_IFRAME_REGEX, "Map location must be the Google Maps embed code: Share > Embed a map > Copy HTML, then paste the whole <iframe ...></iframe>"),
+                Map_Location: Yup.string()
+                  .required("Map location (Google Maps embed iframe) is required")
+                  .test("google-maps-embed", GOOGLE_MAPS_EMBED_ERROR, value =>
+                    !value || Boolean(normalizeGoogleMapsEmbed(value)),
+                  ),
                 Images: Yup.array().min(1, "At least one venue image is required"),
                 // Make these fields optional
                 PinCode: Yup.string(),
@@ -3442,7 +3440,11 @@ export default function CreateEvent({
                   payload.append("CountryIsoCode", "IN")
                   payload.append("StateIsoCode", values.StateIsoCode)
                   payload.append("CityIsoCode", values.CityIsoCode)
-                  payload.append("Map_Location", values.Map_Location.trim())
+                  const mapLocation = normalizeGoogleMapsEmbed(values.Map_Location)
+                  if (!mapLocation) {
+                    throw new Error(GOOGLE_MAPS_EMBED_ERROR)
+                  }
+                  payload.append("Map_Location", mapLocation)
                   payload.append("Priority", "1")
                   values.Images.forEach((image) => payload.append("Images", image))
 
@@ -3533,6 +3535,9 @@ export default function CreateEvent({
                     {(touched.Map_Location || values.Map_Location) && errors.Map_Location && (
                       <p className="text-sm text-red-600">{errors.Map_Location}</p>
                     )}
+                    <p className="text-xs text-muted-foreground">
+                      Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare embed URL is also accepted.
+                    </p>
                   </div>
 
                   <div className="space-y-2">

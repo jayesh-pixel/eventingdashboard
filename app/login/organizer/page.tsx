@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import { organizerEndpoint } from "@/lib/api-endpoints"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { Loader2, Eye, EyeOff, UserCheck } from "lucide-react"
@@ -39,10 +38,10 @@ export default function OrganizerLoginPage() {
     }
     setIsLoading(true)
     try {
-      const response = await fetch(organizerEndpoint.ORGANIZER_LOGIN_API_URL, {
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Username: username, Password: password }),
+        body: JSON.stringify({ role: "organizer", username, password }),
       })
       const data = await response.json()
       if (!response.ok || data.error) throw new Error(data.message || "Login failed")

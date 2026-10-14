@@ -92,12 +92,9 @@ export default function LoginPage() {
         endpoint: roleOption.endpoint,
       })
 
-      const requestPayload = {
-        Username: username,
-        Password: password,
-      }
+      const requestPayload = { role: selectedRole, username, password }
 
-      const response = await fetch(roleOption.endpoint, {
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
