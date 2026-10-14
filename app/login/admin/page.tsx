@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth-context"
 import { authEndpoints } from "@/lib/api-endpoints"
 import { Loader2, Eye, EyeOff, UserCheck } from "lucide-react"
 import { Logo } from "@/components/logo"
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, getLengthError } from "@/lib/credential-limits"
 
 export default function AdminLoginPage() {
   const router = useRouter()
@@ -22,11 +23,18 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  // Super admin login schema: Username min 4 (not 5 like organizer/promoter), Password 5-10.
+  const usernameError = getLengthError("Username", username, 4)
+  const passwordError = getLengthError("Password", password, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!username || !password) {
       toast({ title: "Error", description: "Please enter both username and password", variant: "destructive" })
+      return
+    }
+    if (usernameError || passwordError) {
+      toast({ title: "Error", description: usernameError || passwordError, variant: "destructive" })
       return
     }
     setIsLoading(true)
@@ -65,17 +73,19 @@ export default function AdminLoginPage() {
           <CardContent className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="username" className="text-base font-medium">Username</Label>
-              <Input id="username" type="text" placeholder="Enter your username" value={username} onChange={e => setUsername(e.target.value)} disabled={isLoading} required autoComplete="username" className="py-3 px-4 rounded-lg border-primary/30 focus:ring-2 focus:ring-primary/40 text-base" />
+              <Input id="username" type="text" placeholder="Enter your username" value={username} onChange={e => setUsername(e.target.value)} disabled={isLoading} required autoComplete="username" aria-invalid={!!usernameError} className={`py-3 px-4 rounded-lg border-primary/30 focus:ring-2 focus:ring-primary/40 text-base${usernameError ? " border-red-500 focus:ring-red-500/40" : ""}`} />
+              {usernameError && <p className="text-sm text-red-600">{usernameError}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="password" className="text-base font-medium">Password</Label>
               <div className="relative">
-                <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} disabled={isLoading} required autoComplete="current-password" className="py-3 px-4 rounded-lg border-primary/30 focus:ring-2 focus:ring-primary/40 text-base" />
+                <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} disabled={isLoading} required autoComplete="current-password" aria-invalid={!!passwordError} className={`py-3 px-4 rounded-lg border-primary/30 focus:ring-2 focus:ring-primary/40 text-base${passwordError ? " border-red-500 focus:ring-red-500/40" : ""}`} />
                 <Button type="button" variant="ghost" size="icon" className="absolute right-0 top-0 h-full px-3" onClick={() => setShowPassword(!showPassword)}>
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   <span className="sr-only">{showPassword ? "Hide password" : "Show password"}</span>
                 </Button>
               </div>
+              {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-4">

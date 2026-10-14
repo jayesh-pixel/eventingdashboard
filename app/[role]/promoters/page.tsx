@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { handleApiResponse, getApiErrorMessage, normalizeSearchText } from "@/lib/utils"
 import { SendDefaultPasswordMail, getNumericAdminRole } from "@/lib/api-constants"
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, getEmailError, getLengthError, getPasswordError, getUsernameError } from "@/lib/credential-limits"
 import {
   Pagination,
   PaginationContent,
@@ -105,11 +106,10 @@ const statusLabels = {
   2: "Inactive",
 }
 
-// Promoter login schema: Password min(5).max(10); the admin updatepassword endpoint has no check
-const PASSWORD_MIN_LENGTH = 5
-const PASSWORD_MAX_LENGTH = 10
 // updateProfile Joi schema caps State/City at 20 chars (register allows 500)
 const PROFILE_ADDRESS_NAME_MAX_LENGTH = 20
+// State/City names must be at least 3 chars on register and updateProfile
+const ADDRESS_NAME_MIN_LENGTH = 3
 
 export default function PromotersPage({ params }: PromotersPageProps) {
   // Handle params which might be a Promise
@@ -355,7 +355,19 @@ export default function PromotersPage({ params }: PromotersPageProps) {
   const handleViewPromoter = (promoter: Promoter) => {
     setSelectedPromoter(promoter)
     setShowViewDialog(true)
-  }  // CRUD Functions
+  }
+
+  // Character limits are flagged in red on the create form while typing.
+  const liveFieldErrors = {
+    FullName: getLengthError("Full name", formData.FullName.trim(), 5, 50),
+    Username: getUsernameError(formData.Username.trim()),
+    Password: getPasswordError(formData.Password),
+    Email: getEmailError(formData.Email.trim()),
+    // updateProfile allows a shorter name (3-50) than register (5-50)
+    EditFullName: getLengthError("Full name", formData.FullName.trim(), 3, 50),
+  }
+
+  // CRUD Functions
   const handleCreatePromoter = async () => {
     if (!formData.FullName || !formData.Username) {
       toast({
@@ -366,21 +378,12 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
-    // Backend validation requires FullName min 5 chars
-    if (formData.FullName.trim().length < 5) {
+    // Same limits the fields flag in red while typing
+    const lengthError = liveFieldErrors.FullName || liveFieldErrors.Username
+    if (lengthError) {
       toast({
         title: "Error",
-        description: "Full Name must be at least 5 characters",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Backend validation requires Username min 5 chars
-    if (formData.Username.trim().length < 5) {
-      toast({
-        title: "Error",
-        description: "Username must be at least 5 characters",
+        description: lengthError,
         variant: "destructive",
       })
       return
@@ -400,16 +403,13 @@ export default function PromotersPage({ params }: PromotersPageProps) {
     }
 
     // Validate email format only if provided
-    if (formData.Email && formData.Email.trim()) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.Email)) {
-        toast({
-          title: "Error",
-          description: "Please enter a valid email address",
-          variant: "destructive",
-        })
-        return
-      }
+    if (liveFieldErrors.Email) {
+      toast({
+        title: "Error",
+        description: liveFieldErrors.Email,
+        variant: "destructive",
+      })
+      return
     }
 
     // Backend validation requires these address fields
@@ -417,6 +417,18 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       toast({
         title: "Error",
         description: "Country, State, and City are required fields",
+        variant: "destructive",
+      })
+      return
+    }
+    const tooShortOnCreate = [
+      { label: "State", value: formData.State },
+      { label: "City", value: formData.City },
+    ].find(({ value }) => value.trim().length < ADDRESS_NAME_MIN_LENGTH)
+    if (tooShortOnCreate) {
+      toast({
+        title: "Error",
+        description: `${tooShortOnCreate.label} name "${tooShortOnCreate.value}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters). Please choose a different ${tooShortOnCreate.label.toLowerCase()}.`,
         variant: "destructive",
       })
       return
@@ -431,10 +443,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       })
       return
     }
-    if (formData.Password.trim().length < 5 || formData.Password.trim().length > 10) {
+    if (liveFieldErrors.Password) {
       toast({
         title: "Error",
-        description: "Password must be 5-10 characters long",
+        description: liveFieldErrors.Password,
         variant: "destructive",
       })
       return
@@ -534,9 +546,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       }
 
       const payload: any = {
-        FullName: formData.FullName,
-        Username: formData.Username,
-        Password: formData.Password.trim(),
+        FullName: formData.FullName.trim(),
+        Username: formData.Username.trim(),
+        Password: formData.Password,
         SendMailFlag: sendAccountInfo ? SendDefaultPasswordMail.Yes : SendDefaultPasswordMail.No,
         CreatedBy: getNumericAdminRole(user?.AdminRole || "superadmin"),
         createduser_id: user?.user_id || "",
@@ -614,12 +626,11 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       return
     }
 
-    // Validate email format only if provided
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (formData.Email && formData.Email.trim() && !emailRegex.test(formData.Email)) {
+    const editFieldError = liveFieldErrors.EditFullName || liveFieldErrors.Email
+    if (editFieldError) {
       toast({
         title: "Error",
-        description: "Please enter a valid email address",
+        description: editFieldError,
         variant: "destructive",
       })
       return
@@ -641,6 +652,18 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       })
       return
     }
+    const tooShort = [
+      { label: "State", value: formData.State, changed: stateChanged },
+      { label: "City", value: formData.City, changed: cityChanged },
+    ].find(({ value, changed }) => changed && value && value.trim().length < ADDRESS_NAME_MIN_LENGTH)
+    if (tooShort) {
+      toast({
+        title: "Error",
+        description: `${tooShort.label} name "${tooShort.value}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters). Please choose a different ${tooShort.label.toLowerCase()}.`,
+        variant: "destructive",
+      })
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -652,8 +675,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
       const formDataToSend = new FormData()
       formDataToSend.append("user_id", selectedPromoter._id)
       // Only send non-empty values — backend Joi rejects empty strings
-      if (formData.FullName?.trim()) formDataToSend.append("FullName", formData.FullName)
-      if (formData.Email?.trim()) formDataToSend.append("Email", formData.Email)
+      if (formData.FullName?.trim()) formDataToSend.append("FullName", formData.FullName.trim())
+      if (formData.Email?.trim()) formDataToSend.append("Email", formData.Email.trim())
       if (formData.Phone1?.trim()) formDataToSend.append("Phone1", formData.Phone1.replace(/\D/g, ""))
       // Address: send only what changed (backend keeps omitted fields)
       if (stateChanged && formData.State && formData.StateIsoCode) {
@@ -1314,8 +1337,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 id="fullName"
                 value={formData.FullName}
                 onChange={(e) => setFormData(prev => ({ ...prev, FullName: e.target.value }))}
-                placeholder="Enter full name"
+                placeholder="Enter full name (5-50 characters)"
+                className={liveFieldErrors.FullName ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {liveFieldErrors.FullName && <p className="text-sm text-red-600">{liveFieldErrors.FullName}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="username">Username *</Label>
@@ -1323,8 +1348,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 id="username"
                 value={formData.Username}
                 onChange={(e) => setFormData(prev => ({ ...prev, Username: e.target.value }))}
-                placeholder="Enter username"
+                placeholder="Enter username (5-50 characters)"
+                className={liveFieldErrors.Username ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {liveFieldErrors.Username && <p className="text-sm text-red-600">{liveFieldErrors.Username}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
@@ -1334,7 +1361,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 value={formData.Email}
                 onChange={(e) => setFormData(prev => ({ ...prev, Email: e.target.value }))}
                 placeholder="Enter email address (optional)"
+                className={liveFieldErrors.Email ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {liveFieldErrors.Email && <p className="text-sm text-red-600">{liveFieldErrors.Email}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="password">Password *</Label>
@@ -1345,7 +1374,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   value={formData.Password}
                   onChange={(e) => setFormData(prev => ({ ...prev, Password: e.target.value }))}
                   placeholder="Enter password (5-10 characters)"
-                  className="pr-10"
+                  className={`pr-10${liveFieldErrors.Password ? " border-red-500 focus-visible:ring-red-500" : ""}`}
                 />
                 <button
                   type="button"
@@ -1368,6 +1397,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
               >
                 Generate Password
               </Button>
+              {liveFieldErrors.Password && <p className="text-sm text-red-600">{liveFieldErrors.Password}</p>}
             </div>            <div className="grid gap-2">
               <Label htmlFor="phone">Phone</Label>
               <Input
@@ -1451,8 +1481,10 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 id="editFullName"
                 value={formData.FullName}
                 onChange={(e) => setFormData(prev => ({ ...prev, FullName: e.target.value }))}
-                placeholder="Enter full name"
+                placeholder="Enter full name (3-50 characters)"
+                className={liveFieldErrors.EditFullName ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {liveFieldErrors.EditFullName && <p className="text-sm text-red-600">{liveFieldErrors.EditFullName}</p>}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="editUsername">Username</Label>
@@ -1472,7 +1504,9 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 value={formData.Email}
                 onChange={(e) => setFormData(prev => ({ ...prev, Email: e.target.value }))}
                 placeholder="Enter email address"
+                className={liveFieldErrors.Email ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
+              {liveFieldErrors.Email && <p className="text-sm text-red-600">{liveFieldErrors.Email}</p>}
             </div>            <div className="grid gap-2">
               <Label htmlFor="editPhone">Phone (10 digits)</Label>
               <Input
@@ -1501,6 +1535,12 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                 setCityIsoCode={setCityIsoCode}
                 cityName={cityName}
                 setCityName={setCityName}
+                maxNameLength={
+                  selectedPromoter &&
+                  (stateName !== (selectedPromoter.State || "") || cityName !== (selectedPromoter.City || ""))
+                    ? PROFILE_ADDRESS_NAME_MAX_LENGTH
+                    : undefined
+                }
               />
             </div>
           </div>
@@ -1619,8 +1659,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Enter new password (5-10 characters)"
-                    className="pr-10"
-                    maxLength={PASSWORD_MAX_LENGTH}
+                    className={`pr-10${getPasswordError(newPassword) ? " border-red-500 focus-visible:ring-red-500" : ""}`}
                   />
                   <button
                     type="button"
@@ -1645,8 +1684,8 @@ export default function PromotersPage({ params }: PromotersPageProps) {
                   Generate Secure Password
                 </Button>
                 
-                {newPassword && newPassword.length < PASSWORD_MIN_LENGTH && (
-                  <p className="text-sm text-red-500">Password must be {PASSWORD_MIN_LENGTH}-{PASSWORD_MAX_LENGTH} characters long</p>
+                {getPasswordError(newPassword) && (
+                  <p className="text-sm text-red-600">{getPasswordError(newPassword)}</p>
                 )}
               </div>
               
@@ -1672,7 +1711,7 @@ export default function PromotersPage({ params }: PromotersPageProps) {
             </Button>
             <Button 
               onClick={handlePasswordReset}
-              disabled={submitting || !newPassword || newPassword.length < PASSWORD_MIN_LENGTH}
+              disabled={submitting || !newPassword || !!getPasswordError(newPassword)}
               className="bg-blue-600 hover:bg-blue-700"
             >
               {submitting ? (

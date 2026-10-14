@@ -133,6 +133,30 @@ const mockGenres: Genre[] = [
 ]
 
 const ITEMS_PER_PAGE = 10
+// Joi validateGenreCreation (enforced on create) / validateGenreDataUpdate limits.
+const NAME_MIN = 3
+const NAME_MAX = 50
+const DESCRIPTION_MAX = 1024
+// The create API's multer accepts at most 5 "Images"; a 6th fails with "Unexpected field".
+const MAX_CREATE_IMAGES = 5
+
+const overLimit = (label: string, value: string, max: number) => {
+  const length = value.trim().length
+  return length > max ? `${label} must be at most ${max} characters (currently ${length})` : ""
+}
+
+// The API checks duplicates with new RegExp("^" + Name + "$") built from the raw name,
+// so a name that is not a valid pattern (e.g. "C++", "[Live") fails there with a 500.
+const breaksServerNameRegex = (name: string) => {
+  try {
+    new RegExp("^" + name + "$", "i")
+    return false
+  } catch {
+    return true
+  }
+}
+const NAME_REGEX_ERROR =
+  'Name contains characters the server cannot process (e.g. "++", a leading "*", or an unclosed "(" or "[")'
 
 export default function GenresPage({ params }: GenresPageProps) {
   // Handle params which might be a Promise
@@ -184,6 +208,34 @@ export default function GenresPage({ params }: GenresPageProps) {
   // Image upload state
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState<{ name?: string; description?: string }>({})
+
+  // Name and Description are required on create; the update API keeps the old name when
+  // it is blank and clears the description.
+  const validateFields = (isEdit: boolean) => {
+    const errors: { name?: string; description?: string } = {}
+    const name = formData.genreName.trim()
+    if (!name) {
+      if (!isEdit) errors.name = "Genre name is required"
+    } else if (name.length < NAME_MIN || name.length > NAME_MAX) {
+      errors.name = `Genre name must be ${NAME_MIN}-${NAME_MAX} characters (currently ${name.length})`
+    } else if (breaksServerNameRegex(name)) {
+      errors.name = NAME_REGEX_ERROR
+    }
+    const description = formData.genreDescription.trim()
+    if (!description) {
+      if (!isEdit) errors.description = "Genre description is required"
+    } else if (description.length > DESCRIPTION_MAX) {
+      errors.description = `Description must be at most ${DESCRIPTION_MAX} characters (currently ${description.length})`
+    }
+
+    setFieldErrors(errors)
+    const firstError = errors.name || errors.description
+    if (firstError) {
+      toast({ title: "Error", description: firstError, variant: "destructive" })
+    }
+    return !firstError
+  }
 
   // Search runs on the server across every page; filtering only the 10 loaded rows
   // never found a genre on another page. Read through a ref so the many
@@ -335,28 +387,22 @@ export default function GenresPage({ params }: GenresPageProps) {
   }
 
   const handleCreateGenre = async () => {
-    if (!formData.genreName.trim()) {
-      toast({
-        title: "Error",
-        description: "Genre name is required",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!formData.genreDescription.trim()) {
-      toast({
-        title: "Error",
-        description: "Genre description is required",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!validateFields(false)) return
 
     if (selectedImages.length === 0 && !formData.genreImage) {
       toast({
         title: "Image Required",
         description: "Please upload at least one genre image before creating it.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const imageCount = selectedImages.length + (formData.genreImage ? 1 : 0)
+    if (imageCount > MAX_CREATE_IMAGES) {
+      toast({
+        title: "Too Many Images",
+        description: `You can upload at most ${MAX_CREATE_IMAGES} images when creating a genre (currently ${imageCount}). Add more after it is created.`,
         variant: "destructive",
       })
       return
@@ -377,8 +423,9 @@ export default function GenresPage({ params }: GenresPageProps) {
 
       // Create FormData for multipart/form-data request
       const formDataToSend = new FormData()
-      formDataToSend.append("Name", formData.genreName)
-      formDataToSend.append("Description", formData.genreDescription || "")
+      // Joi checks the untrimmed strings, so padding spaces could push them past the limits.
+      formDataToSend.append("Name", formData.genreName.trim())
+      formDataToSend.append("Description", formData.genreDescription.trim())
       
       // Add all selected images to the payload (optional)
       if (selectedImages.length > 0) {
@@ -432,6 +479,8 @@ export default function GenresPage({ params }: GenresPageProps) {
 
   const handleEditGenre = async () => {
     if (!selectedGenre) return
+
+    if (!validateFields(true)) return
 
     setLoading(true)
     try {
@@ -559,6 +608,7 @@ export default function GenresPage({ params }: GenresPageProps) {
       genreImages: genre.Images || []
     })
     setSelectedImages([])
+    setFieldErrors({})
     setIsEditDialogOpen(true)
   }
 
@@ -566,6 +616,7 @@ export default function GenresPage({ params }: GenresPageProps) {
     setFormData({ genreName: "", genreDescription: "", genreImage: null })
     setSelectedImages([])
     setSelectedGenre(null)
+    setFieldErrors({})
   }
 
   // Handle image selection with validation
@@ -761,6 +812,10 @@ export default function GenresPage({ params }: GenresPageProps) {
     }
   }
 
+  // Shown while typing so an over-long value turns red before submit.
+  const nameError = overLimit("Genre name", formData.genreName, NAME_MAX) || fieldErrors.name
+  const descriptionError = overLimit("Description", formData.genreDescription, DESCRIPTION_MAX) || fieldErrors.description
+
   if (role !== "superadmin") {
     return (
       <div className="flex items-center justify-center h-64">
@@ -794,6 +849,7 @@ export default function GenresPage({ params }: GenresPageProps) {
                   onChange={(e) => setFormData({ ...formData, genreName: e.target.value })}
                   placeholder="Enter genre name"
                 />
+                {nameError && <p className="text-sm text-red-600">{nameError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="genreDescription">Description *</Label>
@@ -804,12 +860,13 @@ export default function GenresPage({ params }: GenresPageProps) {
                   placeholder="Enter genre description"
                   rows={3}
                 />
+                {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
               </div>
               <div className="space-y-2">
                 <Label>Add Images *</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Required. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
+                    Required, up to 5 images. Only PNG or JPG files. 500 KB max size. Dimensions: 1024x8121 recommended.
                   </p>
                   <Input
                     type="file"
@@ -999,6 +1056,7 @@ Actions
                 onChange={(e) => setFormData({ ...formData, genreName: e.target.value })}
                 placeholder="Enter genre name"
               />
+              {nameError && <p className="text-sm text-red-600">{nameError}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="editGenreDescription">Description</Label>
@@ -1009,6 +1067,7 @@ Actions
                 placeholder="Enter genre description"
                 rows={3}
               />
+              {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
             </div>
             
             {/* Current Images Section */}

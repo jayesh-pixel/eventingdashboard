@@ -49,6 +49,7 @@ import { useAuth } from "@/lib/auth-context"
 import { apiClient } from "@/lib/api-client"
 import { dashboard, promoterEndPointPannel, organizerEndpoint, smtpEndpoints } from "@/lib/api-endpoints"
 import { getValidToken } from "@/lib/token-utils"
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, getEmailError, getLengthError, getPasswordError, getPhoneError } from "@/lib/credential-limits"
 import { Loader2, Eye, EyeOff, Upload } from "lucide-react"
 import type { UserRole } from "@/lib/navigation"
 
@@ -86,6 +87,11 @@ interface ApiUserData {
 
 // Backend profile Joi schemas cap State/City at 20 chars for organizer/promoter
 const ADDRESS_NAME_MAX_LENGTH = 20
+// ...and require at least 3 chars for every role
+const ADDRESS_NAME_MIN_LENGTH = 3
+// Organizer updateProfile caps Email at 50 chars
+const ORGANIZER_EMAIL_MAX_LENGTH = 50
+const SMTP_FIELD_MIN_LENGTH = 2
 
 const toPhoneString = (value: unknown): string =>
   value == null ? "" : String(value).replace(/\D/g, "").slice(0, 10)
@@ -129,6 +135,19 @@ export default function SettingsPage({ params }: SettingsPageProps) {
     confirmPassword: "",
   })
   const [passwordLoading, setPasswordLoading] = useState(false)
+  // Limits flagged in red while typing. The current password is checked for length only,
+  // so an existing password with spaces at either end can still be entered.
+  const currentPasswordError = getLengthError(
+    "Current password",
+    passwordForm.currentPassword,
+    PASSWORD_MIN_LENGTH,
+    PASSWORD_MAX_LENGTH
+  )
+  const newPasswordError = getPasswordError(passwordForm.newPassword)
+  const confirmPasswordError =
+    passwordForm.confirmPassword && passwordForm.confirmPassword !== passwordForm.newPassword
+      ? "Passwords do not match"
+      : ""
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -151,6 +170,33 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   })
   const [smtpId, setSmtpId] = useState<string | null>(null)
   const [smtpLoading, setSmtpLoading] = useState(false)
+
+  // Profile/SMTP limits flagged in red while typing (empty optional fields are not sent)
+  const trimmedProfileEmail = profileForm.Email.trim()
+  const profileErrors = {
+    FullName: getLengthError("Full name", profileForm.FullName.trim(), 3, 50),
+    Phone1: getPhoneError("Phone number", profileForm.Phone1),
+    WhatsappNumber: getPhoneError("WhatsApp number", profileForm.WhatsappNumber),
+    Email:
+      getEmailError(trimmedProfileEmail) ||
+      (role === "organizer" && trimmedProfileEmail.length > ORGANIZER_EMAIL_MAX_LENGTH
+        ? `Email must be at most ${ORGANIZER_EMAIL_MAX_LENGTH} characters (currently ${trimmedProfileEmail.length})`
+        : ""),
+    Address: getLengthError("Address", profileForm.Address.trim(), 3, 1024),
+  }
+  const trimmedSmtpPort = smtpForm.port.trim()
+  const smtpErrors = {
+    host: getLengthError("SMTP host", smtpForm.host.trim(), SMTP_FIELD_MIN_LENGTH),
+    port:
+      trimmedSmtpPort && !(/^\d+$/.test(trimmedSmtpPort) && Number(trimmedSmtpPort) >= 1 && Number(trimmedSmtpPort) <= 65535)
+        ? "SMTP port must be a whole number from 1 to 65535"
+        : "",
+    username: getLengthError("SMTP username", smtpForm.username.trim(), SMTP_FIELD_MIN_LENGTH),
+    // Sent as typed (the backend stores it as-is), so spaces count
+    password: smtpForm.password.trim() ? getLengthError("SMTP password", smtpForm.password, SMTP_FIELD_MIN_LENGTH) : "",
+    encryption: getLengthError("Encryption", smtpForm.encryption.trim(), SMTP_FIELD_MIN_LENGTH),
+  }
+  const errorInputClass = (error: string) => (error ? "border-red-500 focus-visible:ring-red-500" : "")
 
   // Load user profile data
   useEffect(() => {
@@ -238,13 +284,22 @@ export default function SettingsPage({ params }: SettingsPageProps) {
   const handleSaveSmtp = async () => {
     // Backend SMTP validation marks every field optional — only send non-empty values
     // (Joi rejects empty strings, so blank fields are omitted instead of sent as "")
+    const smtpError = Object.values(smtpErrors).find(Boolean)
+    if (smtpError) {
+      toast({
+        title: "Error",
+        description: smtpError,
+        variant: "destructive",
+      })
+      return
+    }
     setSmtpLoading(true)
     try {
       const payload = {
         ...(smtpForm.host.trim() ? { Host: smtpForm.host.trim() } : {}),
         ...(smtpForm.port.trim() ? { Port: smtpForm.port.trim() } : {}),
         ...(smtpForm.username.trim() ? { Username: smtpForm.username.trim() } : {}),
-        ...(smtpForm.password.trim() ? { Password: smtpForm.password.trim() } : {}),
+        ...(smtpForm.password.trim() ? { Password: smtpForm.password } : {}),
         ...(smtpForm.encryption.trim() ? { Encryption: smtpForm.encryption.trim() } : {}),
         ...(smtpId ? { smtp_id: smtpId } : {}),
       }
@@ -325,10 +380,12 @@ export default function SettingsPage({ params }: SettingsPageProps) {
       return
     }
 
-    if (passwordForm.newPassword.length < 5 || passwordForm.newPassword.length > 10) {
+    // Also rejects spaces at either end: change-password validates the length and then
+    // saves the trimmed value, so "abcd " was stored as "abcd" - too short to log in with.
+    if (newPasswordError) {
       toast({
         title: "Error",
-        description: "New password must be 5-10 characters long.",
+        description: newPasswordError,
         variant: "destructive",
       })
       return
@@ -406,30 +463,24 @@ export default function SettingsPage({ params }: SettingsPageProps) {
     }
 
     // Validation — backend profile update only requires user_id; all fields optional
-    // Email validation (only if provided)
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (profileForm.Email.trim() && !emailRegex.test(profileForm.Email)) {
+    const profileError = Object.values(profileErrors).find(Boolean)
+    if (profileError) {
       toast({
         title: "Error",
-        description: "Please enter a valid email address.",
+        description: profileError,
         variant: "destructive",
       })
       return
     }
 
-    if (profileForm.Phone1 && profileForm.Phone1.length !== 10) {
+    const tooShort = [
+      { label: "State", value: profileForm.State, saved: savedProfileForm.State },
+      { label: "City", value: profileForm.City, saved: savedProfileForm.City },
+    ].find(({ value, saved }) => value !== saved && value.trim() && value.trim().length < ADDRESS_NAME_MIN_LENGTH)
+    if (tooShort) {
       toast({
         title: "Error",
-        description: "Phone number must contain 10 digits.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (profileForm.WhatsappNumber && profileForm.WhatsappNumber.length !== 10) {
-      toast({
-        title: "Error",
-        description: "WhatsApp number must contain 10 digits.",
+        description: `${tooShort.label} name "${tooShort.value}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters). Please choose a different ${tooShort.label.toLowerCase()}.`,
         variant: "destructive",
       })
       return
@@ -476,11 +527,11 @@ export default function SettingsPage({ params }: SettingsPageProps) {
         if (value && value.trim()) formData.append(key, value)
       }
       formData.append("user_id", user.user_id)
-      appendIfFilled("FullName", profileForm.FullName)
-      appendIfFilled("Email", profileForm.Email)
+      appendIfFilled("FullName", profileForm.FullName.trim())
+      appendIfFilled("Email", trimmedProfileEmail)
       appendIfFilled("Phone1", toPhoneString(profileForm.Phone1))
       appendIfFilled("Phone2", toPhoneString(profileForm.WhatsappNumber))
-      appendIfFilled("Address", profileForm.Address)
+      appendIfFilled("Address", profileForm.Address.trim())
       formData.append("Country", "India")
       formData.append("CountryIsoCode", "IN")
       // Backend keeps the stored value for omitted fields; skip unchanged State/City so a
@@ -597,7 +648,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                   id="full-name"
                   value={profileForm.FullName}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, FullName: e.target.value }))}
+                  className={errorInputClass(profileErrors.FullName)}
                 />
+                {profileErrors.FullName && <p className="text-sm text-red-600">{profileErrors.FullName}</p>}
               </div>
 
               <div className="space-y-2">
@@ -612,7 +665,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                     ...prev,
                     Phone1: e.target.value.replace(/\D/g, "").slice(0, 10),
                   }))}
+                  className={errorInputClass(profileErrors.Phone1)}
                 />
+                {profileErrors.Phone1 && <p className="text-sm text-red-600">{profileErrors.Phone1}</p>}
               </div>
 
               <div className="space-y-2">
@@ -627,7 +682,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                     ...prev,
                     WhatsappNumber: e.target.value.replace(/\D/g, "").slice(0, 10),
                   }))}
+                  className={errorInputClass(profileErrors.WhatsappNumber)}
                 />
+                {profileErrors.WhatsappNumber && <p className="text-sm text-red-600">{profileErrors.WhatsappNumber}</p>}
               </div>
 
               <div className="space-y-2">
@@ -638,7 +695,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                   placeholder="Enter Admin emailId"
                   value={profileForm.Email}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, Email: e.target.value }))}
+                  className={errorInputClass(profileErrors.Email)}
                 />
+                {profileErrors.Email && <p className="text-sm text-red-600">{profileErrors.Email}</p>}
               </div>
 
               <div className="space-y-2 md:col-span-2">
@@ -648,7 +707,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                   placeholder="Enter text here..."
                   value={profileForm.Address}
                   onChange={(e) => setProfileForm(prev => ({ ...prev, Address: e.target.value }))}
+                  className={errorInputClass(profileErrors.Address)}
                 />
+                {profileErrors.Address && <p className="text-sm text-red-600">{profileErrors.Address}</p>}
               </div>
 
               <AddressSelector
@@ -692,6 +753,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 type={showCurrentPassword ? "text" : "password"}
                 value={passwordForm.currentPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, currentPassword: e.target.value }))}
+                className={currentPasswordError ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
               <Button
                 type="button"
@@ -707,6 +769,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 )}
               </Button>
             </div>
+            {currentPasswordError && <p className="text-sm text-red-600">{currentPasswordError}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="new-password">New Password *</Label>
@@ -714,9 +777,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               <Input
                 id="new-password"
                 type={showNewPassword ? "text" : "password"}
-                maxLength={10}
                 value={passwordForm.newPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, newPassword: e.target.value }))}
+                className={newPasswordError ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
               <Button
                 type="button"
@@ -732,6 +795,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 )}
               </Button>
             </div>
+            {newPasswordError && <p className="text-sm text-red-600">{newPasswordError}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirm-password">Confirm New Password *</Label>
@@ -739,9 +803,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
               <Input
                 id="confirm-password"
                 type={showConfirmPassword ? "text" : "password"}
-                maxLength={10}
                 value={passwordForm.confirmPassword}
                 onChange={(e) => setPasswordForm(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                className={confirmPasswordError ? "border-red-500 focus-visible:ring-red-500" : ""}
               />
               <Button
                 type="button"
@@ -757,6 +821,7 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 )}
               </Button>
             </div>
+            {confirmPasswordError && <p className="text-sm text-red-600">{confirmPasswordError}</p>}
           </div>
           <Button onClick={handlePasswordChange} disabled={passwordLoading}>
             {passwordLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -780,7 +845,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 placeholder="smtp.example.com"
                 value={smtpForm.host}
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, host: e.target.value }))}
+                className={errorInputClass(smtpErrors.host)}
               />
+              {smtpErrors.host && <p className="text-sm text-red-600">{smtpErrors.host}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtp-port">SMTP Port</Label>
@@ -790,7 +857,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 placeholder="587"
                 value={smtpForm.port}
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, port: e.target.value }))}
+                className={errorInputClass(smtpErrors.port)}
               />
+              {smtpErrors.port && <p className="text-sm text-red-600">{smtpErrors.port}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtp-user">SMTP Username</Label>
@@ -798,7 +867,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 id="smtp-user"
                 value={smtpForm.username}
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, username: e.target.value }))}
+                className={errorInputClass(smtpErrors.username)}
               />
+              {smtpErrors.username && <p className="text-sm text-red-600">{smtpErrors.username}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtp-password">SMTP Password</Label>
@@ -807,7 +878,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 type="password"
                 value={smtpForm.password}
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, password: e.target.value }))}
+                className={errorInputClass(smtpErrors.password)}
               />
+              {smtpErrors.password && <p className="text-sm text-red-600">{smtpErrors.password}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="smtp-encryption">Encryption</Label>
@@ -816,7 +889,9 @@ export default function SettingsPage({ params }: SettingsPageProps) {
                 placeholder="TLS / SSL / NONE"
                 value={smtpForm.encryption}
                 onChange={(e) => setSmtpForm(prev => ({ ...prev, encryption: e.target.value }))}
+                className={errorInputClass(smtpErrors.encryption)}
               />
+              {smtpErrors.encryption && <p className="text-sm text-red-600">{smtpErrors.encryption}</p>}
             </div>
             <Button onClick={handleSaveSmtp} disabled={smtpLoading}>
               {smtpLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

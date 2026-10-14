@@ -96,22 +96,61 @@ interface ApiResponse {
 const ITEMS_PER_PAGE = 10
 
 // Same anchored pattern as the API's isValidGoogleMapsIframe (helpers/commonFunctions.js);
-// anything else is rejected with 400 "Invalid Google Maps iframe URL".
+// anything else is rejected with 400 "Invalid Google Maps iframe URL". The policy is the one
+// this page shipped with on 3 Oct. The API source has an uncommitted switch to
+// "strict-origin-when-cross-origin" - if the live API is on that, change MAPS_REFERRER_POLICY.
+const MAPS_REFERRER_POLICY = "no-referrer-when-downgrade"
 const GOOGLE_MAPS_IFRAME_REGEX =
   /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"><\/iframe>$/
 const GOOGLE_MAPS_EMBED_URL_REGEX = /^https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+$/
 const MAP_LOCATION_ERROR =
   'Map Location must be the Google Maps embed code: in Google Maps choose Share > Embed a map > Copy HTML and paste the whole <iframe ...></iframe>.'
 
-// Trims the pasted value and wraps a bare embed URL in the iframe markup Google's
-// "Embed a map" dialog produces, which is the only shape the API accepts.
+const buildMapIframe = (src: string, width = "600", height = "450") =>
+  `<iframe src="${src}" width="${width}" height="${height}" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="${MAPS_REFERRER_POLICY}"></iframe>`
+
+// Trims the pasted value and rebuilds a bare embed URL, or Google's "Embed a map" HTML
+// (whose referrerpolicy/attribute order differs from what the API matches), in the
+// only shape the API accepts.
 const normalizeMapLocation = (value: string): string => {
   const trimmed = value.trim()
   if (GOOGLE_MAPS_EMBED_URL_REGEX.test(trimmed)) {
-    return `<iframe src="${trimmed}" width="600" height="450" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`
+    return buildMapIframe(trimmed)
+  }
+  if (/^<iframe\b[^>]*>\s*<\/iframe>$/i.test(trimmed)) {
+    const src = trimmed.match(/\ssrc="(https:\/\/www\.google\.com\/maps\/embed\?pb=[^"\s<>]+)"/)?.[1]
+    if (src) {
+      const width = trimmed.match(/\swidth="(\d+)"/)?.[1]
+      const height = trimmed.match(/\sheight="(\d+)"/)?.[1]
+      return buildMapIframe(src, width, height)
+    }
   }
   return trimmed
 }
+
+// Joi validateVenueCreation / validateVenueUpdateData limits.
+const NAME_MIN = 3
+const NAME_MAX = 50
+const TEXT_MIN = 5
+const TEXT_MAX = 1024
+
+const overLimit = (label: string, value: string, max: number) => {
+  const length = value.trim().length
+  return length > max ? `${label} must be at most ${max} characters (currently ${length})` : ""
+}
+
+// The API checks duplicates with new RegExp("^" + Name + "$") built from the raw name,
+// so a name that is not a valid pattern (e.g. "C++", "[Live") fails there with a 500.
+const breaksServerNameRegex = (name: string) => {
+  try {
+    new RegExp("^" + name + "$", "i")
+    return false
+  } catch {
+    return true
+  }
+}
+
+type VenueFieldErrors = Partial<Record<"name" | "description" | "address" | "location" | "mapLocation", string>>
 
 export default function VenuesPage({ params }: VenuesPageProps) {
   // Handle params which might be a Promise
@@ -145,6 +184,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
   const [imageValidationErrors, setImageValidationErrors] = React.useState<string[]>([])
+  const [fieldErrors, setFieldErrors] = React.useState<VenueFieldErrors>({})
 
   // Image validation function
   const validateImageFile = (file: File): Promise<string | null> => {
@@ -352,43 +392,64 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     setCurrentPage(page)
   }
 
-  const handleCreateVenue = async () => {
-    if (!formData.venueName.trim() || !formData.fullAddress.trim() || !formData.state.trim() || !formData.city.trim() || !formData.mapLocation.trim()) {
-      toast({
-        title: "Error",
-        description: "Please fill in all required fields (Name, Address, State, City, and Map Location)",
-        variant: "destructive",
-      })
-      return
+  // Create requires Name, Address, State, City and Map Location; on update the API keeps
+  // the stored value for any blank field.
+  const validateFields = (isEdit: boolean): boolean => {
+    const errors: VenueFieldErrors = {}
+    const name = formData.venueName.trim()
+    if (!name) {
+      if (!isEdit) errors.name = "Venue name is required"
+    } else if (name.length < NAME_MIN || name.length > NAME_MAX) {
+      errors.name = `Venue name must be ${NAME_MIN}-${NAME_MAX} characters (currently ${name.length})`
+    } else if (breaksServerNameRegex(name)) {
+      errors.name =
+        'Venue name contains characters the server cannot process (e.g. "++", a leading "*", or an unclosed "(" or "[")'
     }
 
-    if (formData.venueName.trim().length < 3) {
-      toast({
-        title: "Error",
-        description: "Venue name must be at least 3 characters",
-        variant: "destructive",
-      })
-      return
+    const description = formData.venueDescription.trim()
+    if (description && (description.length < TEXT_MIN || description.length > TEXT_MAX)) {
+      errors.description = `Description must be ${TEXT_MIN}-${TEXT_MAX} characters (currently ${description.length})`
     }
 
-    if (formData.venueDescription.trim() && formData.venueDescription.trim().length < 5) {
-      toast({
-        title: "Error",
-        description: "Description must be at least 5 characters",
-        variant: "destructive",
-      })
-      return
+    const address = formData.fullAddress.trim()
+    if (!address) {
+      if (!isEdit) errors.address = "Full address is required"
+    } else if (address.length < TEXT_MIN || address.length > TEXT_MAX) {
+      errors.address = `Full address must be ${TEXT_MIN}-${TEXT_MAX} characters (currently ${address.length})`
+    }
+
+    if (!isEdit && !stateData.some((s) => s.name === formData.state)) {
+      // StateIsoCode is required by the Venue model; it comes from the loaded state list.
+      errors.location = "Select a state from the list (the state list may not have loaded; reopen the dialog)"
+    } else if (!formData.city.trim()) {
+      // Changing the state clears the city; the update API would otherwise keep the old city.
+      errors.location = `Select a city in ${formData.state || "the selected state"}`
     }
 
     const mapLocation = normalizeMapLocation(formData.mapLocation)
-    if (!GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
-      toast({
-        title: "Error",
-        description: MAP_LOCATION_ERROR,
-        variant: "destructive",
-      })
-      return
+    if (!isEdit) {
+      if (!mapLocation) errors.mapLocation = "Map location is required"
+      else if (!GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) errors.mapLocation = MAP_LOCATION_ERROR
+    } else if (
+      mapLocation &&
+      mapLocation !== (selectedVenue?.Map_Location || "").trim() &&
+      !GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)
+    ) {
+      errors.mapLocation = MAP_LOCATION_ERROR
     }
+
+    setFieldErrors(errors)
+    const firstError = errors.name || errors.description || errors.address || errors.location || errors.mapLocation
+    if (firstError) {
+      toast({ title: "Error", description: firstError, variant: "destructive" })
+    }
+    return !firstError
+  }
+
+  const handleCreateVenue = async () => {
+    if (!validateFields(false)) return
+
+    const mapLocation = normalizeMapLocation(formData.mapLocation)
 
     if (selectedImages.length === 0) {
       toast({
@@ -424,8 +485,9 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       formDataPayload.append('AdminRole', getNumericAdminRole(user.AdminRole || role).toString())
       formDataPayload.append('user_id', user.user_id)
       formDataPayload.append('Name', formData.venueName)
-      formDataPayload.append('Description', formData.venueDescription)
-      formDataPayload.append('Address', formData.fullAddress)
+      // The API stores Description and Address as sent.
+      formDataPayload.append('Description', formData.venueDescription.trim())
+      formDataPayload.append('Address', formData.fullAddress.trim())
       formDataPayload.append('City', formData.city)
       formDataPayload.append('State', formData.state)
       formDataPayload.append('Country', 'India')
@@ -483,18 +545,12 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       return
     }
 
+    if (!validateFields(true)) return
+
     // Only send Map_Location when it changed: the API re-validates whatever it receives,
     // so an unchanged older value would block saving unrelated fields.
     const mapLocation = normalizeMapLocation(formData.mapLocation)
     const mapLocationChanged = mapLocation !== (selectedVenue.Map_Location || "").trim()
-    if (mapLocationChanged && mapLocation && !GOOGLE_MAPS_IFRAME_REGEX.test(mapLocation)) {
-      toast({
-        title: "Error",
-        description: MAP_LOCATION_ERROR,
-        variant: "destructive",
-      })
-      return
-    }
 
     setLoading(true)
     try {
@@ -511,8 +567,8 @@ export default function VenuesPage({ params }: VenuesPageProps) {
         user_id: user.user_id,
         venue_id: selectedVenue._id,
         Name: formData.venueName,
-        Description: formData.venueDescription,
-        Address: formData.fullAddress,
+        Description: formData.venueDescription.trim(),
+        Address: formData.fullAddress.trim(),
         City: formData.city,
         State: formData.state,
         Country: "India",
@@ -614,6 +670,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
       state: venue.State,
       mapLocation: venue.Map_Location,
     })
+    setFieldErrors({})
     setIsEditDialogOpen(true)
   }
 
@@ -635,6 +692,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     setSelectedVenue(null)
     setSelectedImages([])
     setImageValidationErrors([])
+    setFieldErrors({})
   }
 
   // Image upload functions
@@ -763,6 +821,20 @@ export default function VenuesPage({ params }: VenuesPageProps) {
     return `${BASE_URL}/${imagePath}`
   }
 
+  // Shown while typing so an over-long value or a non-embed map link turns red before submit.
+  const liveMapLocation = normalizeMapLocation(formData.mapLocation)
+  const mapLocationEdited = isEditDialogOpen
+    ? liveMapLocation !== (selectedVenue?.Map_Location || "").trim()
+    : true
+  const nameError = overLimit("Venue name", formData.venueName, NAME_MAX) || fieldErrors.name
+  const descriptionError = overLimit("Description", formData.venueDescription, TEXT_MAX) || fieldErrors.description
+  const addressError = overLimit("Full address", formData.fullAddress, TEXT_MAX) || fieldErrors.address
+  // Both location errors mean "no city chosen yet", so drop them once a city is picked.
+  const locationError = formData.city.trim() ? "" : fieldErrors.location
+  const mapLocationError = liveMapLocation
+    ? mapLocationEdited && !GOOGLE_MAPS_IFRAME_REGEX.test(liveMapLocation) ? MAP_LOCATION_ERROR : ""
+    : fieldErrors.mapLocation
+
   if (role !== "superadmin") {
     return (
       <div className="flex items-center justify-center h-64">
@@ -797,6 +869,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                     onChange={(e) => setFormData({ ...formData, venueName: e.target.value })}
                     placeholder="Enter venue name"
                   />
+                  {nameError && <p className="text-sm text-red-600">{nameError}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="priority">Priority</Label>
@@ -819,6 +892,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   placeholder="Enter venue description"
                   rows={3}
                 />
+                {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
               </div>
               
               <div className="space-y-2">
@@ -830,6 +904,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   placeholder="Enter full address"
                   rows={2}
                 />
+                {addressError && <p className="text-sm text-red-600">{addressError}</p>}
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -866,6 +941,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   </Select>
                 </div>
               </div>
+              {locationError && <p className="text-sm text-red-600">{locationError}</p>}
               
               <div className="space-y-2">
                 <Label htmlFor="mapLocation">Map Location *</Label>
@@ -876,6 +952,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   placeholder="Paste the Google Maps embed (iframe) code"
                   rows={2}
                 />
+                {mapLocationError && <p className="text-sm text-red-600">{mapLocationError}</p>}
                 <p className="text-xs text-muted-foreground">
                   Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare https://www.google.com/maps/embed?pb=... link is also accepted.
                 </p>
@@ -1254,6 +1331,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                   onChange={(e) => setFormData({ ...formData, venueName: e.target.value })}
                   placeholder="Enter venue name"
                 />
+                {nameError && <p className="text-sm text-red-600">{nameError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="editPriority">Priority</Label>
@@ -1276,6 +1354,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 placeholder="Enter venue description"
                 rows={3}
               />
+              {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
             </div>
             
             <div className="space-y-2">
@@ -1287,6 +1366,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 placeholder="Enter full address"
                 rows={2}
               />
+              {addressError && <p className="text-sm text-red-600">{addressError}</p>}
             </div>
             
             <div className="grid grid-cols-2 gap-4">
@@ -1323,6 +1403,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 </Select>
               </div>
             </div>
+            {locationError && <p className="text-sm text-red-600">{locationError}</p>}
             
             <div className="space-y-2">
               <Label htmlFor="editMapLocation">Map Location</Label>
@@ -1333,6 +1414,7 @@ export default function VenuesPage({ params }: VenuesPageProps) {
                 placeholder="Paste the Google Maps embed (iframe) code"
                 rows={2}
               />
+              {mapLocationError && <p className="text-sm text-red-600">{mapLocationError}</p>}
               <p className="text-xs text-muted-foreground">
                 Google Maps &gt; Share &gt; Embed a map &gt; Copy HTML. A bare https://www.google.com/maps/embed?pb=... link is also accepted.
               </p>

@@ -94,6 +94,28 @@ const ITEMS_PER_PAGE = 10
 const MAX_FILE_SIZE = 500 * 1024 // 500KB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png']
 const REQUIRED_DIMENSIONS = { width: 640, height: 480 }
+// Joi validateArtistRegistration / validateArtistDataUpdate limits.
+const NAME_MIN = 5
+const NAME_MAX = 50
+const DESCRIPTION_MAX = 1024
+
+const overLimit = (label: string, value: string, max: number) => {
+  const length = value.trim().length
+  return length > max ? `${label} must be at most ${max} characters (currently ${length})` : ""
+}
+
+// The API checks duplicates with new RegExp("^" + Name + "$") built from the raw name,
+// so a name that is not a valid pattern (e.g. "C++", "[Live") fails there with a 500.
+const breaksServerNameRegex = (name: string) => {
+  try {
+    new RegExp("^" + name + "$", "i")
+    return false
+  } catch {
+    return true
+  }
+}
+const NAME_REGEX_ERROR =
+  'Name contains characters the server cannot process (e.g. "++", a leading "*", or an unclosed "(" or "[")'
 
 export default function ArtistsPage({ params }: ArtistsPageProps) {
   // Handle params which might be a Promise
@@ -140,15 +162,22 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
   const validateForm = (isEdit = false) => {
     const errors: Record<string, string> = {}
 
-    if (!formData.name.trim()) {
+    const name = formData.name.trim()
+    if (!name) {
       if (!isEdit) errors.name = "Artist name is required"
-    } else if (formData.name.trim().length < 5) {
-      errors.name = "Artist name must be at least 5 characters"
+    } else if (name.length < NAME_MIN || name.length > NAME_MAX) {
+      errors.name = `Artist name must be ${NAME_MIN}-${NAME_MAX} characters (currently ${name.length})`
+    } else if (breaksServerNameRegex(name)) {
+      errors.name = NAME_REGEX_ERROR
     }
-    
-    if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
+
+    // The API trims the email before storing it.
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
       errors.email = "Please enter a valid email address"
     }
+
+    const descriptionError = overLimit("Description", formData.description, DESCRIPTION_MAX)
+    if (descriptionError) errors.description = descriptionError
     
     // PhoneNo is stored as a Number, so an edited artist's value may not be a string.
     if (formData.phoneNo && !/^\d{10}$/.test(String(formData.phoneNo).replace(/\D/g, ''))) {
@@ -570,6 +599,7 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
       description: artist.Description || "",
       priority: artist.Priority || 0,
     })
+    setFormErrors({})
     setIsEditDialogOpen(true)
   }
 
@@ -609,6 +639,10 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
     }
   }, [role, fetchArtists])
 
+  // Shown while typing so an over-long value turns red before submit.
+  const nameError = overLimit("Artist name", formData.name, NAME_MAX) || formErrors.name
+  const descriptionError = overLimit("Description", formData.description, DESCRIPTION_MAX) || formErrors.description
+
   // Role-based access control
   if (role !== "superadmin") {
     return (
@@ -645,8 +679,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Enter artist name"
                   />
-                  {formErrors.name && (
-                    <p className="text-sm text-red-600">{formErrors.name}</p>
+                  {nameError && (
+                    <p className="text-sm text-red-600">{nameError}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -699,6 +733,9 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                   placeholder="Enter artist description"
                   rows={3}
                 />
+                {descriptionError && (
+                  <p className="text-sm text-red-600">{descriptionError}</p>
+                )}
               </div>
               
               {/* Image Upload Section */}
@@ -984,8 +1021,8 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Enter artist name"
                   />
-                  {formErrors.name && (
-                    <p className="text-sm text-red-600">{formErrors.name}</p>
+                  {nameError && (
+                    <p className="text-sm text-red-600">{nameError}</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -1036,6 +1073,9 @@ export default function ArtistsPage({ params }: ArtistsPageProps) {
                     placeholder="Enter artist description"
                     rows={3}
                   />
+                  {descriptionError && (
+                    <p className="text-sm text-red-600">{descriptionError}</p>
+                  )}
                 </div>
               </div>
             </div>

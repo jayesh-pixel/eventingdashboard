@@ -29,7 +29,7 @@ import type { Booking } from "@/lib/types"
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { getNumericRole } from "@/lib/role-mapping"
-import { downloadBookingsWorkbook, exportTimestamp, fetchAllBookingPages, type ExportColumn } from "@/lib/booking-export"
+import { describeBookingsError, downloadBookingsWorkbook, toBookingSearchKeyword, exportTimestamp, fetchAllBookingPages, type ExportColumn } from "@/lib/booking-export"
 import {
   eventEndPoint,
   getallcityDataEndPoint,
@@ -139,6 +139,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   // State management
   const [loading, setLoading] = React.useState(true)
   const [hasLoadedBookings, setHasLoadedBookings] = React.useState(false)
+  const latestFetchId = React.useRef(0)
   const [bookingsData, setBookingsData] = React.useState<Booking[]>([])
   const [originalData, setOriginalData] = React.useState<Booking[]>([])
   const [currentPage, setCurrentPage] = React.useState(1)
@@ -219,9 +220,14 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     return nextDate
   }
 
+  // Clamp to the target month's last day: setMonth alone overflowed, so "Last 1 Month"
+  // on 31 Mar started at 3 Mar instead of 28/29 Feb.
   const addMonths = (date: Date, months: number) => {
     const nextDate = new Date(date)
+    nextDate.setDate(1)
     nextDate.setMonth(nextDate.getMonth() + months)
+    const lastDay = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate()
+    nextDate.setDate(Math.min(date.getDate(), lastDay))
     return nextDate
   }
 
@@ -244,7 +250,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       case "last1month":
         return makeApiDateRange(toDateInputValue(addMonths(today, -1)), todayValue)
       case "manual":
-        return manualStartDate && manualEndDate ? makeApiDateRange(manualStartDate, manualEndDate) : null
+        if (!manualStartDate || !manualEndDate) return null
+        // A range picked end-first used to match nothing; YYYY-MM-DD sorts as text.
+        return manualStartDate <= manualEndDate
+          ? makeApiDateRange(manualStartDate, manualEndDate)
+          : makeApiDateRange(manualEndDate, manualStartDate)
       default:
         return null
     }
@@ -309,8 +319,9 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       // whole request with 400 when it is shorter, so a one or two letter search wiped
       // the table out instead of narrowing it. Below the threshold the keyword is simply
       // not sent and the unfiltered list stays on screen.
-      if (filters?.searchTerm && filters.searchTerm.length >= MIN_SEARCH_LENGTH) {
-        payload.searchkeyword = filters.searchTerm
+      const searchKeyword = filters?.searchTerm ? toBookingSearchKeyword(filters.searchTerm) : ""
+      if (searchKeyword.length >= MIN_SEARCH_LENGTH) {
+        payload.searchkeyword = searchKeyword
       }
 
       const selectedDateRange = getSelectedDateRange()
@@ -615,6 +626,16 @@ export default function BookingsPage({ params }: BookingsPageProps) {
   }
 
   // Fetch bookings data
+  // Organizer + venue/city and the export pull at most 25 pages of 200; say so instead of
+  // presenting a cut-short list as complete.
+  const warnBookingsTruncated = (loadedPages: number, totalPages: number) => {
+    toast({
+      title: "Showing partial results",
+      description: `Only the first ${loadedPages * 200} of about ${totalPages * 200} bookings were loaded. Add a date range or event filter to see the rest.`,
+      variant: "destructive",
+    })
+  }
+
   const fetchBookingsData = async (filters?: {
     searchTerm?: string
     page?: number
@@ -624,6 +645,11 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     promoterId?: string
     organizerId?: string
   }) => {
+    // Only the newest request may touch the table: without this, a slow response for the
+    // previous filters (e.g. the multi-page organizer + venue path) landed after the new
+    // one and put the old rows back, so the filter looked like it did nothing.
+    const fetchId = ++latestFetchId.current
+    const isStale = () => fetchId !== latestFetchId.current
     try {
       setLoading(true)
 
@@ -641,7 +667,16 @@ export default function BookingsPage({ params }: BookingsPageProps) {
 
       if (clientFilter) {
         // Organizer + venue/city: fetch the organizer's bookings, narrow and page here.
-        const rawRows = await fetchAllBookingPages(apiEndpoint, requestPayload, authToken, extractBookingsArray)
+        const rawRows = await fetchAllBookingPages(
+          apiEndpoint,
+          requestPayload,
+          authToken,
+          extractBookingsArray,
+          undefined,
+          undefined,
+          warnBookingsTruncated
+        )
+        if (isStale()) return
         const rows = sortBookingsByDate(normalizeBookingData(applyClientScopeFilter(rawRows, clientFilter)))
         const pageCount = Math.ceil(rows.length / ITEMS_PER_PAGE)
 
@@ -676,6 +711,8 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         body: JSON.stringify(requestPayload),
       })
 
+      if (isStale()) return
+
       // Treat 404 as no data (show empty state, not an error dialog)
       if (response.status === 404) {
         console.warn("Received 404 from bookings API – showing empty state")
@@ -688,6 +725,7 @@ export default function BookingsPage({ params }: BookingsPageProps) {
       }
 
       const data = await handleApiResponse(response)
+      if (isStale()) return
       console.log("🎯 BOOKING API RESPONSE SUCCESS:")
       console.log("- Response status:", response.status)
       console.log("- Response size:", JSON.stringify(data).length, "characters")
@@ -793,18 +831,21 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         throw new Error("No valid bookings array found in response")
       }
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching bookings:", error)
       toast({
         title: "Error",
-        description: getApiErrorMessage(error, "Failed to fetch bookings"),
+        description: describeBookingsError(getApiErrorMessage(error, "Failed to fetch bookings")),
         variant: "destructive",
       })
       setBookingsData([])
       setOriginalData([])
       setPaginationMeta({ totalPages: 0, totalBookings: 0 })
     } finally {
-      setHasLoadedBookings(true)
-      setLoading(false)
+      if (!isStale()) {
+        setHasLoadedBookings(true)
+        setLoading(false)
+      }
     }
   }
 
@@ -1188,6 +1229,12 @@ export default function BookingsPage({ params }: BookingsPageProps) {
     setEventFilter("all")
     setPromoterFilter("all")
     setOrganizerFilter("all")
+    // "Reset All" left the date range and search applied, so the table stayed narrowed.
+    setDateFilter("all")
+    setManualStartDate("")
+    setManualEndDate("")
+    setSearchTerm("")
+    setDebouncedSearchTerm("")
     setCurrentPage(1)
   }
 
@@ -1322,7 +1369,10 @@ export default function BookingsPage({ params }: BookingsPageProps) {
         getBookingsListEndpoint(),
         scopePayload,
         authToken,
-        extractBookingsArray
+        extractBookingsArray,
+        undefined,
+        undefined,
+        warnBookingsTruncated
       )
       const rawRows = clientFilter ? applyClientScopeFilter(fetchedRows, clientFilter) : fetchedRows
 
@@ -1653,6 +1703,13 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                     Type at least {MIN_SEARCH_LENGTH} characters to search.
                   </p>
                 )}
+              {/* The API matches names and booking IDs from the start, and phone numbers only
+                  in full, so "Sharma" or a partial number finds nothing. */}
+              {normalizeSearchText(searchTerm).length >= MIN_SEARCH_LENGTH && (
+                <p className="text-xs text-muted-foreground">
+                  Matches the start of a name or booking ID, or a full 10-digit phone number.
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-3">
               <Dialog open={isFilterDialogOpen} onOpenChange={handleFilterDialogOpenChange}>
@@ -1831,7 +1888,14 @@ export default function BookingsPage({ params }: BookingsPageProps) {
                             : "Online"}
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-0 overflow-x-hidden">
+                  <CardContent className="relative p-0 overflow-x-hidden">
+                  {/* Refetches after the first load kept the old rows on screen with no
+                      sign of work, which read as the filter doing nothing. */}
+                  {loading && hasLoadedBookings && (
+                    <div className="absolute inset-0 z-10 flex items-start justify-center bg-background/60 pt-16">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  )}
                   {/* Mobile Card View */}
                                  {/* Desktop Table View */}
                   <div className="w-full">

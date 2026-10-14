@@ -29,7 +29,7 @@ import { formatEventDate, normalizeSearchText } from "@/lib/utils"
 import { useToast } from "@/hooks/use-toast"
 import { organizerEndpoint, promoterEndPointPannel } from "@/lib/api-endpoints"
 import { getNumericRole } from "@/lib/role-mapping"
-import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
+import { downloadBookingsWorkbook, exportTimestamp, toBookingSearchKeyword, type ExportColumn } from "@/lib/booking-export"
 import { getValidToken } from "@/lib/token-utils"
 import { useRouter } from "next/navigation"
 import type { UserRole } from "@/lib/navigation"
@@ -203,7 +203,7 @@ export default function EventReportPage({ params }: EventReportPageProps) {
           }
         : scopePayload()
       if (searchKeyword) {
-        basePayload.searchkeyword = searchKeyword
+        basePayload.searchkeyword = toBookingSearchKeyword(searchKeyword)
       }
 
       const endpoint = organizerEndpoint.GET_ALL_LATEST_BOOKINGS_FOR_SUPERADMIN_ORGANIZER
@@ -245,8 +245,13 @@ export default function EventReportPage({ params }: EventReportPageProps) {
           )
         )
 
+        // A failed page used to be skipped, so the report undercounted with no sign of it.
+        const failedPages = pages.filter((pageData) => !pageData || pageData.error).length
+        if (failedPages > 0) {
+          throw new Error(`Could not load ${failedPages} of ${totalPagesFromApi} pages of bookings. Please try again.`)
+        }
         for (const pageData of pages) {
-          if (pageData) rows = rows.concat(extract(pageData))
+          rows = rows.concat(extract(pageData))
         }
       }
 

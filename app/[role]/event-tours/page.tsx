@@ -40,6 +40,7 @@ import { eventTourEndPoint } from "@/lib/api-endpoints"
 import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import { formatDate } from "@/lib/utils"
+import { getLengthError } from "@/lib/credential-limits"
 import type { EventTour } from "@/lib/types"
 import Image from "next/image"
 
@@ -65,6 +66,27 @@ const ITEMS_PER_PAGE = 10
 const TOUR_NAME_MIN = 5
 const TOUR_NAME_MAX = 50
 const MAX_TOUR_IMAGES = 5
+// Description max(1024) (validateEventTourCreation / validateEventTourDataUpdate)
+const TOUR_DESCRIPTION_MAX = 1024
+
+// The API stores the trimmed name and checks it for duplicates with new RegExp("^" + name + "$", "i"),
+// so a name that is not a valid pattern (e.g. "C++ Tour") fails on the server
+const getTourNameError = (name: string) => {
+  const trimmed = name.trim()
+  const lengthError = getLengthError("Tour name", trimmed, TOUR_NAME_MIN, TOUR_NAME_MAX)
+  if (lengthError) return lengthError
+  try {
+    new RegExp(`^${trimmed}$`, "i")
+  } catch {
+    return "Tour name cannot contain unmatched ( ) [ ] or a * + ? with nothing before it"
+  }
+  return ""
+}
+
+const getTourDescriptionError = (description: string) =>
+  description.trim().length > TOUR_DESCRIPTION_MAX
+    ? `Description must be at most ${TOUR_DESCRIPTION_MAX} characters (currently ${description.trim().length})`
+    : ""
 
 export default function EventToursPage({ params }: EventToursPageProps) {
   // Handle params which might be a Promise
@@ -221,10 +243,11 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       return
     }
 
-    if (formData.tourName.trim().length < TOUR_NAME_MIN || formData.tourName.trim().length > TOUR_NAME_MAX) {
+    const nameError = getTourNameError(formData.tourName)
+    if (nameError) {
       toast({
         title: "Error",
-        description: `Tour name must be ${TOUR_NAME_MIN}-${TOUR_NAME_MAX} characters`,
+        description: nameError,
         variant: "destructive",
       })
       return
@@ -243,6 +266,16 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       toast({
         title: "Error",
         description: "Tour description is required",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const descriptionError = getTourDescriptionError(formData.tourDescription)
+    if (descriptionError) {
+      toast({
+        title: "Error",
+        description: descriptionError,
         variant: "destructive",
       })
       return
@@ -272,8 +305,8 @@ export default function EventToursPage({ params }: EventToursPageProps) {
 
       // Create FormData for multipart/form-data request
       const formDataToSend = new FormData()
-      formDataToSend.append("Name", formData.tourName)
-      formDataToSend.append("Description", formData.tourDescription || "")
+      formDataToSend.append("Name", formData.tourName.trim())
+      formDataToSend.append("Description", formData.tourDescription.trim())
       
       // Add images if selected
       formData.imageFiles.forEach((file) => {
@@ -323,12 +356,14 @@ export default function EventToursPage({ params }: EventToursPageProps) {
       return
     }
 
-    // The update handler skips validateEventTourDataUpdate, so enforce its Name rule here
-    const trimmedName = formData.tourName.trim()
-    if (trimmedName.length < TOUR_NAME_MIN || trimmedName.length > TOUR_NAME_MAX) {
+    // The update handler skips validateEventTourDataUpdate, so enforce its rules here
+    const editError = formData.tourName.trim()
+      ? getTourNameError(formData.tourName) || getTourDescriptionError(formData.tourDescription)
+      : "Tour name is required"
+    if (editError) {
       toast({
         title: "Error",
-        description: `Tour name must be ${TOUR_NAME_MIN}-${TOUR_NAME_MAX} characters`,
+        description: editError,
         variant: "destructive",
       })
       return
@@ -355,8 +390,8 @@ export default function EventToursPage({ params }: EventToursPageProps) {
         },
         body: JSON.stringify({
           eventTour_id: selectedTour._id,
-          Name: formData.tourName,
-          Description: formData.tourDescription,
+          Name: formData.tourName.trim(),
+          Description: formData.tourDescription.trim(),
         }),
       })
 
@@ -753,6 +788,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
                   placeholder="Enter tour name"
                 />
+                {formData.tourName.trim() && getTourNameError(formData.tourName) && (
+                  <p className="text-sm text-red-600">{getTourNameError(formData.tourName)}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="tourDescription">Description *</Label>
@@ -763,6 +801,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                   placeholder="Enter tour description"
                   rows={3}
                 />
+                {getTourDescriptionError(formData.tourDescription) && (
+                  <p className="text-sm text-red-600">{getTourDescriptionError(formData.tourDescription)}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="imageFiles">Images *</Label>
@@ -993,6 +1034,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 onChange={(e) => setFormData({ ...formData, tourName: e.target.value })}
                 placeholder="Enter tour name"
               />
+              {formData.tourName.trim() && getTourNameError(formData.tourName) && (
+                <p className="text-sm text-red-600">{getTourNameError(formData.tourName)}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="editTourDescription">Description</Label>
@@ -1003,6 +1047,9 @@ export default function EventToursPage({ params }: EventToursPageProps) {
                 placeholder="Enter tour description"
                 rows={3}
               />
+              {getTourDescriptionError(formData.tourDescription) && (
+                <p className="text-sm text-red-600">{getTourDescriptionError(formData.tourDescription)}</p>
+              )}
             </div>
             
             {/* Current Images */}

@@ -28,7 +28,15 @@ interface AddressSelectorProps {
   setCityName: (value: string) => void
   className?: string
   required?: boolean
+  // Longest State/City name the target API accepts, e.g. 20 for organizer/promoter
+  // profile updates; longer names get an inline error.
+  maxNameLength?: number
 }
+
+const nameTooLongError = (label: string, name: string, max?: number) =>
+  max && name.length > max
+    ? `${label} name must be at most ${max} characters for this form ("${name}" is ${name.length})`
+    : ""
 
 export const AddressSelector: React.FC<AddressSelectorProps> = ({
   stateIsoCode,
@@ -41,6 +49,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
   setCityName,
   className = "",
   required = true,
+  maxNameLength,
 }) => {
   const [stateData, setStateData] = React.useState<State[]>([])
   const [cityData, setCityData] = React.useState<City[]>([])
@@ -165,6 +174,9 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
     setCityName(selectedCity ? selectedCity.name : "")
   }
 
+  const stateNameError = nameTooLongError("State", stateName, maxNameLength)
+  const cityNameError = nameTooLongError("City", cityName, maxNameLength)
+
   return (
     <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${className}`}>
       {/* State Selector */}
@@ -182,6 +194,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             ))}
           </SelectContent>
         </Select>
+        {stateNameError && <p className="text-sm text-red-600">{stateNameError}</p>}
       </div>
 
       {/* City Selector */}
@@ -211,6 +224,7 @@ export const AddressSelector: React.FC<AddressSelectorProps> = ({
             ))}
           </SelectContent>
         </Select>
+        {cityNameError && <p className="text-sm text-red-600">{cityNameError}</p>}
       </div>
     </div>
   )

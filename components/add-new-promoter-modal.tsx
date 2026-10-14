@@ -157,6 +157,13 @@ const AddNewPromoterModal = ({
         return
       }
 
+      // validateAddPromoterToEvent wants promoterIds as non-empty strings; an assigned row
+      // without a promoter_id would serialize as null and fail the whole save. Duplicates
+      // would be stored twice in EventPromoter.
+      const promoterIds = Array.from(
+        new Set(selectedPromoterIds.filter((id): id is string => typeof id === "string" && id.trim() !== ""))
+      )
+
       // Backend expects { event_id, promoterIds: [string] } — single request with all promoter IDs
       const response = await authFetch(eventEndPoint.ADD_PROMOTER_IN_EVENT, {
         method: "POST",
@@ -166,7 +173,7 @@ const AddNewPromoterModal = ({
         },
         body: JSON.stringify({
           event_id: eventId,
-          promoterIds: selectedPromoterIds,
+          promoterIds,
         }),
       })
 

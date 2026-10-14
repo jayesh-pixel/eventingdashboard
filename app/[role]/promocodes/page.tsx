@@ -41,6 +41,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { Promocode, PromocodesApiResponse, PromocodeStatus, PromocodeType } from "@/lib/types"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
+import { getLengthError } from "@/lib/credential-limits"
 
 const statusColors: Record<number, string> = {
   0: "bg-gray-100 text-gray-800",    // InActive
@@ -69,6 +70,24 @@ const formatExpiryDate = (value: string) => {
   const date = value ? new Date(value) : null
   if (!date || isNaN(date.getTime())) return "N/A"
   return date.toLocaleDateString("en-IN", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })
+}
+
+// createPromocode checks for duplicates with new RegExp("^" + name + "$") on the raw
+// name, so "SAVE(10" or "C++OFF" throws there and comes back as a 500.
+const isRegexSafe = (value: string) => {
+  try {
+    new RegExp(`^${value}$`, "i")
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Today as YYYY-MM-DD in the browser's local time (the format ExpiryDate is sent in).
+const todayDateString = () => {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
 }
 
 const EVENTS_PAGE_SIZE = 50
@@ -394,6 +413,40 @@ export default function PromocodesPage() {
     return Number(normalized)
   }
 
+  // Live checks against validatePromocodeCreation / createPromocode; empty required
+  // fields are left to the submit toasts.
+  const getAmountError = (label: string, raw: string) => {
+    if (!raw.trim()) return ""
+    const value = parseDecimal(raw)
+    if (!Number.isFinite(value)) return `${label} must be a number`
+    if (value <= 0) return `${label} must be greater than 0`
+    return ""
+  }
+  const promoName = formData.PromoCodeName.trim()
+  const valueNumberLive = parseDecimal(formData.Value)
+  const fieldErrors = {
+    PromoCodeName:
+      getLengthError("Promocode name", promoName, 6, 12) ||
+      (promoName && !isRegexSafe(promoName)
+        ? "Promocode name has an unmatched bracket or a misplaced symbol such as + * ?"
+        : ""),
+    Value:
+      getAmountError("Value", formData.Value) ||
+      // Not rejected by the API, but the discount is capped at the order total, so
+      // anything above 100% silently behaves as 100%.
+      (formData.PromocodeType === "2" && valueNumberLive > 100 ? "Percentage cannot be more than 100" : ""),
+    MinCheckoutAmount: getAmountError("Minimum checkout amount", formData.MinCheckoutAmount),
+    ExpiryDate: !formData.ExpiryDate
+      ? ""
+      : !/^\d{4}-\d{2}-\d{2}$/.test(formData.ExpiryDate)
+        ? "Expiry date must be a valid date (YYYY-MM-DD)"
+        : formData.ExpiryDate < todayDateString()
+          ? "Expiry date cannot be in the past"
+          : "",
+    TermsCondition: getLengthError("Terms & Conditions", formData.TermsCondition.trim(), 5, 1024),
+  }
+  const fieldErrorList = Object.values(fieldErrors).filter(Boolean)
+
   const handleCreatePromocode = async () => {
     if (!formData.PromoCodeName.trim()) {
       toast({
@@ -455,6 +508,15 @@ export default function PromocodesPage() {
       toast({
         title: "Validation Error",
         description: "Please select at least one event",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (fieldErrorList.length > 0) {
+      toast({
+        title: "Validation Error",
+        description: fieldErrorList[0],
         variant: "destructive",
       })
       return
@@ -624,6 +686,7 @@ export default function PromocodesPage() {
                     onChange={(e) => setFormData({...formData, PromoCodeName: e.target.value})}
                     placeholder="Enter promocode name"
                   />
+                  {fieldErrors.PromoCodeName && <p className="text-xs text-destructive">{fieldErrors.PromoCodeName}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="promocodeType">Type *</Label>
@@ -655,6 +718,7 @@ export default function PromocodesPage() {
                     onChange={(e) => setFormData((prev) => ({...prev, Value: e.target.value}))}
                     placeholder="Enter value"
                   />
+                  {fieldErrors.Value && <p className="text-xs text-destructive">{fieldErrors.Value}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="minAmount">Minimum Checkout Amount (₹) *</Label>
@@ -666,6 +730,7 @@ export default function PromocodesPage() {
                     onChange={(e) => setFormData((prev) => ({...prev, MinCheckoutAmount: e.target.value}))}
                     placeholder="Enter minimum amount"
                   />
+                  {fieldErrors.MinCheckoutAmount && <p className="text-xs text-destructive">{fieldErrors.MinCheckoutAmount}</p>}
                 </div>
               </div>
 
@@ -676,8 +741,10 @@ export default function PromocodesPage() {
                     id="expiryDate"
                     type="date"
                     value={formData.ExpiryDate}
+                    min={todayDateString()}
                     onChange={(e) => setFormData({...formData, ExpiryDate: e.target.value})}
                   />
+                  {fieldErrors.ExpiryDate && <p className="text-xs text-destructive">{fieldErrors.ExpiryDate}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="validFor">Applies To *</Label>
@@ -806,6 +873,7 @@ export default function PromocodesPage() {
                   onChange={(e) => setFormData({...formData, TermsCondition: e.target.value})}
                   placeholder="Enter terms and conditions"
                 />
+                {fieldErrors.TermsCondition && <p className="text-xs text-destructive">{fieldErrors.TermsCondition}</p>}
               </div>
 
               <div className="flex items-center space-x-2">

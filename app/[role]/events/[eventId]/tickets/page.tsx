@@ -83,6 +83,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { getNumericRole } from "@/lib/role-mapping"
 import { eventEndPoint, promoterEndpoint, ticketEndPoint } from "@/lib/api-endpoints"
 import { NormalTicket, BulkTicket, Event } from "@/lib/types"
+import { getLengthError } from "@/lib/credential-limits"
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
@@ -97,6 +98,25 @@ const TICKETS_PAGE_SIZE = 100
 
 // BulkTicketStatus on the backend: Booked = 1, Cancelled = 2.
 const BULK_TICKET_CANCELLED = 2
+
+// validateEventTicketCreation / validateEventTicketUpdate: Name 1-50, Description 3-10000.
+const TICKET_NAME_MAX_LENGTH = 50
+const TICKET_DESCRIPTION_MIN_LENGTH = 3
+const TICKET_DESCRIPTION_MAX_LENGTH = 10000
+
+// Joi .email() also wants a real top-level domain, so "a@b.c" is rejected server-side.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}$/
+
+// createEventTicket checks for duplicates with new RegExp(`^${Name}$`) on the raw name,
+// so a name such as "VIP (Early" or "C++" throws there and comes back as a 500.
+const isRegexSafe = (value: string) => {
+  try {
+    new RegExp(`^${value}$`, "i")
+    return true
+  } catch {
+    return false
+  }
+}
 
 // Extended interfaces to handle both old and new API response structures
 interface ExtendedNormalTicket extends NormalTicket {
@@ -233,6 +253,11 @@ export default function TicketsPage() {
   // Tab and filter states
   const [activeTab, setActiveTab] = React.useState("normal")
   const [nameFilter, setNameFilter] = React.useState<string>("all")
+  // A list was loaded from several places at once (mount, tab switch, the filter effects,
+  // reloads after an edit). Whichever answered last won, so an unfiltered load finishing
+  // after the filtered one put every ticket back while the filter still showed as set.
+  const normalListRequest = React.useRef(0)
+  const bulkListRequest = React.useRef(0)
   const [dateFilter, setDateFilter] = React.useState<string>("all")
   // TicketNamesArray from the unfiltered list endpoints, so the name filter keeps
   // offering every name even while a filter narrows the rows.
@@ -304,7 +329,9 @@ export default function TicketsPage() {
     if (ticketName.length < 2 || ticketName.length > 50) issues.push("Ticket name (2-50 characters)")
     if (customerName.length < 2 || customerName.length > 50) issues.push("Customer name (2-50 characters)")
     if (!/^\d{10}$/.test(bulkFormData.PhoneNumber.replace(/\D/g, ""))) issues.push("Phone number (10 digits)")
-    if (!bulkFormData.Email.trim()) issues.push("Email")
+    const email = bulkFormData.Email.trim()
+    if (!email) issues.push("Email")
+    else if (!EMAIL_PATTERN.test(email) || email.length > 1024) issues.push("Email (valid address)")
     if (!bulkFormData.EventDateTime_id) {
       issues.push(eventDateTimes.length === 0 ? "Event date (none loaded for this event)" : "Event date")
     }
@@ -318,6 +345,77 @@ export default function TicketsPage() {
     }
     return issues
   }, [bulkFormData, eventDateTimes.length])
+
+  // Red messages under the bulk fields while typing; empty fields are left to the
+  // "Still needed" list so an untouched form is not shown as an error.
+  const bulkFieldErrors = React.useMemo(() => {
+    const phoneDigits = bulkFormData.PhoneNumber.replace(/\D/g, "")
+    const email = bulkFormData.Email.trim()
+    return {
+      TicketName: getLengthError("Ticket name", bulkFormData.TicketName.trim(), 2, 50),
+      CustomerName: getLengthError("Customer name", bulkFormData.CustomerName.trim().replace(/\s+/g, " "), 2, 50),
+      PhoneNumber: bulkFormData.PhoneNumber.trim() && phoneDigits.length !== 10
+        ? `Phone number must be exactly 10 digits (currently ${phoneDigits.length})`
+        : "",
+      Email: email && (!EMAIL_PATTERN.test(email) || email.length > 1024)
+        ? "Enter a valid email address, e.g. name@example.com"
+        : "",
+      TotalQuantity: bulkFormData.TotalQuantity > MAX_BULK_TICKETS_PER_BATCH
+        ? `Maximum ${MAX_BULK_TICKETS_PER_BATCH} tickets per batch (currently ${bulkFormData.TotalQuantity})`
+        : bulkFormData.TotalQuantity < 0 ? "Quantity must be at least 1" : "",
+      TicketPrice: bulkFormData.TicketPrice < 0 ? "Price cannot be negative" : "",
+    }
+  }, [bulkFormData])
+
+  // Live checks for the normal ticket form (validateEventTicketCreation + createEventTicket).
+  // Empty name/quantity are still reported on submit only.
+  const normalFormErrors = React.useMemo(() => {
+    const name = normalFormData.TicketName.trim()
+    let nameError = getLengthError("Ticket name", name, 1, TICKET_NAME_MAX_LENGTH)
+    if (!nameError && name && !isRegexSafe(name)) {
+      nameError = "Ticket name has an unmatched bracket or a misplaced symbol such as + * ? — remove or balance it"
+    }
+    if (!nameError && name && normalFormData.TicketType !== 3) {
+      // The backend refuses a name (case-insensitive) already used on any of the chosen dates.
+      const targetDates = new Set(
+        isMultiDateEvent || eventDateTimes.length > 1 ? selectedEventDateTimes : [normalFormData.EventDateTime_id]
+      )
+      const lower = name.toLowerCase()
+      const duplicate = normalTickets.some((t) => {
+        const existing = (t.Name || t.TicketName || "").trim().toLowerCase()
+        return existing === lower && !!t.EventDateTime_id && targetDates.has(t.EventDateTime_id)
+      })
+      if (duplicate) nameError = `A ticket named "${name}" already exists for the selected date(s)`
+    }
+    const description = normalFormData.TicketDescription.trim()
+    return {
+      TicketName: nameError,
+      TicketDescription: getLengthError("Description", description, TICKET_DESCRIPTION_MIN_LENGTH, TICKET_DESCRIPTION_MAX_LENGTH),
+      TicketPrice: normalFormData.TicketPrice < 0 ? "Price cannot be negative" : "",
+      MaxQuantity: normalFormData.MaxQuantity < 0 ? "Total quantity must be at least 1" : "",
+      BookingMaxLimit: normalFormData.BookingMaxLimit < 0 ? "Booking max limit must be at least 1" : "",
+    }
+  }, [normalFormData, normalTickets, selectedEventDateTimes, eventDateTimes.length, isMultiDateEvent])
+  const normalFormErrorList = Object.values(normalFormErrors).filter(Boolean)
+
+  // validateEventTicketUpdate: Description 3-10000; updateEventTicketbyId refuses a
+  // Quantity lower than the ticket's current Quantity.
+  const editFormErrors = React.useMemo(() => {
+    if (selectedTicketType !== "normal" || !selectedTicket) return { Description: "", Quantity: "" }
+    const currentQuantity = Number((selectedTicket as ExtendedNormalTicket).Quantity) || 0
+    const typedQuantity = Number(editFormData.Quantity) || 0
+    return {
+      Description: getLengthError(
+        "Description",
+        String(editFormData.Description || "").trim(),
+        TICKET_DESCRIPTION_MIN_LENGTH,
+        TICKET_DESCRIPTION_MAX_LENGTH
+      ),
+      Quantity: typedQuantity !== 0 && typedQuantity < currentQuantity
+        ? `Total quantity cannot be lower than the current quantity (${currentQuantity})`
+        : "",
+    }
+  }, [editFormData, selectedTicket, selectedTicketType])
 
   // Helper functions
   // Event date/times come back as wall-clock values tagged +00:00, so format
@@ -819,6 +917,8 @@ export default function TicketsPage() {
   }
 
   const fetchNormalTickets = async () => {
+    const requestId = ++normalListRequest.current
+    const isStale = () => requestId !== normalListRequest.current
     try {
       setLoading(true)
       const authToken = getValidToken()
@@ -835,6 +935,7 @@ export default function TicketsPage() {
       console.log("Normal tickets API Payload:", JSON.stringify(payload, null, 2))
 
       const normalTicketsResponse = await requestTicketsPage(ticketEndPoint.GET_ALL_EVENT_TICKETS, payload, 1, authToken)
+      if (isStale()) return
 
       console.log("Normal tickets response status:", normalTicketsResponse.status)
 
@@ -859,6 +960,7 @@ export default function TicketsPage() {
               authToken,
               (data) => data?.EventTicketsData,
             )
+            if (isStale()) return
             setNormalTickets([...(normalData.data.EventTicketsData || []), ...remainingTickets])
             if (Array.isArray(normalData.data.TicketNamesArray)) {
               setNormalTicketNames(normalData.data.TicketNamesArray.filter(Boolean))
@@ -881,6 +983,7 @@ export default function TicketsPage() {
         console.error("Normal tickets API call failed:", normalTicketsResponse.status, errorText)
       }
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching normal tickets:", error)
       toast({
         title: "Error",
@@ -888,11 +991,13 @@ export default function TicketsPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 
   const fetchTicketsByFilter = async () => {
+    const requestId = ++normalListRequest.current
+    const isStale = () => requestId !== normalListRequest.current
     try {
       setLoading(true)
       const authToken = getValidToken()
@@ -918,6 +1023,7 @@ export default function TicketsPage() {
       console.log("Filter API Payload:", JSON.stringify(filterPayload, null, 2))
 
       const response = await requestTicketsPage(ticketEndPoint.SEARCH_TICKETS, filterPayload, 1, authToken)
+      if (isStale()) return
 
       console.log("Filter API response status:", response.status)
 
@@ -941,6 +1047,7 @@ export default function TicketsPage() {
             authToken,
             pickRows,
           )
+          if (isStale()) return
           const ticketsData = [...(pickRows(data.data) || []), ...remainingTickets]
           console.log("Filtered tickets count:", ticketsData.length)
           setNormalTickets(ticketsData)
@@ -960,6 +1067,7 @@ export default function TicketsPage() {
         })
       }
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching filtered tickets:", error)
       toast({
         title: "Error",
@@ -967,7 +1075,7 @@ export default function TicketsPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 
@@ -1010,6 +1118,8 @@ export default function TicketsPage() {
   }
 
   const fetchBulkTickets = async () => {
+    const requestId = ++bulkListRequest.current
+    const isStale = () => requestId !== bulkListRequest.current
     try {
       setLoading(true)
       const authToken = getValidToken()
@@ -1033,10 +1143,12 @@ export default function TicketsPage() {
       console.log("Bulk tickets response status:", bulkTicketsResponse.status)
 
       const { tickets, ticketNames } = await parseBulkTicketsResponse(bulkTicketsResponse)
+      if (isStale()) return
       console.log("Bulk tickets loaded:", tickets.length)
       setBulkTickets(tickets)
       if (ticketNames) setBulkTicketNames(ticketNames)
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching bulk tickets:", error)
       setBulkTickets([])
       toast({
@@ -1045,11 +1157,13 @@ export default function TicketsPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 
   const fetchBulkTicketsByFilter = async () => {
+    const requestId = ++bulkListRequest.current
+    const isStale = () => requestId !== bulkListRequest.current
     try {
       setLoading(true)
       const authToken = getValidToken()
@@ -1083,9 +1197,11 @@ export default function TicketsPage() {
       console.log("Bulk Filter API response status:", response.status)
 
       const { tickets } = await parseBulkTicketsResponse(response)
+      if (isStale()) return
       console.log("Filtered bulk tickets count:", tickets.length)
       setBulkTickets(tickets)
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching filtered bulk tickets:", error)
       setBulkTickets([])
       toast({
@@ -1094,7 +1210,7 @@ export default function TicketsPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }
 
@@ -1159,9 +1275,9 @@ export default function TicketsPage() {
         })
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
-          fetchNormalTickets()
+          refreshNormalTickets()
         } else {
-          fetchBulkTickets()
+          refreshBulkTickets()
         }
       } else {
         const errorData = await response.json()
@@ -1244,7 +1360,7 @@ export default function TicketsPage() {
           
           // Refresh the tickets list to get the actual server state
           console.log("Refreshing tickets after successful toggle...")
-          await fetchNormalTickets()
+          await refreshNormalTickets()
         } else {
           console.error("API returned error:", data)
           // Revert optimistic update on error
@@ -1343,6 +1459,16 @@ export default function TicketsPage() {
         return
       }
 
+      if (activeTab === "normal" && normalFormErrorList.length > 0) {
+        toast({
+          title: "Validation Error",
+          description: normalFormErrorList[0],
+          variant: "destructive",
+        })
+        setLoading(false)
+        return
+      }
+
       // Validate event date/time selection for normal tickets (skip for Season Pass - covers all dates)
       if (activeTab === "normal" && normalFormData.TicketType !== 3) {
         if (isMultiDateEvent || eventDateTimes.length > 1) {
@@ -1419,7 +1545,7 @@ export default function TicketsPage() {
           
         payload = {
           ...payload,
-          Name: normalFormData.TicketName,
+          Name: normalFormData.TicketName.trim(),
           EventTicketType: normalFormData.TicketType.toString(),
           EventDateTimeIds: eventDateTimeIds,
           Price: normalFormData.TicketPrice,
@@ -1537,9 +1663,9 @@ export default function TicketsPage() {
         }
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
-          fetchNormalTickets()
+          refreshNormalTickets()
         } else {
-          fetchBulkTickets()
+          refreshBulkTickets()
         }
       } else {
         // Try to surface backend message on non-2xx responses
@@ -1653,12 +1779,12 @@ export default function TicketsPage() {
           return
         }
 
-        // Description is optional, but when provided the backend requires at least 3 characters
-        const editDescription = (editFormData.Description || "").trim()
-        if (editDescription && editDescription.length < 3) {
+        // Description is optional, but when provided the backend requires 3-10000 characters
+        const editError = editFormErrors.Description || editFormErrors.Quantity
+        if (editError) {
           toast({
             title: "Validation Error",
-            description: "Description must be at least 3 characters.",
+            description: editError,
             variant: "destructive",
           })
           setLoading(false)
@@ -1726,9 +1852,9 @@ export default function TicketsPage() {
         setSelectedPromoters([])
         // Refresh only the current tab's tickets
         if (activeTab === "normal") {
-          fetchNormalTickets()
+          refreshNormalTickets()
         } else {
-          fetchBulkTickets()
+          refreshBulkTickets()
         }
       } else {
         const errorData = await response.json()
@@ -1749,6 +1875,15 @@ export default function TicketsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Reload the normal list through the filter API when a Name/Date filter is active. Reloads
+  // after an edit called fetchNormalTickets directly and showed every ticket under a filter.
+  const refreshNormalTickets = () => {
+    if (nameFilter !== "all" || dateFilter !== "all") {
+      return fetchTicketsByFilter()
+    }
+    return fetchNormalTickets()
   }
 
   // Reload the bulk list through the filter API when a Name/Date filter is active
@@ -1869,14 +2004,9 @@ export default function TicketsPage() {
     if (user && eventId) {
       fetchEventDateTimes()
       
-      // Load tickets for the initial active tab only
-      if (activeTab === "normal") {
-        fetchNormalTickets()
-        setLoadedTabs(prev => new Set(prev).add("normal"))
-      } else if (activeTab === "bulk") {
-        fetchBulkTickets()
-        setLoadedTabs(prev => new Set(prev).add("bulk"))
-      }
+      // The active tab's tickets are loaded by the filter effects below; loading them here
+      // as well raced those requests.
+      setLoadedTabs(prev => new Set(prev).add(activeTab))
     }
   }, [eventId, user])
 
@@ -1912,16 +2042,11 @@ export default function TicketsPage() {
     setCreateTicketError(null)
     setActiveTab(newTab)
     
-    // Load data only if this tab hasn't been loaded before
-    if (!loadedTabs.has(newTab)) {
-      if (newTab === "normal") {
-        fetchNormalTickets()
-        setLoadedTabs(prev => new Set(prev).add("normal"))
-      } else if (newTab === "bulk") {
-        fetchBulkTickets()
-        setLoadedTabs(prev => new Set(prev).add("bulk"))
-      }
-    }
+    // Normal and bulk tickets have different names, so a name picked on one tab matched
+    // nothing on the other and left an empty list under a blank dropdown.
+    setNameFilter("all")
+    // The filter effects load the new tab; an extra unfiltered load here raced them.
+    setLoadedTabs(prev => new Set(prev).add(newTab))
   }
 
   const handleOpenCreateModal = () => {
@@ -2565,6 +2690,7 @@ export default function TicketsPage() {
                     value={normalFormData.TicketName}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                   />
+                  {normalFormErrors.TicketName && <p className="text-xs text-destructive">{normalFormErrors.TicketName}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -2786,15 +2912,18 @@ export default function TicketsPage() {
                     value={normalFormData.TicketDescription}
                     onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketDescription: e.target.value }))}
                   />
+                  {normalFormErrors.TicketDescription && <p className="text-xs text-destructive">{normalFormErrors.TicketDescription}</p>}
                 </div>                <div className={`grid gap-4 ${getNumericRole(role) === 1 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   <div className="space-y-2">
                     <Label htmlFor="ticketPrice">Price (₹) *</Label>
                     <Input
                       id="ticketPrice"
                       type="number"
+                      min="0"
                       value={normalFormData.TicketPrice}
                       onChange={(e) => setNormalFormData(prev => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0 }))}
                     />
+                    {normalFormErrors.TicketPrice && <p className="text-xs text-destructive">{normalFormErrors.TicketPrice}</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -2802,9 +2931,11 @@ export default function TicketsPage() {
                     <Input
                       id="maxQuantity"
                       type="number"
+                      min="1"
                       value={normalFormData.MaxQuantity}
                       onChange={(e) => setNormalFormData(prev => ({ ...prev, MaxQuantity: parseInt(e.target.value) || 0 }))}
                     />
+                    {normalFormErrors.MaxQuantity && <p className="text-xs text-destructive">{normalFormErrors.MaxQuantity}</p>}
                   </div>
 
                   {/* Only show Booking Max Limit for superadmin */}
@@ -2814,9 +2945,11 @@ export default function TicketsPage() {
                       <Input
                         id="bookingMaxLimit"
                         type="number"
+                        min="1"
                         value={normalFormData.BookingMaxLimit}
                         onChange={(e) => setNormalFormData(prev => ({ ...prev, BookingMaxLimit: parseInt(e.target.value) || 0 }))}
                       />
+                      {normalFormErrors.BookingMaxLimit && <p className="text-xs text-destructive">{normalFormErrors.BookingMaxLimit}</p>}
                     </div>
                   )}
                 </div>
@@ -2830,7 +2963,7 @@ export default function TicketsPage() {
                   Cancel
                 </Button>                <Button
                   onClick={handleCreateTicket}
-                  disabled={loading || !normalFormData.TicketName || 
+                  disabled={loading || !normalFormData.TicketName || normalFormErrorList.length > 0 ||
                     (normalFormData.TicketType !== 3 && (isMultiDateEvent || eventDateTimes.length > 1 
                       ? selectedEventDateTimes.length === 0 
                       : !normalFormData.EventDateTime_id))}
@@ -2852,6 +2985,7 @@ export default function TicketsPage() {
                     onChange={(e) => setBulkFormData(prev => ({ ...prev, TicketName: e.target.value }))}
                     required
                   />
+                  {bulkFieldErrors.TicketName && <p className="text-xs text-destructive">{bulkFieldErrors.TicketName}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -2862,6 +2996,7 @@ export default function TicketsPage() {
                     onChange={(e) => setBulkFormData(prev => ({ ...prev, CustomerName: e.target.value }))}
                     required
                   />
+                  {bulkFieldErrors.CustomerName && <p className="text-xs text-destructive">{bulkFieldErrors.CustomerName}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -2873,6 +3008,7 @@ export default function TicketsPage() {
                     onChange={(e) => setBulkFormData(prev => ({ ...prev, PhoneNumber: e.target.value }))}
                     required
                   />
+                  {bulkFieldErrors.PhoneNumber && <p className="text-xs text-destructive">{bulkFieldErrors.PhoneNumber}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -2884,6 +3020,7 @@ export default function TicketsPage() {
                     onChange={(e) => setBulkFormData(prev => ({ ...prev, Email: e.target.value }))}
                     required
                   />
+                  {bulkFieldErrors.Email && <p className="text-xs text-destructive">{bulkFieldErrors.Email}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -2917,7 +3054,9 @@ export default function TicketsPage() {
                       onChange={(e) => setBulkFormData(prev => ({ ...prev, TotalQuantity: parseInt(e.target.value) || 0 }))}
                       required
                     />
-                    <p className="text-xs text-muted-foreground">Maximum {MAX_BULK_TICKETS_PER_BATCH} tickets can be booked per transaction</p>
+                    {bulkFieldErrors.TotalQuantity
+                      ? <p className="text-xs text-destructive">{bulkFieldErrors.TotalQuantity}</p>
+                      : <p className="text-xs text-muted-foreground">Maximum {MAX_BULK_TICKETS_PER_BATCH} tickets can be booked per transaction</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -2931,6 +3070,7 @@ export default function TicketsPage() {
                       onChange={(e) => setBulkFormData(prev => ({ ...prev, TicketPrice: parseFloat(e.target.value) || 0 }))}
                       required
                     />
+                    {bulkFieldErrors.TicketPrice && <p className="text-xs text-destructive">{bulkFieldErrors.TicketPrice}</p>}
                   </div>
                 </div>
               </div>
@@ -3006,7 +3146,7 @@ export default function TicketsPage() {
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs text-muted-foreground">Current Quantity</div>
-                        <div className="text-sm font-medium">{editFormData.TicketQuantity || editFormData.Quantity || editFormData.MaxQuantity || selectedTicket?.Quantity || "N/A"}</div>
+                        <div className="text-sm font-medium">{selectedTicket?.Quantity ?? "N/A"}</div>
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs text-muted-foreground">Status</div>
@@ -3037,6 +3177,7 @@ export default function TicketsPage() {
                       rows={3}
                       className="border-primary"
                     />
+                    {editFormErrors.Description && <p className="text-xs text-destructive">{editFormErrors.Description}</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -3158,6 +3299,7 @@ export default function TicketsPage() {
                         onChange={(e) => setEditFormData((prev: any) => ({ ...prev, TicketQuantity: parseInt(e.target.value) || 0, Quantity: parseInt(e.target.value) || 0, MaxQuantity: parseInt(e.target.value) || 0 }))}
                         className="border-primary"
                       />
+                      {editFormErrors.Quantity && <p className="text-xs text-destructive">{editFormErrors.Quantity}</p>}
                     </div>
                   </div>
                   <div className="text-sm text-muted-foreground">

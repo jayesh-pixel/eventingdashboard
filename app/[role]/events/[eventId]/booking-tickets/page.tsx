@@ -45,6 +45,7 @@ import { promoterEndPointPannel, websiteCustomer } from "@/lib/api-endpoints";
 import { getValidToken } from "@/lib/token-utils";
 import type { UserRole } from "@/lib/navigation";
 import { TicketType } from "@/lib/types";
+import { getLengthError } from "@/lib/credential-limits";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types & Interfaces
@@ -140,6 +141,9 @@ const readEventHeader = (ev: any) => {
     venue: [venue, city].filter(Boolean).join(", "),
   };
 };
+
+// Joi .email() also wants a real top-level domain, so "a@b.c" is rejected server-side.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[A-Za-z]{2,}$/;
 
 // Brand gradient (logo cyan -> deep blue) used for the active chip and CTAs.
 const BRAND_GRADIENT = "bg-gradient-to-br from-[#00E1FC] to-[#0F33D1] text-white";
@@ -407,7 +411,14 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     // Only one ticket type can be booked per order, so the others lock while a
     // quantity is being chosen.
     const locked = isAnyCountActive && !selected;
-    const hasFooter = !!t.Description || seasonPass || hasAvailability;
+    // Explain why "+" stopped working; the backend would refuse one more either way.
+    const limitMessage =
+      selected && count > 0 && atLimit
+        ? hasAvailability && count >= availableQuantity
+          ? `Only ${availableQuantity} ticket(s) left`
+          : `Maximum ${maxAllowed} ticket(s) per booking`
+        : "";
+    const hasFooter = !!t.Description || seasonPass || hasAvailability || !!limitMessage;
     return (
       <div
         key={t._id}
@@ -444,6 +455,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
             {t.Description && <p className="leading-snug">{t.Description}</p>}
             {seasonPass && <p>Valid for all {dates.length} days · {formatDateRange(dates)}</p>}
             {hasAvailability && !soldOut && <p className="text-xs">{availableQuantity} available</p>}
+            {limitMessage && <p className="text-xs text-destructive">{limitMessage}</p>}
           </div>
         )}
       </div>
@@ -467,7 +479,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     if (!customer.PhoneNo.trim()) errors.PhoneNo = "Phone number is required";
     else if (!/^\d{10}$/.test(customer.PhoneNo.trim())) errors.PhoneNo = "Phone number must be 10 digits";
     if (!customer.Email.trim()) errors.Email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.Email.trim()) || customer.Email.trim().length > 1024) errors.Email = "Enter a valid email";
+    else if (!EMAIL_PATTERN.test(customer.Email.trim()) || customer.Email.trim().length > 1024) errors.Email = "Enter a valid email, e.g. name@example.com";
     if (customer.Age.trim()) {
       const age = parseInt(customer.Age, 10);
       if (isNaN(age) || age < 1 || age > 120) errors.Age = "Age should be 1–120";
@@ -479,6 +491,12 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
     if (note && (note.length < 3 || note.length > 500)) errors.noteDescription = "Note must be 3–500 characters";
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
+  };
+
+  // Length limits shown while typing; empty fields are only flagged on Continue.
+  const liveCustomerErrors: Record<string, string> = {
+    FullName: getLengthError("Full name", normalizeSearchText(customer.FullName), 3, 50),
+    noteDescription: getLengthError("Note", customer.noteDescription.trim(), 3, 500),
   };
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -493,6 +511,20 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
       if (!selectedTicket) {
         toast({ title: "Validation Error", description: "Please select at least one ticket", variant: "destructive" });
         return;
+      }
+
+      // BookEventTicketsByPromoter refuses more than BookingMaxLimit or the stock left.
+      const maxPerBooking = selectedTicket.BookingMaxLimit;
+      if (typeof maxPerBooking === "number" && totalTickets > maxPerBooking) {
+        toast({ title: "Validation Error", description: `Maximum ${maxPerBooking} ticket(s) of "${selectedTicket.Name}" per booking (selected ${totalTickets})`, variant: "destructive" });
+        return;
+      }
+      if (typeof selectedTicket.Quantity === "number") {
+        const left = Math.max(selectedTicket.Quantity - (selectedTicket.BookedQuantity ?? 0), 0);
+        if (totalTickets > left) {
+          toast({ title: "Validation Error", description: `Only ${left} ticket(s) of "${selectedTicket.Name}" left (selected ${totalTickets})`, variant: "destructive" });
+          return;
+        }
       }
 
       // A season pass covers every date, so its ticket document carries no
@@ -870,7 +902,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 <div className="space-y-1">
                   <label className="font-medium">Full Name *</label>
                   <input value={customer.FullName} className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("FullName", e.target.value)} />
-                  {formErrors.FullName && <p className="text-destructive text-xs">{formErrors.FullName}</p>}
+                  {(formErrors.FullName || liveCustomerErrors.FullName) && <p className="text-destructive text-xs">{formErrors.FullName || liveCustomerErrors.FullName}</p>}
                 </div>
 
                 {/* Phone only */}
@@ -911,7 +943,7 @@ export default function BookingTicketsPage({ params }: BookingTicketsPageProps) 
                 <div className="space-y-1">
                   <label className="font-medium">Note (optional)</label>
                   <textarea rows={3} value={customer.noteDescription} className="w-full p-2 rounded-xl border" onChange={(e) => handleCustChange("noteDescription", e.target.value)} />
-                  {formErrors.noteDescription && <p className="text-destructive text-xs">{formErrors.noteDescription}</p>}
+                  {(formErrors.noteDescription || liveCustomerErrors.noteDescription) && <p className="text-destructive text-xs">{formErrors.noteDescription || liveCustomerErrors.noteDescription}</p>}
                 </div>
 
                 <Button className="w-full h-12" onClick={() => validateCustomerForm() && setCheckoutPage(true)}>

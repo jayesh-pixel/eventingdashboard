@@ -23,7 +23,15 @@ interface AddAddressProps {
   setCityIsoCode: (value: string) => void;
   cityName: string;
   setCityName: (value: string) => void;
+  // Longest State/City name the target API accepts, e.g. 20 for organizer/promoter
+  // profile updates; longer names get an inline error.
+  maxNameLength?: number;
 }
+
+const nameTooLongError = (label: string, name: string, max?: number) =>
+  max && name.length > max
+    ? `${label} name must be at most ${max} characters for this form ("${name}" is ${name.length})`
+    : "";
 
 const AddAddress: React.FC<AddAddressProps> = ({
   stateIsoCode,
@@ -34,6 +42,7 @@ const AddAddress: React.FC<AddAddressProps> = ({
   setCityIsoCode,
   cityName,
   setCityName,
+  maxNameLength,
 }) => {
   const [stateData, setStateData] = useState<State[]>([]);
   const [citydata, setCitydata] = useState<City[]>([]);
@@ -118,6 +127,9 @@ const AddAddress: React.FC<AddAddressProps> = ({
     setCityName(selectedCity ? selectedCity.name : "");
   };
 
+  const stateNameError = nameTooLongError("State", stateName, maxNameLength);
+  const cityNameError = nameTooLongError("City", cityName, maxNameLength);
+
   return (
     <div className="w-[100%] flex justify-between">
       <div className="w-[50%]">
@@ -150,6 +162,7 @@ const AddAddress: React.FC<AddAddressProps> = ({
             </option>
           ))}
         </select>
+        {stateNameError && <p className="mt-1 text-sm text-red-600">{stateNameError}</p>}
       </div>
 
       <div className="w-[48%]">
@@ -178,6 +191,7 @@ const AddAddress: React.FC<AddAddressProps> = ({
             </option>
           ))}
         </select>
+        {cityNameError && <p className="mt-1 text-sm text-red-600">{cityNameError}</p>}
       </div>
     </div>
   );

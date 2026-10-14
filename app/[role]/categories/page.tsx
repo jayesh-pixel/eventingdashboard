@@ -126,6 +126,29 @@ const mockCategories: Category[] = [
 ]
 
 const ITEMS_PER_PAGE = 10
+// Joi validateCategoryCreation / validateCategoryDataUpdate limits.
+const NAME_MAX = 50
+const DESCRIPTION_MAX = 1024
+// The create API's multer accepts at most 5 "CategoryImages"; a 6th fails with "Unexpected field".
+const MAX_CREATE_IMAGES = 5
+
+const overLimit = (label: string, value: string, max: number) => {
+  const length = value.trim().length
+  return length > max ? `${label} must be at most ${max} characters (currently ${length})` : ""
+}
+
+// The API checks duplicates with new RegExp("^" + Name + "$") built from the raw name,
+// so a name that is not a valid pattern (e.g. "C++", "[Live") fails there with a 500.
+const breaksServerNameRegex = (name: string) => {
+  try {
+    new RegExp("^" + name + "$", "i")
+    return false
+  } catch {
+    return true
+  }
+}
+const NAME_REGEX_ERROR =
+  'Name contains characters the server cannot process (e.g. "++", a leading "*", or an unclosed "(" or "[")'
 
 export default function CategoriesPage({ params }: CategoriesPageProps) {
   // Handle params which might be a Promise
@@ -178,6 +201,29 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   // Image upload state
   const [selectedImages, setSelectedImages] = React.useState<File[]>([])
   const [uploadingImages, setUploadingImages] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState<{ name?: string; description?: string }>({})
+
+  // Name is required on create only; the update API keeps the old name when it is blank.
+  const validateFields = (isEdit: boolean) => {
+    const errors: { name?: string; description?: string } = {}
+    const name = formData.categoryName.trim()
+    if (!name) {
+      if (!isEdit) errors.name = "Category name is required"
+    } else if (name.length > NAME_MAX) {
+      errors.name = `Category name must be at most ${NAME_MAX} characters (currently ${name.length})`
+    } else if (breaksServerNameRegex(name)) {
+      errors.name = NAME_REGEX_ERROR
+    }
+    const descriptionError = overLimit("Description", formData.categoryDescription, DESCRIPTION_MAX)
+    if (descriptionError) errors.description = descriptionError
+
+    setFieldErrors(errors)
+    const firstError = errors.name || errors.description
+    if (firstError) {
+      toast({ title: "Error", description: firstError, variant: "destructive" })
+    }
+    return !firstError
+  }
 
   // Search runs on the server across every page; filtering only the 10 loaded rows
   // never found a category on another page. Read through a ref so the many
@@ -517,22 +563,26 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       categoryPriority: 1,
     })
     setSelectedImages([])
+    setFieldErrors({})
   }
 
   const handleCreateCategory = async () => {
-    if (!formData.categoryName.trim()) {
-      toast({
-        title: "Error",
-        description: "Category name is required",
-        variant: "destructive",
-      })
-      return
-    }
+    if (!validateFields(false)) return
 
     if (selectedImages.length === 0 && !formData.categoryImage) {
       toast({
         title: "Image Required",
         description: "Please upload at least one category image before creating it.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const imageCount = selectedImages.length + (formData.categoryImage ? 1 : 0)
+    if (imageCount > MAX_CREATE_IMAGES) {
+      toast({
+        title: "Too Many Images",
+        description: `You can upload at most ${MAX_CREATE_IMAGES} images when creating a category (currently ${imageCount}). Add more after it is created.`,
         variant: "destructive",
       })
       return
@@ -614,6 +664,8 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
   }
   const handleEditCategory = async () => {
     if (!selectedCategory) return
+
+    if (!validateFields(true)) return
 
     if (formData.categoryPriority < 0 || formData.categoryPriority > 10) {
       toast({
@@ -832,8 +884,13 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
       categoryImages: category.Images || []
     })
     setSelectedImages([])
+    setFieldErrors({})
     setIsEditDialogOpen(true)
   }
+
+  // Shown while typing so an over-long value turns red before submit.
+  const nameError = overLimit("Category name", formData.categoryName, NAME_MAX) || fieldErrors.name
+  const descriptionError = overLimit("Description", formData.categoryDescription, DESCRIPTION_MAX) || fieldErrors.description
 
   if (role !== "superadmin") {
     return (
@@ -870,6 +927,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
                   placeholder="Enter category name"
                 />
+                {nameError && <p className="text-sm text-red-600">{nameError}</p>}
               </div>              <div className="space-y-2">
                 <Label htmlFor="categoryDescription">Description</Label>
                 <Textarea
@@ -879,6 +937,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                   placeholder="Enter category description"
                   rows={3}
                 />
+                {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="categoryPriority">Priority (0-10)</Label>
@@ -896,7 +955,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 <Label>Add Images *</Label>
                 <div className="space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Required. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
+                    Required, up to 5 images. Only PNG or JPG files. 500 KB max size. Dimensions: 100x100 to 2048x16384 pixels.
                   </p>
                   <Input
                     type="file"
@@ -1119,6 +1178,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
                 placeholder="Enter category name"
               />
+              {nameError && <p className="text-sm text-red-600">{nameError}</p>}
             </div>            <div className="space-y-2">
               <Label htmlFor="editCategoryDescription">Description</Label>
               <Textarea
@@ -1128,6 +1188,7 @@ export default function CategoriesPage({ params }: CategoriesPageProps) {
                 placeholder="Enter category description"
                 rows={3}
               />
+              {descriptionError && <p className="text-sm text-red-600">{descriptionError}</p>}
             </div>
             <div className="space-y-2">
               <Label htmlFor="editCategoryPriority">Priority (0-10) *</Label>

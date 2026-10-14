@@ -42,6 +42,7 @@ import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { SendDefaultPasswordMail, getNumericAdminRole } from "@/lib/api-constants"
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, getEmailError, getLengthError, getPasswordError, getUsernameError } from "@/lib/credential-limits"
 
 interface OrganizersPageProps {
   params: Promise<{ role: UserRole }> | { role: UserRole }
@@ -148,9 +149,14 @@ interface TotalSalesRequest {
 const ITEMS_PER_PAGE = 10
 // updateProfile Joi schema caps State/City at 20 chars (register allows 500)
 const PROFILE_ADDRESS_NAME_MAX_LENGTH = 20
-// Organizer login schema: Password min(5).max(10); the update endpoint trims and has no check
-const PASSWORD_MIN_LENGTH = 5
-const PASSWORD_MAX_LENGTH = 10
+// updateProfile: FullName 3-50 (register 5-50), Email max 50; State/City min 3 on both
+const PROFILE_FULL_NAME_MIN_LENGTH = 3
+const PROFILE_EMAIL_MAX_LENGTH = 50
+const ADDRESS_NAME_MIN_LENGTH = 3
+
+type LiveField = "CompanyName" | "FullName" | "Username" | "password" | "Email" | "Phone1" | "Address"
+// Fields the edit form still sends, so their live checks stay on while editing
+const LIVE_ON_EDIT_FIELDS: LiveField[] = ["FullName", "Email", "Phone1", "Address"]
 
 export default function OrganizersPage({ params }: OrganizersPageProps) {
   // Handle params as either a Promise or direct object
@@ -248,54 +254,40 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       const companyLabel = formData.OwnerType === "ownClub" ? "Club name" : "Company name"
       if (!companyName) {
         errors.CompanyName = `${companyLabel} is required`
-      } else if (companyName.length < 5) {
-        errors.CompanyName = `${companyLabel} must be at least 5 characters`
-      } else if (companyName.length > 50) {
-        errors.CompanyName = `${companyLabel} must not exceed 50 characters`
+      } else if (getLengthError(companyLabel, companyName, 5, 50)) {
+        errors.CompanyName = getLengthError(companyLabel, companyName, 5, 50)
       }
     }
     
-    // Full Name validation (backend requires min 5 chars on create; optional on update)
+    // Full Name validation (5-50 on create; optional, 3-50 on update)
     if (!formData.FullName.trim()) {
       if (!editingOrganizer) errors.FullName = "Full name is required"
-    } else if (formData.FullName.trim().length < 5) {
-      errors.FullName = "Full name must be at least 5 characters"
-    } else if (formData.FullName.trim().length > 50) {
-      errors.FullName = "Full name must not exceed 50 characters"
+    } else if (liveFieldErrors.FullName) {
+      errors.FullName = liveFieldErrors.FullName
     }
     
     // Username validation (backend requires min 5 chars on create; not used on update)
     if (!formData.Username.trim()) {
       if (!editingOrganizer) errors.Username = "Username is required"
-    } else if (formData.Username.trim().length < 5) {
-      errors.Username = "Username must be at least 5 characters"
-    } else if (formData.Username.trim().length > 50) {
-      errors.Username = "Username must not exceed 50 characters"
+    } else if (getUsernameError(formData.Username.trim())) {
+      errors.Username = getUsernameError(formData.Username.trim())
     }
     
-    // Email validation (optional)
-    if (formData.Email && formData.Email.trim() !== "") {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!emailRegex.test(formData.Email.trim())) {
-        errors.Email = "Please enter a valid email address"
-      }
-    }
-
-    // Phone validation (optional)
-    if (formData.Phone1 && formData.Phone1.trim() !== "") {
-      const phoneRegex = /^[1-9][0-9]{9}$/
-      if (!phoneRegex.test(formData.Phone1.replace(/\D/g, ""))) {
-        errors.Phone1 = "Please enter a valid 10-digit phone number"
-      }
-    }
+    // Email and phone are optional
+    if (liveFieldErrors.Email) errors.Email = liveFieldErrors.Email
+    if (liveFieldErrors.Phone1) errors.Phone1 = liveFieldErrors.Phone1
     
     // State and City are required by backend on create (Country is fixed to India)
     if (!editingOrganizer) {
       if (!formData.State || !formData.StateIsoCode) {
         errors.State = "State is required"
+      } else if (formData.State.trim().length < ADDRESS_NAME_MIN_LENGTH) {
+        errors.State = `State name "${formData.State}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters) and cannot be saved`
       }
       if (!formData.City || !formData.CityIsoCode) {
         errors.City = "City is required"
+      } else if (formData.City.trim().length < ADDRESS_NAME_MIN_LENGTH) {
+        errors.City = `City name "${formData.City}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters) and cannot be saved`
       }
     } else {
       // Only changed names are sent on update, so an unchanged legacy long name does not block saving
@@ -305,25 +297,49 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       if (formData.City !== (editingOrganizer.City || "") && formData.City.trim().length > PROFILE_ADDRESS_NAME_MAX_LENGTH) {
         errors.City = `City name "${formData.City}" is too long (max ${PROFILE_ADDRESS_NAME_MAX_LENGTH} characters) and cannot be saved`
       }
-      if (formData.Address.trim() && formData.Address.trim().length < 3) {
-        errors.Address = "Address must be at least 3 characters"
+      if (formData.State !== (editingOrganizer.State || "") && formData.State && formData.State.trim().length < ADDRESS_NAME_MIN_LENGTH) {
+        errors.State = `State name "${formData.State}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters) and cannot be saved`
       }
+      if (formData.City !== (editingOrganizer.City || "") && formData.City && formData.City.trim().length < ADDRESS_NAME_MIN_LENGTH) {
+        errors.City = `City name "${formData.City}" is too short (min ${ADDRESS_NAME_MIN_LENGTH} characters) and cannot be saved`
+      }
+      if (liveFieldErrors.Address) errors.Address = liveFieldErrors.Address
     }
 
     // Password validation (required for new organizers)
     if (!editingOrganizer) {
       if (!formData.password) {
         errors.password = "Password is required"
-      } else if (formData.password.length < PASSWORD_MIN_LENGTH) {
-        errors.password = `Password must be at least ${PASSWORD_MIN_LENGTH} characters`
-      } else if (formData.password.length > PASSWORD_MAX_LENGTH) {
-        errors.password = "Password must not exceed 10 characters (login limit)"
+      } else if (getPasswordError(formData.password)) {
+        errors.password = getPasswordError(formData.password)
       }
     }
     
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
+
+  // Character limits are flagged in red while typing, not only after submit. Once a field
+  // has a value its live check is authoritative, so a fixed value clears a stale submit error.
+  const liveFieldErrors: Record<LiveField, string> = {
+    CompanyName: getLengthError(formData.OwnerType === "ownClub" ? "Club name" : "Company name", formData.CompanyName.trim(), 5, 50),
+    FullName: getLengthError("Full name", formData.FullName.trim(), editingOrganizer ? PROFILE_FULL_NAME_MIN_LENGTH : 5, 50),
+    Username: getUsernameError(formData.Username.trim()),
+    password: getPasswordError(formData.password),
+    Email:
+      getEmailError(formData.Email.trim()) ||
+      (editingOrganizer && formData.Email.trim().length > PROFILE_EMAIL_MAX_LENGTH
+        ? `Email must be at most ${PROFILE_EMAIL_MAX_LENGTH} characters (currently ${formData.Email.trim().length})`
+        : ""),
+    Phone1: formData.Phone1.trim() && !/^[1-9][0-9]{9}$/.test(formData.Phone1.replace(/\D/g, ""))
+      ? "Please enter a valid 10-digit phone number"
+      : "",
+    Address: editingOrganizer ? getLengthError("Address", formData.Address.trim(), 3, 1024) : "",
+  }
+  const getFieldError = (field: LiveField) =>
+    (editingOrganizer && !LIVE_ON_EDIT_FIELDS.includes(field)) || !formData[field] ? formErrors[field] : liveFieldErrors[field]
+  const errorInputClass = (field: LiveField) =>
+    getFieldError(field) ? "border-red-500 focus-visible:ring-red-500" : ""
 
   // Generate password function
   const handleGeneratePassword = () => {
@@ -646,9 +662,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
       // Prepare the payload based on the original form structure and API requirements
       const payload = {
         OwnerType: formData.OwnerType === "ownClub" ? 1 : 2, // 1 for Club, 2 for EventCompany
-        CompanyName: formData.CompanyName,
-        FullName: formData.FullName,
-        Username: formData.Username,
+        CompanyName: formData.CompanyName.trim(),
+        FullName: formData.FullName.trim(),
+        Username: formData.Username.trim(),
         Email: formData.Email?.trim() ? formData.Email.trim() : undefined,
         Phone1: phoneDigits || undefined,
         Password: editingOrganizer ? undefined : formData.password,
@@ -1352,10 +1368,11 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   readOnly={!!editingOrganizer}
                   disabled={!!editingOrganizer}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
-                  placeholder="Enter your club name"
+                  placeholder="Enter your club name (5-50 characters)"
+                  className={errorInputClass("CompanyName")}
                 />
-                {formErrors.CompanyName && (
-                  <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
+                {getFieldError("CompanyName") && (
+                  <div className="text-red-600 text-sm">{getFieldError("CompanyName")}</div>
                 )}
               </div>
             )}
@@ -1369,10 +1386,11 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   readOnly={!!editingOrganizer}
                   disabled={!!editingOrganizer}
                   onChange={(e) => setFormData({ ...formData, CompanyName: e.target.value })}
-                  placeholder="Enter event company name"
+                  placeholder="Enter event company name (5-50 characters)"
+                  className={errorInputClass("CompanyName")}
                 />
-                {formErrors.CompanyName && (
-                  <div className="text-red-600 text-sm">{formErrors.CompanyName}</div>
+                {getFieldError("CompanyName") && (
+                  <div className="text-red-600 text-sm">{getFieldError("CompanyName")}</div>
                 )}
               </div>
             )}
@@ -1384,10 +1402,11 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 id="organizerFullName"
                 value={formData.FullName}
                 onChange={(e) => setFormData({ ...formData, FullName: e.target.value })}
-                placeholder="Enter organizer full name"
+                placeholder={`Enter organizer full name (${editingOrganizer ? PROFILE_FULL_NAME_MIN_LENGTH : 5}-50 characters)`}
+                className={errorInputClass("FullName")}
               />
-              {formErrors.FullName && (
-                <div className="text-red-600 text-sm">{formErrors.FullName}</div>
+              {getFieldError("FullName") && (
+                <div className="text-red-600 text-sm">{getFieldError("FullName")}</div>
               )}
             </div>
 
@@ -1400,10 +1419,11 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 readOnly={!!editingOrganizer}
                 disabled={!!editingOrganizer}
                 onChange={(e) => setFormData({ ...formData, Username: e.target.value })}
-                placeholder="Enter organizer username"
+                placeholder="Enter organizer username (5-50 characters)"
+                className={errorInputClass("Username")}
               />
-              {formErrors.Username && (
-                <div className="text-red-600 text-sm">{formErrors.Username}</div>
+              {getFieldError("Username") && (
+                <div className="text-red-600 text-sm">{getFieldError("Username")}</div>
               )}
             </div>
 
@@ -1417,9 +1437,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   value={formData.Email}
                   onChange={(e) => setFormData({ ...formData, Email: e.target.value })}
                   placeholder="Enter organizer emailId (optional)"
+                  className={errorInputClass("Email")}
                 />
-                {formErrors.Email && (
-                  <div className="text-red-600 text-sm">{formErrors.Email}</div>
+                {getFieldError("Email") && (
+                  <div className="text-red-600 text-sm">{getFieldError("Email")}</div>
                 )}
               </div>
 
@@ -1431,9 +1452,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   value={formData.Phone1}
                   onChange={(e) => setFormData({ ...formData, Phone1: e.target.value })}
                   placeholder="Enter organizer phone number (optional)"
+                  className={errorInputClass("Phone1")}
                 />
-                {formErrors.Phone1 && (
-                  <div className="text-red-600 text-sm">{formErrors.Phone1}</div>
+                {getFieldError("Phone1") && (
+                  <div className="text-red-600 text-sm">{getFieldError("Phone1")}</div>
                 )}
               </div>
             </div>
@@ -1450,9 +1472,10 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     value={formData.Address}
                     onChange={(e) => setFormData({ ...formData, Address: e.target.value })}
                     placeholder="Enter organizer address (optional)"
+                    className={errorInputClass("Address")}
                   />
-                  {formErrors.Address && (
-                    <div className="text-red-600 text-sm">{formErrors.Address}</div>
+                  {getFieldError("Address") && (
+                    <div className="text-red-600 text-sm">{getFieldError("Address")}</div>
                   )}
                 </div>
               )}
@@ -1466,6 +1489,12 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                 setCityIsoCode={setCityIsoCode}
                 cityName={cityName}
                 setCityName={setCityName}
+                maxNameLength={
+                  editingOrganizer &&
+                  (stateName !== (editingOrganizer.State || "") || cityName !== (editingOrganizer.City || ""))
+                    ? PROFILE_ADDRESS_NAME_MAX_LENGTH
+                    : undefined
+                }
               />
               {formErrors.State && (
                 <div className="text-red-600 text-sm">{formErrors.State}</div>
@@ -1485,9 +1514,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     type={formData.showPassword ? "text" : "password"}
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    placeholder="Generate the Password (max 10 characters)"
-                    className="pr-10"
-                    maxLength={10}
+                    placeholder="Generate the Password (5-10 characters)"
+                    className={`pr-10 ${errorInputClass("password")}`}
                   />
                   <button
                     type="button"
@@ -1497,8 +1525,8 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                     <Eye className="h-4 w-4 text-gray-400" />
                   </button>
                 </div>
-                {formErrors.password && (
-                  <div className="text-red-600 text-sm">{formErrors.password}</div>
+                {getFieldError("password") && (
+                  <div className="text-red-600 text-sm">{getFieldError("password")}</div>
                 )}
                 
                 {/* Generate Password Button */}
@@ -1659,8 +1687,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   placeholder="Enter new password (5-10 characters)"
-                  className="pr-10"
-                  maxLength={PASSWORD_MAX_LENGTH}
+                  className={`pr-10${getPasswordError(newPassword) ? " border-red-500 focus-visible:ring-red-500" : ""}`}
                 />
                 <button
                   type="button"
@@ -1670,6 +1697,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <Eye className="h-4 w-4 text-gray-400" />
                 </button>
               </div>
+              {getPasswordError(newPassword) && (
+                <div className="text-red-600 text-sm">{getPasswordError(newPassword)}</div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -1683,8 +1713,7 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Confirm new password"
-                  className="pr-10"
-                  maxLength={PASSWORD_MAX_LENGTH}
+                  className={`pr-10${confirmPassword && confirmPassword !== newPassword ? " border-red-500 focus-visible:ring-red-500" : ""}`}
                 />
                 <button
                   type="button"
@@ -1694,6 +1723,9 @@ export default function OrganizersPage({ params }: OrganizersPageProps) {
                   <Eye className="h-4 w-4 text-gray-400" />
                 </button>
               </div>
+              {confirmPassword && confirmPassword !== newPassword && (
+                <div className="text-red-600 text-sm">Passwords do not match</div>
+              )}
             </div>
             
             <Button

@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input"
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
   PaginationNext,
@@ -40,8 +41,8 @@ import { formatEventDate, normalizeSearchText, parseEventDateTime } from "@/lib/
 import { useAuth } from "@/lib/auth-context"
 import { useToast } from "@/components/ui/use-toast"
 import { useRouter } from "next/navigation"
-import { eventEndPoint, organizerEndpoint, ticketEndPoint } from "@/lib/api-endpoints"
-import { downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
+import { eventEndPoint, organizerEndpoint, promoterEndpoint, ticketEndPoint } from "@/lib/api-endpoints"
+import { describeBookingsError, downloadBookingsWorkbook, exportTimestamp, type ExportColumn } from "@/lib/booking-export"
 import { getNumericRole } from "@/lib/role-mapping"
 import { getValidToken } from "@/lib/token-utils"
 
@@ -98,6 +99,8 @@ const ITEMS_PER_PAGE = 10
 // so a very large event can never turn this into an unbounded fan-out.
 const SERVER_PAGE_SIZE = 200
 const MAX_SERVER_PAGES = 25
+// Promoter filter value for an unassigned promoter whose _id is unknown; filtered client-side.
+const PROMOTER_NAME_FILTER_PREFIX = "username:"
 const CONTROL_CLASS =
   "h-12 border-blue-100 bg-white text-base shadow-sm focus:ring-primary/30 focus-visible:ring-primary/30"
 const ICON_BUTTON_CLASS =
@@ -129,6 +132,30 @@ const EVENT_BOOKING_EXPORT_COLUMNS = (
   { header: "Total Amount", value: (b) => b.totalAmount },
 ]
 
+// Page buttons for the table: always the first and last page, a window of five around
+// the current page, and ellipses for the gaps - e.g. 1 2 3 4 5 … 40, 1 … 17 18 19 … 40.
+const getPageItems = (currentPage: number, totalPages: number): Array<number | "ellipsis"> => {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1)
+
+  let start = Math.max(2, currentPage - 1)
+  let end = Math.min(totalPages - 1, currentPage + 1)
+  if (currentPage <= 4) {
+    start = 2
+    end = 5
+  } else if (currentPage >= totalPages - 3) {
+    start = totalPages - 4
+    end = totalPages - 1
+  }
+
+  return [
+    1,
+    ...(start > 2 ? ["ellipsis" as const] : []),
+    ...Array.from({ length: end - start + 1 }, (_, index) => start + index),
+    ...(end < totalPages - 1 ? ["ellipsis" as const] : []),
+    totalPages,
+  ]
+}
+
 type BookingDataType = "transaction" | "summary"
 type BookingTab = "all" | "promoter" | "online" | "bulk"
 type DateFilterOption = "all" | "today" | "yesterday" | "last7days" | "last1month" | "manual"
@@ -159,6 +186,17 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   const [summaryTicketOptions, setSummaryTicketOptions] = React.useState<string[]>([])
   const [summaryDateOptions, setSummaryDateOptions] = React.useState<SummaryDateOption[]>([])
   const [promoters, setPromoters] = React.useState<PromoterOption[]>([])
+  // Usernames of promoters who punched tickets for this event. Kept across fetches so a
+  // promoter stays in the dropdown after the list is narrowed to someone else.
+  const [bookingPromoterNames, setBookingPromoterNames] = React.useState<string[]>([])
+  // Username -> promoter _id from /promoter/getAll, looked up only for promoters that
+  // are no longer assigned to the event (booking rows carry no promoter_id).
+  const [promoterIdsByUsername, setPromoterIdsByUsername] = React.useState<Map<string, string> | null>(null)
+  const promoterLookupRequested = React.useRef(false)
+  // Every filter change refetches the event's bookings (up to 25 server pages). Only the
+  // newest request may touch the table, or a slow unfiltered load that finishes after a
+  // quick filtered one overwrites it and the filter looks like it did nothing.
+  const latestFetchId = React.useRef(0)
   const [apiErrorMessage, setApiErrorMessage] = React.useState("")
   const [transactionTotals, setTransactionTotals] = React.useState<TransactionTotals>({
     totalQuantity: 0,
@@ -206,9 +244,14 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     return nextDate
   }
 
+  // Clamp to the target month's last day: setMonth alone overflowed, so "Last 1 Month"
+  // on 31 Mar started at 3 Mar instead of 28/29 Feb.
   const addMonths = (date: Date, months: number) => {
     const nextDate = new Date(date)
+    nextDate.setDate(1)
     nextDate.setMonth(nextDate.getMonth() + months)
+    const lastDay = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate()
+    nextDate.setDate(Math.min(date.getDate(), lastDay))
     return nextDate
   }
 
@@ -236,7 +279,11 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       case "last1month":
         return makeApiDateRange(toDateInputValue(addMonths(today, -1)), todayValue)
       case "manual":
-        return manualStartDate && manualEndDate ? makeApiDateRange(manualStartDate, manualEndDate) : null
+        if (!manualStartDate || !manualEndDate) return null
+        // A range picked end-first used to match nothing; YYYY-MM-DD sorts as text.
+        return manualStartDate <= manualEndDate
+          ? makeApiDateRange(manualStartDate, manualEndDate)
+          : makeApiDateRange(manualEndDate, manualStartDate)
       default:
         return null
     }
@@ -449,11 +496,14 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         // Event date/times are stored as wall-clock values tagged +00:00, so they
         // are read back as entered instead of being shifted into the local zone.
         const start = parseEventDateTime(dateItem?.EventStartDateTime || dateItem?.startDate || dateItem?.TicketDate)
-        const end = parseEventDateTime(dateItem?.EventEndDateTime || dateItem?.endDate || dateItem?.EventStartDateTime)
         if (!start) return
 
+        // One calendar day: the start date. A summary row's TicketDate is its show's
+        // EventStartDateTime, and the summary API ignores startDate/endDate, so this range
+        // is matched against those rows here. Ending it at EventEndDateTime made a night
+        // running past midnight (11 Oct 19:00 - 12 Oct 01:00) also take in 12 Oct's show.
         const startDate = toEventDateInputValue(start)
-        const endDate = toEventDateInputValue(end || start)
+        const endDate = startDate
         const id = `${startDate}|${endDate}`
         options.set(id, {
           id,
@@ -465,15 +515,15 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     }
 
     fallbackBookings.forEach((booking) => {
-      const parsed = parseDate(booking.ticketDate)
+      const parsed = parseEventDateTime(booking.ticketDate)
       if (!parsed) return
 
-      const date = toDateInputValue(parsed)
+      const date = toEventDateInputValue(parsed)
       const id = `${date}|${date}`
       if (!options.has(id)) {
         options.set(id, {
           id,
-          label: formatDate(parsed),
+          label: formatEventDate(parsed, { day: "numeric", month: "long", year: "numeric" }, "en-GB"),
           startDate: date,
           endDate: date,
         })
@@ -590,6 +640,8 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
   }, [eventId])
 
   const fetchEventBookingsData = React.useCallback(async () => {
+    const fetchId = ++latestFetchId.current
+    const isStale = () => fetchId !== latestFetchId.current
     try {
       setLoading(true)
       setApiErrorMessage("")
@@ -645,7 +697,12 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         // the organizer's events" when it is present, so this page listed every event.
         if (isPromoter) {
           requestPayload.promoter_id = user.user_id
-        } else if (promoterFilter !== "all" && bookingDataType === "transaction" && activeTab !== "online") {
+        } else if (
+          promoterFilter !== "all" &&
+          !promoterFilter.startsWith(PROMOTER_NAME_FILTER_PREFIX) &&
+          bookingDataType === "transaction" &&
+          activeTab !== "online"
+        ) {
           // The online endpoint's validator has no promoter_id and answers 400.
           requestPayload.promoter_id = promoterFilter
         }
@@ -673,6 +730,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       const response = await postPayload(requestPayload)
 
       const data = await response.json().catch(() => null)
+      if (isStale()) return
 
       if (response.status === 404) {
         setBookingsData([])
@@ -701,13 +759,26 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
             )
           )
 
+          // A failed page used to be skipped, so the table and totals came back short.
+          const failedPages = pageResponses.filter((pageData) => !pageData || pageData.error).length
+          if (failedPages > 0) {
+            throw new Error(`Could not load ${failedPages} of ${totalPagesFromApi} pages of bookings. Please try again.`)
+          }
+
           for (const pageData of pageResponses) {
-            if (pageData && !pageData.error) {
-              bookingsArray = bookingsArray.concat(extractBookingsArray(pageData))
-            }
+            bookingsArray = bookingsArray.concat(extractBookingsArray(pageData))
           }
         }
+
+        if (totalPagesFromApi > MAX_SERVER_PAGES && !isStale()) {
+          toast({
+            title: "Showing partial results",
+            description: `Only the first ${MAX_SERVER_PAGES * SERVER_PAGE_SIZE} bookings were loaded. Add a date or promoter filter to see the rest.`,
+            variant: "destructive",
+          })
+        }
       }
+      if (isStale()) return
       const eventBookings = bookingsArray.filter((booking) => {
         const rowEventId = getStringValue(booking.eventId, booking.event_id, booking.EventId, booking.Event_id)
         return !rowEventId || rowEventId === eventId
@@ -737,6 +808,15 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
         )
       }
 
+      if (bookingDataType === "transaction") {
+        const punchedBy = normalizedBookings
+          .filter((booking) => booking.bookingChannel === "Promoter" && booking.promoterName !== "-")
+          .map((booking) => booking.promoterName.trim())
+        if (punchedBy.length > 0) {
+          setBookingPromoterNames((current) => Array.from(new Set([...current, ...punchedBy])))
+        }
+      }
+
       setBookingsData(normalizedBookings)
       setOriginalData(normalizedBookings)
       // The summary endpoint returns totalQuantity / totalCheckInCount / totalPrice too.
@@ -746,8 +826,9 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       const firstEventName = normalizedBookings.find((booking) => booking.eventName && booking.eventName !== "N/A")?.eventName
       if (firstEventName) setEventName(firstEventName)
     } catch (error) {
+      if (isStale()) return
       console.error("Error fetching event bookings:", error)
-      const message = error instanceof Error ? error.message : "Could not fetch bookings from server"
+      const message = describeBookingsError(error instanceof Error ? error.message : "Could not fetch bookings from server")
       setApiErrorMessage(message)
       toast({
         title: "Error",
@@ -758,7 +839,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       setOriginalData([])
       setTransactionTotals({ totalQuantity: 0, totalCheckIn: 0, totalPrice: 0 })
     } finally {
-      setLoading(false)
+      if (!isStale()) setLoading(false)
     }
   }, [activeTab, bookingDataType, eventId, getSelectedDateRange, promoterFilter, role, toast, user])
 
@@ -781,7 +862,9 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
     const filtered = originalData.filter((booking) => {
       const matchesSearch =
         bookingDataType === "summary"
-          ? summaryTicketFilter === "all" || booking.ticketName === summaryTicketFilter
+          ? summaryTicketFilter === "all" ||
+            normalizeSearchText(booking.ticketName).trim().toLowerCase() ===
+              normalizeSearchText(summaryTicketFilter).trim().toLowerCase()
           : !searchLower ||
             [
               booking.customerName,
@@ -796,22 +879,84 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
       const matchesDate =
         !selectedDateRange ||
         (() => {
-          const parsedTicketDate = parseDate(booking.ticketDate)
-          const parsedBookingDate = parseDate(booking.bookingDate)
-          return [parsedTicketDate, parsedBookingDate].some((date) => {
-            if (!date || selectedStartTime === null || selectedEndTime === null) return false
-            const time = date.getTime()
-            return time >= selectedStartTime && time <= selectedEndTime
-          })
+          // The range is a wall-clock day tagged +00:00, so the dates must be read the
+          // same way. parseDate reads "11 Oct,2026" as IST midnight (10 Oct 18:30 UTC),
+          // which fell outside the selected day and emptied the table.
+          const rowDates = [parseEventDateTime(booking.ticketDate), parseEventDateTime(booking.bookingDate)].filter(
+            (date): date is Date => date !== null
+          )
+          // The API already applied this range (all tabs but bulk); a row it returned
+          // without a readable date cannot be judged here, so keep it.
+          if (rowDates.length === 0 || selectedStartTime === null || selectedEndTime === null) return true
+          return rowDates.some((date) => date.getTime() >= selectedStartTime && date.getTime() <= selectedEndTime)
         })()
 
-      // The promoter filter is applied by the API (promoter_id), not here.
-      return matchesSearch && matchesDate
+      // The promoter filter is applied by the API (promoter_id), except for an unassigned
+      // promoter whose _id could not be resolved - that one is matched by username here.
+      const matchesPromoter =
+        bookingDataType !== "transaction" ||
+        !promoterFilter.startsWith(PROMOTER_NAME_FILTER_PREFIX) ||
+        booking.promoterName.trim().toLowerCase() ===
+          promoterFilter.slice(PROMOTER_NAME_FILTER_PREFIX.length).toLowerCase()
+
+      return matchesSearch && matchesDate && matchesPromoter
     })
 
     setBookingsData(filtered)
     setCurrentPage(1)
-  }, [bookingDataType, getSelectedDateRange, originalData, searchTerm, summaryTicketFilter])
+  }, [bookingDataType, getSelectedDateRange, originalData, promoterFilter, searchTerm, summaryTicketFilter])
+
+  const assignedPromoterNames = React.useMemo(
+    () => new Set(promoters.map((promoter) => promoter.name.trim().toLowerCase())),
+    [promoters]
+  )
+  const unassignedPromoterNames = React.useMemo(
+    () => bookingPromoterNames.filter((name) => !assignedPromoterNames.has(name.toLowerCase())),
+    [assignedPromoterNames, bookingPromoterNames]
+  )
+
+  React.useEffect(() => {
+    if (unassignedPromoterNames.length === 0 || promoterLookupRequested.current) return
+    promoterLookupRequested.current = true
+
+    const lookupPromoterIds = async () => {
+      try {
+        const authToken = getValidToken()
+        if (!authToken) return
+
+        const response = await authFetch(promoterEndpoint.GET_ALL_PROMOTER_DATA_URL, {
+          method: "GET",
+          headers: { Authorization: `Bearer ${authToken}` },
+        })
+        if (!response.ok) return
+
+        const data = await response.json()
+        const rows: any[] = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : data?.data?.data || []
+        const idsByUsername = new Map<string, string>()
+        rows.forEach((promoter) => {
+          const id = getStringValue(promoter?._id, promoter?.id)
+          const username = getStringValue(promoter?.Username, promoter?.username).trim().toLowerCase()
+          if (id && username) idsByUsername.set(username, id)
+        })
+        setPromoterIdsByUsername(idsByUsername)
+      } catch (error) {
+        // Not fatal: unresolved promoters are still filterable by username.
+        console.warn("Error looking up unassigned promoters (handled):", error)
+      }
+    }
+
+    lookupPromoterIds()
+  }, [unassignedPromoterNames])
+
+  // Assigned promoters plus anyone who punched tickets for this event and was unassigned later.
+  const promoterOptions = React.useMemo(() => {
+    const options = new Map(promoters.map((promoter) => [promoter.id, promoter]))
+    unassignedPromoterNames.forEach((name) => {
+      const id = promoterIdsByUsername?.get(name.toLowerCase()) || `${PROMOTER_NAME_FILTER_PREFIX}${name}`
+      if (!options.has(id)) options.set(id, { id, name })
+    })
+    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [promoterIdsByUsername, promoters, unassignedPromoterNames])
 
   const filteredBookings = bookingsData
   const totalPages = Math.ceil(filteredBookings.length / ITEMS_PER_PAGE)
@@ -1110,20 +1255,26 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
               className={currentPage === 1 ? "pointer-events-none opacity-50" : ""}
             />
           </PaginationItem>
-          {Array.from({ length: Math.min(totalPages, 5) }, (_, index) => index + 1).map((page) => (
-            <PaginationItem key={page}>
-              <PaginationLink
-                href="#"
-                isActive={currentPage === page}
-                onClick={(event) => {
-                  event.preventDefault()
-                  setCurrentPage(page)
-                }}
-              >
-                {page}
-              </PaginationLink>
-            </PaginationItem>
-          ))}
+          {getPageItems(currentPage, totalPages).map((page, index) =>
+            page === "ellipsis" ? (
+              <PaginationItem key={`ellipsis-${index}`}>
+                <PaginationEllipsis />
+              </PaginationItem>
+            ) : (
+              <PaginationItem key={page}>
+                <PaginationLink
+                  href="#"
+                  isActive={currentPage === page}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    setCurrentPage(page)
+                  }}
+                >
+                  {page}
+                </PaginationLink>
+              </PaginationItem>
+            )
+          )}
           <PaginationItem>
             <PaginationNext
               href="#"
@@ -1283,7 +1434,7 @@ export default function EventBookingPage({ params }: EventBookingPageProps) {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Promoter</SelectItem>
-                        {promoters.map((promoter) => (
+                        {promoterOptions.map((promoter) => (
                           <SelectItem key={promoter.id} value={promoter.id}>
                             {promoter.name}
                           </SelectItem>

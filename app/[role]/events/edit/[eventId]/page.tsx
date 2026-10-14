@@ -24,6 +24,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
+import { getLengthError } from "@/lib/credential-limits"
+
+const getRejectRemarkError = (remark: string) => getLengthError("Rejection reason", remark.trim(), 2)
 
 interface EditEventPageProps {
   params: Promise<{ role: UserRole; eventId: string }>
@@ -118,9 +121,31 @@ export default function EditEventPage({ params }: EditEventPageProps) {
     router.push(`/${role}/events`)
   }
 
+  // superAdmin/update requires EventLanguages with at least one entry; approve/reject re-send the
+  // saved list, so an event without languages has to be edited first
+  const hasEventLanguages = () => {
+    const languages = eventData?.EventLanguages || eventData?.eventLanguages
+    return Array.isArray(languages) && languages.length > 0
+  }
+
+  const showMissingLanguagesError = () => {
+    toast({
+      title: "Error",
+      description: "This event has no language. Edit the event and add at least one language first.",
+      variant: "destructive",
+    })
+  }
+
+  // EventRejectRemark is Joi min(2); the trimmed remark is what gets sent
+  const rejectRemarkError = getRejectRemarkError(eventRejectRemark)
+
   // Handle approve event (change status to Published)
   const handleApproveEvent = async () => {
     if (!eventData) return
+    if (!hasEventLanguages()) {
+      showMissingLanguagesError()
+      return
+    }
 
     try {
       setIsApproving(true)
@@ -249,7 +274,20 @@ export default function EditEventPage({ params }: EditEventPageProps) {
       return
     }
 
+    if (rejectRemarkError) {
+      toast({
+        title: "Error",
+        description: rejectRemarkError,
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!eventData) return
+    if (!hasEventLanguages()) {
+      showMissingLanguagesError()
+      return
+    }
 
     try {
       setIsRejecting(true)
@@ -572,6 +610,9 @@ export default function EditEventPage({ params }: EditEventPageProps) {
                 onChange={(e) => setEventRejectRemark(e.target.value)}
                 className="min-h-[100px]"
               />
+              {rejectRemarkError && (
+                <p className="text-sm text-red-600">{rejectRemarkError}</p>
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -587,7 +628,7 @@ export default function EditEventPage({ params }: EditEventPageProps) {
               type="button"
               variant="destructive"
               onClick={handleRejectEvent}
-              disabled={isRejecting || !eventRejectRemark.trim()}
+              disabled={isRejecting || !eventRejectRemark.trim() || !!rejectRemarkError}
             >
               {isRejecting ? (
                 <>

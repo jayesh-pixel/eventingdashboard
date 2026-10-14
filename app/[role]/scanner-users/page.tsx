@@ -43,6 +43,7 @@ import { getValidToken } from "@/lib/token-utils"
 import { useToast } from "@/hooks/use-toast"
 import { handleApiResponse, getApiErrorMessage } from "@/lib/utils"
 import { getNumericAdminRole } from "@/lib/api-constants"
+import { getPasswordError, getUsernameError } from "@/lib/credential-limits"
 
 const statusColors = {
   0: "bg-gray-100 text-gray-800",    // Inactive
@@ -61,9 +62,8 @@ const userTypeLabels = {
   2: "Organizer Scanner"
 } as const
 
-// Scanner login schema: Password min(5).max(10); updatePassword itself has no validator
-const PASSWORD_MIN_LENGTH = 5
-const PASSWORD_MAX_LENGTH = 10
+// Scanner login schema: Password min(5).max(10); updatePassword itself has no validator,
+// so the same rules (plus no edge spaces, which the backend trims) are checked here.
 
 export default function ScannerUsersPage() {
   const { toast } = useToast()
@@ -333,6 +333,10 @@ export default function ScannerUsersPage() {
     return { Organizers: formData.selectedOrganizers.map(orgId => ({ organizer_id: orgId })) }
   }
 
+  // Flagged in red while typing; the backend trims the username before saving it
+  const usernameError = getUsernameError(formData.username.trim())
+  const passwordError = getPasswordError(formData.password)
+
   // CRUD Functions
   const handleCreateUser = async () => {
     if (!formData.username.trim() || !formData.password.trim()) {
@@ -344,19 +348,10 @@ export default function ScannerUsersPage() {
       return
     }
 
-    if (formData.username.trim().length < 5) {
+    if (usernameError || passwordError) {
       toast({
         title: "Error",
-        description: "Username must be at least 5 characters",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (formData.password.length < 5 || formData.password.length > 10) {
-      toast({
-        title: "Error",
-        description: "Password must be 5-10 characters long",
+        description: usernameError || passwordError,
         variant: "destructive",
       })
       return
@@ -386,7 +381,7 @@ export default function ScannerUsersPage() {
       }
 
       const payload = {
-        Username: formData.username,
+        Username: formData.username.trim(),
         Password: formData.password,
         UserType: Number(formData.userType),
         ...buildAssignmentPayload(),
@@ -458,19 +453,11 @@ export default function ScannerUsersPage() {
 
     const newPassword = formData.password
     if (newPassword) {
-      if (newPassword.length < PASSWORD_MIN_LENGTH || newPassword.length > PASSWORD_MAX_LENGTH) {
-        toast({
-          title: "Error",
-          description: `Password must be ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} characters long`,
-          variant: "destructive",
-        })
-        return
-      }
       // Backend trims before hashing, so leading/trailing spaces would not match at login
-      if (newPassword !== newPassword.trim()) {
+      if (passwordError) {
         toast({
           title: "Error",
-          description: "Password cannot start or end with a space",
+          description: passwordError,
           variant: "destructive",
         })
         return
@@ -681,8 +668,10 @@ export default function ScannerUsersPage() {
                     id="username"
                     value={formData.username}
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    placeholder="Enter username"
+                    placeholder="Enter username (5-50 characters)"
+                    className={usernameError ? "border-red-500 focus-visible:ring-red-500" : ""}
                   />
+                  {usernameError && <p className="text-sm text-red-600">{usernameError}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password *</Label>
@@ -692,8 +681,9 @@ export default function ScannerUsersPage() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     placeholder="Enter password (5-10 characters)"
-                    maxLength={PASSWORD_MAX_LENGTH}
+                    className={passwordError ? "border-red-500 focus-visible:ring-red-500" : ""}
                   />
+                  {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
                 </div>
               </div>
               
@@ -974,8 +964,9 @@ export default function ScannerUsersPage() {
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   placeholder="Leave blank to keep current password"
-                  maxLength={PASSWORD_MAX_LENGTH}
+                  className={passwordError ? "border-red-500 focus-visible:ring-red-500" : ""}
                 />
+                {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
               </div>
             </div>
             

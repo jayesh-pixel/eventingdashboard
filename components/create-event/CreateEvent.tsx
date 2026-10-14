@@ -25,6 +25,7 @@ import { useAuth } from "@/lib/auth-context"
 import { getValidToken } from "@/lib/token-utils"
 import type { UserRole } from "@/lib/navigation"
 import { handleApiResponse, getApiErrorMessage, parseEventDateTime } from "@/lib/utils"
+import { getLengthError, getPasswordError, getUsernameError } from "@/lib/credential-limits"
 import { getNumericAdminRole } from "@/lib/api-constants"
 import { eventEndPoint, eventTourEndPoint } from "@/lib/api-endpoints"
 import { ReactQuillWrapper } from "./ReactQuillWrapper"
@@ -131,16 +132,49 @@ interface EventFormValues {
   faqs: FAQ[]
 }
 
+// The API checks names for duplicates with new RegExp("^" + name.trim() + "$", "i"); a name that is
+// not a valid pattern (e.g. "C++ Night", "Live :(") makes that request fail on the server.
+const isServerRegexSafe = (value: string) => {
+  try {
+    new RegExp(`^${value.trim()}$`, "i")
+    return true
+  } catch {
+    return false
+  }
+}
+const regexUnsafeMessage = (label: string) =>
+  `${label} cannot contain unmatched ( ) [ ] or a * + ? with nothing before it`
+
+// Yup test: trimmed length within [min, max] (the API trims these values before storing them)
+const trimmedLengthTest = (label: string, min: number, max?: number) =>
+  (value: string | undefined, ctx: Yup.TestContext) => {
+    const message = getLengthError(label, (value || "").trim(), min, max)
+    return message ? ctx.createError({ message }) : true
+  }
+
+const nameSafetyTest = (value: string | undefined) => !value || isServerRegexSafe(value)
+
+// helpers/commonFunctions.js isValidYouTubeUrl: any other EventVedioUrl is rejected
+const YOUTUBE_URL_REGEX = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/(watch\?v=)?([a-zA-Z0-9_-]{11})/
+
+// isValidGoogleMapsIframe only accepts Google's "Embed a map" HTML verbatim. The API source pins
+// referrerpolicy to strict-origin-when-cross-origin while Google now emits no-referrer-when-downgrade,
+// so both are let through here and the server has the final word on that attribute.
+const GOOGLE_MAPS_IFRAME_REGEX =
+  /^<iframe src="https:\/\/www\.google\.com\/maps\/embed\?pb=.+?" width="\d+" height="\d+" style="border:0;" allowfullscreen="" loading="lazy" referrerpolicy="(strict-origin-when-cross-origin|no-referrer-when-downgrade)"><\/iframe>$/
+
+// Joi's email() also requires a real top-level domain, which Yup's email() does not
+const EMAIL_WITH_TLD_REGEX = /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/
+
 // Validation Schema
 // Dynamic validation schema function
 // Mirrors the backend: the create endpoints require most fields, while the update endpoints
 // only require EventLanguages + the location flags (omitted fields keep their existing value).
 const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string, editMode: boolean = false) => Yup.object().shape({
-  eventname: editMode
-    ? Yup.string().min(1, "Event name must be at least 1 character")
-    : Yup.string()
-      .required("Event name is required")
-      .min(1, "Event name must be at least 1 character"),
+  // EventName min(2); the API stores the trimmed name
+  eventname: (editMode ? Yup.string() : Yup.string().trim().required("Event name is required"))
+    .test("length", trimmedLengthTest("Event name", 2))
+    .test("regex-safe", regexUnsafeMessage("Event name"), nameSafetyTest),
 
   eventDescription: editMode
     ? Yup.string().min(10, "Event description must be at least 10 characters")
@@ -155,9 +189,8 @@ const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string,
       .min(10, "Terms and conditions must be at least 10 characters"),
   
   eventVideoUrl: Yup.string()
-    .url("Please enter a valid URL")
-    .nullable()
-    .transform((value) => value === '' ? null : value),
+    .test("youtube", "Only YouTube video URLs are accepted (youtube.com/watch?v=... or youtu.be/...)",
+      (value) => !value || !value.trim() || YOUTUBE_URL_REGEX.test(value.trim())),
   
   eventVisibility: editMode
     ? Yup.string()
@@ -244,12 +277,15 @@ const getEventValidationSchema = (eventSelectionFlag: number, userRole?: string,
   // BestSuitedFor is optional on every endpoint
   ageRestriction: Yup.string(),
 
-  // ConvinienceFeeValue is only required by the superAdmin create endpoint
-  feevalue: userRole === "superadmin" && !editMode
+  // ConvinienceFeeValue must be a number; superadmin submits always send it (create and update),
+  // so an emptied field would go out as "" and be rejected
+  feevalue: userRole === "superadmin"
     ? Yup.number()
+      .typeError("Convenience fee value must be a number")
       .required("Convenience fee value is required")
       .min(0, "Fee value cannot be negative")
     : Yup.number()
+      .typeError("Convenience fee value must be a number")
       .min(0, "Fee value cannot be negative"),
 
   // EventDateTime is only sent/required on create (dates are managed separately on update)
@@ -1391,7 +1427,9 @@ export default function CreateEvent({
     })
   }
 
-  // FAQ handling
+  // FAQ handling (each Question/Answer is Joi min(2))
+  const getFaqFieldError = (label: string, value: string) => getLengthError(label, value.trim(), 2)
+
   const addFAQ = (values: EventFormValues, setFieldValue: any) => {
     if (!tempFAQ.Question.trim() || !tempFAQ.Answer.trim()) {
       toast({
@@ -1402,7 +1440,13 @@ export default function CreateEvent({
       return
     }
 
-    setFieldValue("faqs", [...values.faqs, { ...tempFAQ }])
+    const faqLengthError = getFaqFieldError("Question", tempFAQ.Question) || getFaqFieldError("Answer", tempFAQ.Answer)
+    if (faqLengthError) {
+      toast({ title: "Invalid FAQ", description: faqLengthError, variant: "destructive" })
+      return
+    }
+
+    setFieldValue("faqs", [...values.faqs, { Question: tempFAQ.Question.trim(), Answer: tempFAQ.Answer.trim() }])
     setTempFAQ({ Question: "", Answer: "" })
 
     toast({
@@ -2745,9 +2789,9 @@ export default function CreateEvent({
                       as={Input}
                       name="eventVideoUrl"
                       type="url"
-                      placeholder="Enter event link here"
+                      placeholder="Enter YouTube video link"
                     />
-                    {touched.eventVideoUrl && errors.eventVideoUrl && (
+                    {(touched.eventVideoUrl || values.eventVideoUrl) && errors.eventVideoUrl && (
                       <p className="text-sm text-red-600">{errors.eventVideoUrl}</p>
                     )}
                   </CardContent>
@@ -2814,7 +2858,7 @@ export default function CreateEvent({
                       name="eventname"
                       placeholder="Enter event name"
                     />
-                    {touched.eventname && errors.eventname && (
+                    {(touched.eventname || values.eventname) && errors.eventname && (
                       <p className="text-sm text-red-600">{errors.eventname}</p>
                     )}
                   </CardContent>
@@ -3181,6 +3225,9 @@ export default function CreateEvent({
                           value={tempFAQ.Question}
                           onChange={(e) => setTempFAQ(prev => ({ ...prev, Question: e.target.value }))}
                         />
+                        {getFaqFieldError("Question", tempFAQ.Question) && (
+                          <p className="text-sm text-red-600">{getFaqFieldError("Question", tempFAQ.Question)}</p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label>Answer</Label>
@@ -3190,6 +3237,9 @@ export default function CreateEvent({
                           onChange={(e) => setTempFAQ(prev => ({ ...prev, Answer: e.target.value }))}
                           rows={3}
                         />
+                        {getFaqFieldError("Answer", tempFAQ.Answer) && (
+                          <p className="text-sm text-red-600">{getFaqFieldError("Answer", tempFAQ.Answer)}</p>
+                        )}
                       </div>
                       <div className="flex justify-end">
                         <Button
@@ -3344,14 +3394,19 @@ export default function CreateEvent({
                 Description: "",
                 Images: [] as File[]
               }}
+              // Lengths follow validateVenueCreation; the API trims Name and requires the Google Maps embed iframe
               validationSchema={Yup.object({
-                Name: Yup.string().required("Venue name is required"),
-                Address: Yup.string().required("Address is required"),
+                Name: Yup.string().trim().required("Venue name is required")
+                  .test("length", trimmedLengthTest("Venue name", 3, 50))
+                  .test("regex-safe", regexUnsafeMessage("Venue name"), nameSafetyTest),
+                Address: Yup.string().trim().required("Address is required")
+                  .test("length", trimmedLengthTest("Address", 5, 1024)),
                 City: Yup.string().required("City is required"),
                 CityIsoCode: Yup.string().required("City is required"),
                 State: Yup.string().required("State is required"),
                 StateIsoCode: Yup.string().required("State is required"),
-                Map_Location: Yup.string().required("Map location (Google Maps embed iframe) is required"),
+                Map_Location: Yup.string().trim().required("Map location (Google Maps embed iframe) is required")
+                  .matches(GOOGLE_MAPS_IFRAME_REGEX, "Map location must be the Google Maps embed code: Share > Embed a map > Copy HTML, then paste the whole <iframe ...></iframe>"),
                 Images: Yup.array().min(1, "At least one venue image is required"),
                 // Make these fields optional
                 PinCode: Yup.string(),
@@ -3360,7 +3415,7 @@ export default function CreateEvent({
                   .typeError("Capacity must be a number")
                   .min(1, "Capacity must be at least 1"),
                 ContactNumber: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
-                Description: Yup.string()
+                Description: Yup.string().test("length", trimmedLengthTest("Description", 5, 1024))
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
                 try {
@@ -3378,9 +3433,9 @@ export default function CreateEvent({
                   const payload = new FormData()
                   payload.append("AdminRole", getNumericAdminRole(user?.AdminRole || role || "superadmin").toString())
                   payload.append("user_id", user?.user_id || "")
-                  payload.append("Name", values.Name)
-                  payload.append("Description", values.Description || "")
-                  payload.append("Address", values.Address)
+                  payload.append("Name", values.Name.trim())
+                  payload.append("Description", values.Description.trim())
+                  payload.append("Address", values.Address.trim())
                   payload.append("City", values.City)
                   payload.append("State", values.State)
                   payload.append("Country", "India")
@@ -3440,7 +3495,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Venue Name *</Label>
                     <Field as={Input} name="Name" placeholder="Enter venue name" />
-                    {touched.Name && errors.Name && (
+                    {(touched.Name || values.Name) && errors.Name && (
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
@@ -3448,7 +3503,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Address *</Label>
                     <Field as={Textarea} name="Address" placeholder="Enter venue address" rows={2} />
-                    {touched.Address && errors.Address && (
+                    {(touched.Address || values.Address) && errors.Address && (
                       <p className="text-sm text-red-600">{errors.Address}</p>
                     )}
                   </div>
@@ -3475,7 +3530,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Map Location *</Label>
                     <Field as={Textarea} name="Map_Location" placeholder='Paste the Google Maps embed code (<iframe src="https://www.google.com/maps/embed?pb=...">)' rows={3} />
-                    {touched.Map_Location && errors.Map_Location && (
+                    {(touched.Map_Location || values.Map_Location) && errors.Map_Location && (
                       <p className="text-sm text-red-600">{errors.Map_Location}</p>
                     )}
                   </div>
@@ -3521,6 +3576,9 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Description</Label>
                     <Field as={Textarea} name="Description" placeholder="Venue description (optional)" rows={2} />
+                    {errors.Description && (
+                      <p className="text-sm text-red-600">{errors.Description}</p>
+                    )}
                   </div>
                   
                   <div className="flex justify-end space-x-2">
@@ -3556,18 +3614,34 @@ export default function CreateEvent({
                 City: "",
                 CityIsoCode: ""
               }}
-              // Mirrors validaterRegisterOrganizer (Email / Phone1 are optional on the backend)
+              // Mirrors validaterRegisterOrganizer (Email / Phone1 are optional on the backend). The API
+              // trims CompanyName/FullName/Username and trims the password before hashing it, and login
+              // requires a 5+ character username/password, so the trimmed values are what must fit.
               validationSchema={Yup.object({
                 OwnerType: Yup.string().required("Owner type is required"),
-                CompanyName: Yup.string().required("Company / club name is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
-                FullName: Yup.string().required("Full name is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
-                Username: Yup.string().required("Username is required").min(5, "Must be at least 5 characters").max(50, "Must not exceed 50 characters"),
-                Password: Yup.string().required("Password is required").min(5, "Must be at least 5 characters").max(10, "Must not exceed 10 characters"),
-                Email: Yup.string().email("Invalid email"),
-                Phone1: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
-                State: Yup.string().required("State is required"),
+                CompanyName: Yup.string().trim().required("Company / club name is required")
+                  .test("length", trimmedLengthTest("Company / club name", 5, 50)),
+                FullName: Yup.string().trim().required("Full name is required")
+                  .test("length", trimmedLengthTest("Full name", 5, 50)),
+                Username: Yup.string().trim().required("Username is required")
+                  .test("length", (value, ctx) => {
+                    const message = getUsernameError((value || "").trim())
+                    return message ? ctx.createError({ message }) : true
+                  })
+                  .test("regex-safe", regexUnsafeMessage("Username"), nameSafetyTest),
+                Password: Yup.string().required("Password is required")
+                  .test("length", (value, ctx) => {
+                    const message = getPasswordError(value || "")
+                    return message ? ctx.createError({ message }) : true
+                  }),
+                Email: Yup.string().trim().email("Invalid email")
+                  .matches(EMAIL_WITH_TLD_REGEX, { message: "Email must include a domain such as example.com", excludeEmptyString: true })
+                  .max(1024, "Email must be at most 1024 characters")
+                  .test("regex-safe", regexUnsafeMessage("Email"), nameSafetyTest),
+                Phone1: Yup.string().trim().matches(/^[0-9]{10}$/, { message: "Phone number must be exactly 10 digits", excludeEmptyString: true }),
+                State: Yup.string().required("State is required").min(3, "State name must be at least 3 characters"),
                 StateIsoCode: Yup.string().required("State is required"),
-                City: Yup.string().required("City is required"),
+                City: Yup.string().required("City is required").min(3, "City name must be at least 3 characters"),
                 CityIsoCode: Yup.string().required("City is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
@@ -3651,7 +3725,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>{values.OwnerType === "1" ? "Club Name" : "Company Name"} *</Label>
                     <Field as={Input} name="CompanyName" placeholder="Enter club / company name" />
-                    {touched.CompanyName && errors.CompanyName && (
+                    {(touched.CompanyName || values.CompanyName) && errors.CompanyName && (
                       <p className="text-sm text-red-600">{errors.CompanyName}</p>
                     )}
                   </div>
@@ -3659,7 +3733,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Full Name *</Label>
                     <Field as={Input} name="FullName" placeholder="Enter organizer full name" />
-                    {touched.FullName && errors.FullName && (
+                    {(touched.FullName || values.FullName) && errors.FullName && (
                       <p className="text-sm text-red-600">{errors.FullName}</p>
                     )}
                   </div>
@@ -3668,14 +3742,14 @@ export default function CreateEvent({
                     <div className="space-y-2">
                       <Label>Username *</Label>
                       <Field as={Input} name="Username" placeholder="Login username" />
-                      {touched.Username && errors.Username && (
+                      {(touched.Username || values.Username) && errors.Username && (
                         <p className="text-sm text-red-600">{errors.Username}</p>
                       )}
                     </div>
                     <div className="space-y-2">
                       <Label>Password *</Label>
                       <Field as={Input} name="Password" type="password" placeholder="5-10 characters" />
-                      {touched.Password && errors.Password && (
+                      {(touched.Password || values.Password) && errors.Password && (
                         <p className="text-sm text-red-600">{errors.Password}</p>
                       )}
                     </div>
@@ -3742,7 +3816,8 @@ export default function CreateEvent({
                 CategoryImages: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Category name is required").min(3, "Category name must be at least 3 characters"),
+                Name: Yup.string().required("Category name is required").min(3, "Category name must be at least 3 characters")
+                  .test("regex-safe", regexUnsafeMessage("Category name"), nameSafetyTest),
                 CategoryImages: Yup.array().min(1, "At least one category image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
@@ -3846,7 +3921,8 @@ export default function CreateEvent({
                 Images: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Artist name is required").min(2, "Artist name must be at least 2 characters"),
+                Name: Yup.string().required("Artist name is required").min(2, "Artist name must be at least 2 characters")
+                  .test("regex-safe", regexUnsafeMessage("Artist name"), nameSafetyTest),
                 ContactEmail: Yup.string().email("Invalid email format"),
                 ContactPhone: Yup.string().matches(/^[0-9]{10}$/, { message: "Must be 10 digits", excludeEmptyString: true }),
                 Images: Yup.array().min(1, "At least one artist image is required")
@@ -3969,8 +4045,11 @@ export default function CreateEvent({
                 Images: [] as File[]
               }}
               validationSchema={Yup.object({
-                Name: Yup.string().required("Genre name is required").min(3, "Genre name must be at least 3 characters").max(50, "Genre name must not exceed 50 characters"),
-                Description: Yup.string().trim().required("Genre description is required"),
+                Name: Yup.string().trim().required("Genre name is required")
+                  .test("length", trimmedLengthTest("Genre name", 3, 50))
+                  .test("regex-safe", regexUnsafeMessage("Genre name"), nameSafetyTest),
+                Description: Yup.string().trim().required("Genre description is required")
+                  .test("length", trimmedLengthTest("Genre description", 1, 1024)),
                 Images: Yup.array().min(1, "At least one genre image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
@@ -4076,8 +4155,11 @@ export default function CreateEvent({
               }}
               // Backend (validateEventTourCreation) only accepts Name + Description, plus EventTourImages files
               validationSchema={Yup.object({
-                Name: Yup.string().required("Tour name is required").min(5, "Tour name must be at least 5 characters").max(50, "Tour name must not exceed 50 characters"),
-                Description: Yup.string().trim().required("Tour description is required"),
+                Name: Yup.string().trim().required("Tour name is required")
+                  .test("length", trimmedLengthTest("Tour name", 5, 50))
+                  .test("regex-safe", regexUnsafeMessage("Tour name"), nameSafetyTest),
+                Description: Yup.string().trim().required("Tour description is required")
+                  .test("length", trimmedLengthTest("Tour description", 1, 1024)),
                 EventTourImages: Yup.array().min(1, "At least one tour image is required")
               })}
               onSubmit={async (values, { setSubmitting, resetForm }) => {
@@ -4086,8 +4168,8 @@ export default function CreateEvent({
                   if (!authToken) return
 
                   const payload = new FormData()
-                  payload.append("Name", values.Name)
-                  payload.append("Description", values.Description)
+                  payload.append("Name", values.Name.trim())
+                  payload.append("Description", values.Description.trim())
                   values.EventTourImages.forEach((image) => payload.append("EventTourImages", image))
 
                   const response = await authFetch(getApiEndpoint("/eventtour/create"), {
@@ -4127,12 +4209,12 @@ export default function CreateEvent({
                 }
               }}
             >
-              {({ errors, touched, isSubmitting, setFieldValue }) => (
+              {({ values, errors, touched, isSubmitting, setFieldValue }) => (
                 <Form className="space-y-4">
                   <div className="space-y-2">
                     <Label>Tour Name *</Label>
                     <Field as={Input} name="Name" placeholder="Enter tour/campaign name" />
-                    {touched.Name && errors.Name && (
+                    {(touched.Name || values.Name) && errors.Name && (
                       <p className="text-sm text-red-600">{errors.Name}</p>
                     )}
                   </div>
@@ -4140,7 +4222,7 @@ export default function CreateEvent({
                   <div className="space-y-2">
                     <Label>Description *</Label>
                     <Field as={Textarea} name="Description" placeholder="Tour description" rows={3} />
-                    {touched.Description && errors.Description && (
+                    {(touched.Description || values.Description) && errors.Description && (
                       <p className="text-sm text-red-600">{errors.Description}</p>
                     )}
                   </div>
