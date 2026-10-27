@@ -398,13 +398,26 @@ export default function TicketsPage() {
   }, [normalFormData, normalTickets, selectedEventDateTimes, eventDateTimes.length, isMultiDateEvent])
   const normalFormErrorList = Object.values(normalFormErrors).filter(Boolean)
 
-  // validateEventTicketUpdate: Description 3-10000; updateEventTicketbyId refuses a
-  // Quantity lower than the ticket's current Quantity.
+  // updateEventTicketById only allows a Name change while the ticket is Disabled.
+  const isEditTicketDisabled = selectedTicketType === "normal" && (
+    (selectedTicket as ExtendedNormalTicket)?.EventTicketStatus ?? (selectedTicket as ExtendedNormalTicket)?.Status ?? 1
+  ) === 0
+
+  // validateEventTicketUpdate: Name 1-50, Price >= 0, Description 3-10000; updateEventTicketbyId
+  // refuses a Quantity lower than the ticket's current Quantity.
   const editFormErrors = React.useMemo(() => {
-    if (selectedTicketType !== "normal" || !selectedTicket) return { Description: "", Quantity: "" }
+    if (selectedTicketType !== "normal" || !selectedTicket) return { Name: "", Price: "", Description: "", Quantity: "" }
     const currentQuantity = Number((selectedTicket as ExtendedNormalTicket).Quantity) || 0
     const typedQuantity = Number(editFormData.Quantity) || 0
+    const name = String(editFormData.Name ?? "").trim()
+    const price = String(editFormData.Price ?? "").trim()
     return {
+      Name: name
+        ? getLengthError("Ticket Name", name, 1, TICKET_NAME_MAX_LENGTH)
+        : "Ticket Name cannot be empty",
+      Price: price === "" || Number.isNaN(Number(price))
+        ? "Price is required"
+        : Number(price) < 0 ? "Price cannot be negative" : "",
       Description: getLengthError(
         "Description",
         String(editFormData.Description || "").trim(),
@@ -1735,7 +1748,7 @@ export default function TicketsPage() {
       let payload: any
       
       if (isNormal) {
-        // Format payload for normal tickets - editable fields are Description, Visibility, Price, and Quantity.
+        // Format payload for normal tickets - editable fields are Name, Price, Description, Visibility, and Quantity.
         const normalTicket = selectedTicket as ExtendedNormalTicket
 
         const currentVisibility = ((editFormData as any).Visibility || editFormData.VisibilityLevel || editFormData.EventTicketVisibility || "1").toString()
@@ -1743,6 +1756,9 @@ export default function TicketsPage() {
         payload = {
           Event_id: eventId,
           eventTicket_id: normalTicket._id,
+          Name: String(editFormData.Name ?? "").trim(),
+          // 0 is a valid (free) price and must be sent as 0
+          Price: Number(editFormData.Price),
           Quantity: parseInt(editFormData.MaxQuantity || editFormData.Quantity || normalTicket.Quantity),
           EventTicketVisibility: currentVisibility,
           ...(editFormData.Description && editFormData.Description.trim()
@@ -1780,7 +1796,7 @@ export default function TicketsPage() {
         }
 
         // Description is optional, but when provided the backend requires 3-10000 characters
-        const editError = editFormErrors.Description || editFormErrors.Quantity
+        const editError = editFormErrors.Name || editFormErrors.Price || editFormErrors.Description || editFormErrors.Quantity
         if (editError) {
           toast({
             title: "Validation Error",
@@ -2130,6 +2146,11 @@ export default function TicketsPage() {
     // Initialize selected promoters if this is a normal ticket with promoter visibility
     if (activeTab === 'normal') {
       const normalTicket = ticket as ExtendedNormalTicket
+      setEditFormData({
+        ...normalTicket,
+        Name: normalTicket.Name ?? (normalTicket as any).TicketName ?? "",
+        Price: normalTicket.Price ?? (normalTicket as any).TicketPrice ?? 0,
+      })
       // Check both Visibility and EventTicketVisibility fields (API may return either)
       const visibility = (normalTicket as any).Visibility || normalTicket.EventTicketVisibility || (normalTicket as any).VisibilityLevel
       const visibilityStr = visibility?.toString()
@@ -3142,7 +3163,7 @@ export default function TicketsPage() {
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs text-muted-foreground">Current Price</div>
-                        <div className="text-sm font-medium">{formatCurrency(parseFloat((editFormData.TicketPrice || editFormData.Price || selectedTicket?.Price || 0).toString()))}</div>
+                        <div className="text-sm font-medium">{formatCurrency(parseFloat(((selectedTicket as any)?.Price ?? (selectedTicket as any)?.TicketPrice ?? 0).toString()))}</div>
                       </div>
                       <div className="space-y-1">
                         <div className="text-xs text-muted-foreground">Current Quantity</div>
@@ -3166,7 +3187,23 @@ export default function TicketsPage() {
                     </div>
                   </div>
 
-                  {/* Editable fields: description, visibility, price, and quantity */}
+                  {/* Editable fields: name, description, visibility, price, and quantity */}
+                  <div className="space-y-2">
+                    <Label htmlFor="editTicketName">Ticket Name{isEditTicketDisabled ? "" : " (Read Only)"}</Label>
+                    <Input
+                      id="editTicketName"
+                      value={editFormData.Name ?? ""}
+                      onChange={(e) => setEditFormData((prev: any) => ({ ...prev, Name: e.target.value }))}
+                      disabled={!isEditTicketDisabled}
+                      maxLength={TICKET_NAME_MAX_LENGTH}
+                      className={isEditTicketDisabled ? "border-primary" : "bg-muted"}
+                    />
+                    {!isEditTicketDisabled && (
+                      <p className="text-xs text-muted-foreground">Disable the ticket to change its name.</p>
+                    )}
+                    {editFormErrors.Name && <p className="text-xs text-destructive">{editFormErrors.Name}</p>}
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="editDescription">Description</Label>
                     <Textarea
@@ -3276,17 +3313,19 @@ export default function TicketsPage() {
                     })()}
                   </div>
 
-                  {/* Read-only Price and Editable Quantity */}
+                  {/* Editable Price and Quantity */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="editTicketPrice">Price (₹) (Read Only)</Label>
+                      <Label htmlFor="editTicketPrice">Price (₹)</Label>
                       <Input
                         id="editTicketPrice"
                         type="number"
-                        disabled
-                        value={editFormData.TicketPrice || editFormData.Price || ""}
-                        className="bg-muted"
+                        min="0"
+                        value={editFormData.Price ?? ""}
+                        onChange={(e) => setEditFormData((prev: any) => ({ ...prev, Price: e.target.value }))}
+                        className="border-primary"
                       />
+                      {editFormErrors.Price && <p className="text-xs text-destructive">{editFormErrors.Price}</p>}
                     </div>
 
                     <div className="space-y-2">

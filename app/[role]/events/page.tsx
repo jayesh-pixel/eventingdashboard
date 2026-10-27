@@ -479,8 +479,8 @@ export default function EventsPage({ params }: EventsPageProps) {
         // Dates from arrangedEventDateTime array
         eventStartDate: event.arrangedEventDateTime?.[0]?.EventStartDateTime || event.eventStartDate || event.EventStartDate,
         eventEndDate: event.arrangedEventDateTime?.[0]?.EventEndDateTime || event.eventEndDate || event.EventEndDate,
-        createdAt: event.createdAt || event.CreatedAt || event.created_at || new Date().toISOString(),
-        updatedAt: event.updatedAt || event.UpdatedAt || event.updated_at || new Date().toISOString(),
+        createdAt: event.createdAt || event.CreatedAt || event.created_at || "",
+        updatedAt: event.updatedAt || event.UpdatedAt || event.updated_at || "",
         
         // Location info from new API structure
         city: event.VenueCity || event.city || event.City || event.location || event.Location || "Unknown City",
@@ -1038,11 +1038,8 @@ export default function EventsPage({ params }: EventsPageProps) {
       }
     }
 
-    return [...events].sort((a, b) => {
-      const dateA = new Date(a.updatedAt || a.createdAt || 0)
-      const dateB = new Date(b.updatedAt || b.createdAt || 0)
-      return dateB.getTime() - dateA.getTime()
-    })
+    // Backend already sorts the events
+    return events
   }, [allEventsData, useClientPaging, appliedCity, appliedVenue, appliedEventName, appliedOrganizer, appliedPromoter, filterVenues, filterOrganizers, filterPromoters, role])
 
   const totalPages = useClientPaging ? Math.ceil(filteredEvents.length / ITEMS_PER_PAGE) : serverTotalPages

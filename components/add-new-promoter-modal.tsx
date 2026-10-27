@@ -226,7 +226,7 @@ const AddNewPromoterModal = ({
             Manage Event Promoters
           </DialogTitle>
           <DialogDescription>
-            Select promoters to associate with this event
+            Select promoters to associate with this event. Removing a promoter also removes them from this event&apos;s tickets.
           </DialogDescription>
         </DialogHeader>
         {loading ? (
